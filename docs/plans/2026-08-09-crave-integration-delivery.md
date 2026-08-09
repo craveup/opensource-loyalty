@@ -28,6 +28,9 @@ session-lease paths, GitHub Actions/npm provenance, OCI images, and Crave's Expr
 **LIP baseline:** `origin/main` `7cd6a6a18d1bc7f0091c824fb711864f37780ba9`, repository version
 `0.1.2`
 
+**Current repository:** `alvinjchoi/opensource-loyalty`. A future GitHub organization transfer is an
+administrative option only; release evidence records the repository coordinate actually used.
+
 **Implementation owner:** Umair owns every LIP and Crave code change, schema/contract change,
 conformance fixture, migration, and rollout command in this plan.
 
@@ -170,8 +173,14 @@ used by loyalty, Square, and webhook secrets.
 - Create: `packages/security/package.json`
 - Create: `packages/security/src/field-encryption.ts`
 - Create: `packages/security/src/__tests__/field-encryption.test.ts`
-- Create: `apps/express-admin-and-storefront-api/src/scripts/migrate-provider-secrets.ts`
-- Create: `apps/express-admin-and-storefront-api/src/scripts/__tests__/migrate-provider-secrets.test.ts`
+- Create on the preservation path only:
+  `apps/express-admin-and-storefront-api/src/scripts/migrate-provider-secrets.ts`
+- Create on the preservation path only:
+  `apps/express-admin-and-storefront-api/src/scripts/__tests__/migrate-provider-secrets.test.ts`
+- Create on the approved no-data path only:
+  `apps/express-admin-and-storefront-api/src/scripts/assert-provider-secret-boundary.ts`
+- Create on the approved no-data path only:
+  `apps/express-admin-and-storefront-api/src/scripts/__tests__/assert-provider-secret-boundary.test.ts`
 - Modify: `packages/env/src/env-configuration/index.ts`
 - Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/config.ts`
 - Modify: the existing Square and webhook credential stores to consume the same service
@@ -194,11 +203,13 @@ export interface FieldEncryptionService {
 }
 ```
 
-The prerequisite gate proves encrypt/decrypt, tamper rejection, wrong-key rejection, rotation,
-re-encryption, safe logging, and a resumable dry-run/apply/verify/rollback migration of existing
-plaintext loyalty and Square credentials. LIP returns a new environment credential once through TLS;
-Crave immediately encrypts it with `@workspace/security` and never writes it to a plan, fixture, log,
-job payload, or client response.
+The prerequisite gate always proves encrypt/decrypt, tamper rejection, wrong-key rejection, rotation,
+re-encryption, and safe logging. Preservation additionally proves a resumable dry-run/apply/verify/
+rollback migration of existing plaintext loyalty and Square credentials. Approved no-data instead
+proves those exact fields absent or removed by the digest-bound reset/final-zero audit and contains no
+unused migration script. LIP returns a new environment credential once through TLS; Crave immediately
+encrypts it with `@workspace/security` and never writes it to a plan, fixture, log, job payload, or
+client response.
 
 ## Compatibility and provenance model
 
