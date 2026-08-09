@@ -28,8 +28,8 @@ session-lease paths, GitHub Actions/npm provenance, OCI images, and Crave's Expr
 **LIP baseline:** `origin/main` `7cd6a6a18d1bc7f0091c824fb711864f37780ba9`, repository version
 `0.1.2`
 
-**Current repository:** `alvinjchoi/opensource-loyalty`. A future GitHub organization transfer is an
-administrative option only; release evidence records the repository coordinate actually used.
+**Current repository:** `craveup/opensource-loyalty`. The completed GitHub organization transfer is
+administrative history; release evidence records the repository coordinate actually used.
 
 **Implementation owner:** Umair owns every LIP and Crave code change, schema/contract change,
 conformance fixture, migration, and rollout command in this plan.
@@ -80,8 +80,8 @@ reconciliation, and joint-release contract between the products.
 
 - LIP remains a separate repository, release, service, database, roles, migrations, backups and
   on-call surface.
-- A GitHub organization or repository-ownership transfer is an administrative option only. It is not
-  a launch prerequisite and no task in this plan waits for one.
+- GitHub organization and repository ownership are administrative metadata only. They do not alter
+  the runtime boundary or gate launch.
 - Crave never imports LIP storage, reference-engine, Cloud implementation, or database packages; reads
   LIP tables; joins across databases; or applies LIP migrations.
 - LIP never imports Crave packages or owns Crave customer authentication, carts, authoritative
@@ -908,7 +908,7 @@ audit/SBOM usability at the exact candidate commit.
 CI must prove source/spec/SDK/package/image/migration consistency, direct connection policy,
 consumer conformance, secret scans, exact-lockfile audit/SBOM/risk evidence, and immutable provenance.
 Release order is: dependency gate, migrations, compatible LIP service, LIP manifest, Crave adapter/API,
-sandbox joint smoke, then production promotion. No workflow depends on repository transfer.
+sandbox joint smoke, then production promotion. No runtime workflow depends on repository ownership.
 
 - [ ] **Step 3: Run the complete LIP candidate matrix**
 
@@ -1010,11 +1010,12 @@ evidence-backed.
 - [ ] The release's unchanged lockfile hash, canonical audit report, CycloneDX SBOM, risk register,
       package/image provenance, and LIP manifest agree; every dependency finding is triaged and no
       high or critical finding remains unapproved at production approval.
-- [ ] Repository transfer remains optional administration and did not gate implementation or launch.
+- [ ] Release evidence names `craveup/opensource-loyalty`; repository ownership does not gate
+      implementation or launch.
 
 ## Deferred
 
-- GitHub organization or repository transfer.
+- Future GitHub repository ownership changes.
 - Transaction-pooled LIP runtime until a separately approved lease redesign passes concurrency and
   failover conformance.
 - Crave-specific concepts in the normative LIP protocol.

@@ -13,7 +13,7 @@ Use `spec/` for the normative protocol contract.
 Fastest path with Docker:
 
 ```sh
-git clone https://github.com/alvinjchoi/opensource-loyalty.git
+git clone https://github.com/craveup/opensource-loyalty.git
 cd opensource-loyalty
 docker compose up --build
 ```
@@ -22,7 +22,7 @@ Developer path from source. Use npm; this repo uses npm workspaces and
 `package-lock.json`.
 
 ```sh
-git clone https://github.com/alvinjchoi/opensource-loyalty.git
+git clone https://github.com/craveup/opensource-loyalty.git
 cd opensource-loyalty
 npm install
 npm start

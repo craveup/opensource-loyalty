@@ -7,7 +7,7 @@ This is the shortest path from a clean clone to a working loyalty request.
 If you just want to try the project, use Docker:
 
 ```sh
-git clone https://github.com/alvinjchoi/opensource-loyalty.git
+git clone https://github.com/craveup/opensource-loyalty.git
 cd opensource-loyalty
 docker compose up --build
 ```
@@ -17,7 +17,7 @@ npm. The repo uses npm workspaces with `package-lock.json`; pnpm is not the
 supported install path unless the project is intentionally migrated later.
 
 ```sh
-git clone https://github.com/alvinjchoi/opensource-loyalty.git
+git clone https://github.com/craveup/opensource-loyalty.git
 cd opensource-loyalty
 npm install
 npm start
