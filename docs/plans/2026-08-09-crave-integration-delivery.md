@@ -94,6 +94,49 @@ reconciliation, and joint-release contract between the products.
 - Customer-time loyalty mutation is not an MCP responsibility. Crave's guarded merchant MCP may call
   Crave setup/diagnostic APIs; it does not call LIP or mutate the loyalty ledger directly.
 
+## Scoped greenfield, reuse, and cleanup rule
+
+The Crave integration and adapter work in Tasks 4-6 is unreleased. It has no legacy-compatibility
+burden merely because draft code, DTOs, routes, or tests already exist. Before creating a module, each
+Crave PR must inventory and either reuse, extend, or explicitly retire the existing loyalty seams:
+
+- `services/loyalty/lip-client.ts`, `config.ts`, `types.ts`, `lifecycle.ts`, `identity.ts`,
+  `order-hooks.ts`, `tasks.ts`, `cart-invalidation.ts`, `order-mapper.ts`, `program-catalog.ts`,
+  `webhook.ts`, `money.ts`, and `shared.ts`;
+- existing loyalty controllers/routes and `packages/storefront-sdk/src/types/loyalty.ts`;
+- `middlewares/storefront-idempotency.ts` and `services/storefront/idempotency.ts`;
+- the shared validation modules under `src/validation` and `packages/types/src/validation`;
+- the existing cart/discount implementation, including `utils/discount.ts`, discount repositories,
+  and the authoritative cart pricing/adjustment pipeline; and
+- the Task 4 `@workspace/security` field-encryption service.
+
+One responsibility has one implementation. Extend the existing LIP client or extract one shared
+transport when control-plane and data-plane calls share auth, retry, request-ID, error, and redaction
+behavior; do not copy that behavior into provisioning or reconciliation. A separate typed client is
+allowed only for a proven protocol/auth boundary and must still reuse the transport. Loyalty converts
+LIP effects into typed Crave adjustment inputs; it must not reimplement item pricing, discount/free-item
+math, promo stacking, cart totals, validation, idempotency storage, crypto, or provider retry logic.
+
+Prefer a concrete local function/module for the current use case. Do not add a provider registry,
+generic adapter hierarchy, alias layer, compatibility DTO, or extension point until a second concrete
+in-scope use and a stable common contract exist. Every new module in Tasks 4-6 must name the existing
+modules considered, its distinct responsibility, callers, owner, and deletion/merge decision in the
+PR description.
+
+Once all in-scope Crave callers move to native `loyalty_reward` adjustments, the same delivery
+candidate removes `rewardDiscountCodes`, the reward-mapping route and Business Manager editor,
+mapping-only DTOs/tests/helpers, and any superseded duplicate client. Do not retain aliases, dual
+read/write paths, or old/new endpoints solely because they appeared in drafts. Acceptance requires
+zero remaining source references. If live-use or persisted-data evidence contradicts the recorded
+unreleased status, stop cleanup and add an explicit migration/versioning task rather than guessing.
+
+This greenfield rule does **not** apply to LIP's published/open-source `/lip/v1` contract,
+`@loyalty-interchange/sdk`, external consumers, provider contracts, persisted loyalty ledger,
+reservations/idempotency records, or operational rollback. Those surfaces require evidence-backed
+compatibility analysis, versioned contracts, additive/expand-contract migrations, deprecation where
+applicable, reconciliation, and retention. Rollback uses pinned prior artifacts and compatible data
+migrations; it is not justification for keeping parallel unreleased Crave source paths.
+
 ## Deployment and database topology
 
 ```text
@@ -424,7 +467,11 @@ Expected: FAIL on the new explicit lifecycle/error assertions and boundary harne
 
 Document the required foodservice lifecycle and stable problem codes in normative LIP terms. Generate
 OpenAPI and SDK output. The SDK remains the retry/validation boundary and exposes request IDs and
-typed ambiguous/terminal errors without leaking the API key.
+typed ambiguous/terminal errors without leaking the API key. Because `/lip/v1` and
+`@loyalty-interchange/sdk` are published external contracts, keep changes additive within the declared
+version and retain external-consumer conformance. Any necessary breaking change requires an approved
+new version, migration/deprecation window, and provenance record; it cannot use the Crave greenfield
+cleanup exception.
 
 - [ ] **Step 5: Run GREEN gates**
 
@@ -472,6 +519,7 @@ checkout, storage code, undocumented field, or shared database.
 
 - Create: `apps/express-admin-and-storefront-api/src/application/loyalty/provisioning.ts`
 - Create: `apps/express-admin-and-storefront-api/src/application/loyalty/provisioning.test.ts`
+- Create: `apps/express-admin-and-storefront-api/src/application/loyalty/module-boundaries.test.ts`
 - Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/lip-client.ts`
 - Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/config.ts`
 - Modify: `packages/db/prisma/schema.prisma`
@@ -503,12 +551,18 @@ authorization, shared-bootstrap-key rejection, pending-to-ready polling, attach,
 rotation overlap, emergency rotation, revocation, suspension, signed webhook subscription, and audit
 attribution. The one-time merchant credential appears only in the rotation response.
 
-- [ ] **Step 2: Write failing Crave provisioning tests**
+- [ ] **Step 2: Write failing Crave provisioning and reuse-boundary tests**
 
 Mock only the LIP HTTP boundary. Assert repeated enablement converges; no database/container call exists;
 the exact LIP manifest digest is stored; the returned key is encrypted by the shared service before
 commit; plaintext is absent from logs/jobs/responses; and a failed transaction leaves a retryable
 journal rather than an orphaned second tenant.
+
+The module-boundary test inventories the existing loyalty modules named in the scoped greenfield rule
+and asserts that application code imports no controller/route or concrete database model, only the
+approved shared crypto/validation/idempotency seams are used, and LIP HTTP construction/retry/auth/error
+mapping has one owning transport. It rejects a second copied LIP client, loyalty-local crypto,
+loyalty-local idempotency store, and speculative provider/adapter registries.
 
 - [ ] **Step 3: Run RED gates in each repository**
 
@@ -522,7 +576,7 @@ Crave:
 
 ```bash
 pnpm --filter './packages/*' build
-pnpm --filter express-admin-and-storefront-api test -- --runInBand src/application/loyalty/provisioning.test.ts
+pnpm --filter express-admin-and-storefront-api test -- --runInBand src/application/loyalty/provisioning.test.ts src/application/loyalty/module-boundaries.test.ts
 pnpm --filter @workspace/security test
 ```
 
@@ -565,7 +619,8 @@ git commit -m "loyalty: add encrypted LIP provisioning"
 ```
 
 **Gate:** enable/retry/rotate/revoke converges through HTTP to one audited environment and one intended
-credential lineage, with no plaintext or client-visible secret.
+credential lineage, with no plaintext or client-visible secret. The PR's reuse inventory and boundary
+test prove one LIP transport, shared crypto/validation/idempotency, and no premature adapter hierarchy.
 
 ## Task 5: Implement verified identity and native loyalty adjustments
 
@@ -584,9 +639,33 @@ credential lineage, with no plaintext or client-visible secret.
 
 - Create: `apps/express-admin-and-storefront-api/src/application/loyalty/native-adjustment.ts`
 - Create: `apps/express-admin-and-storefront-api/src/application/loyalty/native-adjustment.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/application/loyalty/module-boundaries.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/config.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/types.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/cart-invalidation.ts`
 - Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/order-hooks.ts`
-- Modify: `apps/express-admin-and-storefront-api/src/controllers/loyalty/**`
-- Modify: `packages/storefront-sdk/src/**`
+- Modify: `apps/express-admin-and-storefront-api/src/controllers/loyalty/admin-loyalty.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/controllers/loyalty/storefront-loyalty.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/routes/api/v1/admin/loyalty.routes.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/controllers/loyalty/__tests__/admin-loyalty.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/controllers/loyalty/__tests__/storefront-loyalty.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/controllers/loyalty/__tests__/claims.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/controllers/loyalty/__tests__/storefront-ledger.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/routes/api/v1/admin/__tests__/loyalty-routes.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/__tests__/config.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/__tests__/identity.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/__tests__/lifecycle.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/__tests__/lip-client.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/__tests__/order-hooks.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/__tests__/program-catalog.test.ts`
+- Modify: `apps/nextjs-partner-web/src/app/(dashboard)/dashboard/settings/loyalty/LoyaltySettings.tsx`
+- Modify: `apps/nextjs-partner-web/src/app/(dashboard)/dashboard/settings/loyalty/components/LoyaltyStatusCard.tsx`
+- Modify: `apps/nextjs-partner-web/src/app/(dashboard)/dashboard/settings/loyalty/loyalty-types.ts`
+- Delete: `apps/nextjs-partner-web/src/app/(dashboard)/dashboard/settings/loyalty/components/RewardMappingEditor.tsx`
+- Delete: `apps/nextjs-partner-web/src/app/(dashboard)/dashboard/settings/loyalty/mapping-errors.ts`
+- Modify: `packages/db/prisma/schema.prisma`
+- Modify: `packages/storefront-sdk/src/client.ts`
+- Modify: `packages/storefront-sdk/src/types/loyalty.ts`
 
 - [ ] **Step 1: Write failing identity and adjustment tests**
 
@@ -625,8 +704,15 @@ Expected: FAIL because the native Crave adjustment and complete joint fixtures a
 
 Map LIP discount/free-item effects to a typed Crave `loyalty_reward` adjustment distinct from
 `public_promo`. Crave validates the effect against its authoritative cart and totals; LIP never
-recomputes or writes Crave totals. Keep the current reward-to-discount mapping during parity and remove
-it only in a later cleanup PR after rollback expires.
+recomputes or writes Crave totals. Reuse the existing cart/discount pricing and validation pipeline;
+`native-adjustment.ts` coordinates typed inputs and lifecycle state but does not calculate a second
+discount, free-item value, subtotal, tax, or stacking result.
+
+Move every in-scope API, Business Manager, Storefront SDK, lifecycle, invalidation, and test caller in
+this delivery candidate. Then delete the draft reward-to-discount mapping surface, including
+`rewardDiscountCodes`, `rewardMappings`, `/reward-mappings`, `RewardMappingEditor`, mapping-only DTOs,
+and superseded helpers/tests. Do not add deprecated aliases, compatibility serializers, dual reads,
+dual writes, or a second client path for these unreleased Crave drafts.
 
 - [ ] **Step 5: Run GREEN gates and commit separate heads**
 
@@ -635,10 +721,13 @@ npm run spec:check
 npx vitest run tests/consumers/crave/order-lifecycle.test.ts tests/conformance/http-lifecycle.test.ts
 pnpm --filter express-admin-and-storefront-api test -- --runInBand src/application/loyalty src/services/loyalty src/controllers/loyalty
 pnpm --filter @craveup/storefront-sdk test
+pnpm --filter nextjs-partner-web test
+! rg -n "rewardDiscountCodes|rewardMappings|reward-mappings|RewardMappingEditor" apps packages -g '!**/module-boundaries.test.ts'
 ```
 
 Expected: all commands exit `0`; balances, reservations, ledger entries, Crave adjustment state, and
-order totals reconcile for every path.
+order totals reconcile for every path. The negated `rg` gate sees no matches; record that zero-result
+output as obsolete-reference removal evidence.
 
 LIP commit:
 
@@ -650,12 +739,14 @@ git commit -m "conformance: prove Crave loyalty lifecycle"
 Crave commit:
 
 ```bash
-git add apps/express-admin-and-storefront-api packages/storefront-sdk
+git add apps/express-admin-and-storefront-api apps/nextjs-partner-web packages/db/prisma/schema.prisma packages/storefront-sdk
 git commit -m "loyalty: add native reward adjustments"
 ```
 
 **Gate:** only verified identities earn/redeem, guest claim cannot replay or cross customers, and all
-Crave/LIP financial identities reconcile.
+Crave/LIP financial identities reconcile. Module-boundary tests show that loyalty delegates Crave
+pricing/discount math, reuses the existing contract/client/validation/idempotency/crypto seams, and
+contains no obsolete mapping symbol, duplicate client, alias, or dual draft path.
 
 ## Task 6: Add reconciliation, observability, and recovery
 
@@ -677,6 +768,7 @@ Crave/LIP financial identities reconcile.
 
 - Create: `apps/express-admin-and-storefront-api/src/application/loyalty/reconciliation.ts`
 - Create: `apps/express-admin-and-storefront-api/src/application/loyalty/reconciliation.test.ts`
+- Modify: `apps/express-admin-and-storefront-api/src/application/loyalty/module-boundaries.test.ts`
 - Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/tasks.ts`
 - Modify: `apps/express-admin-and-storefront-api/src/services/loyalty/order-hooks.ts`
 
@@ -710,12 +802,15 @@ operator-facing diagnostics.
 
 ```bash
 npx vitest run tests/consumers/crave/recovery.test.ts tests/unit/webhooks.test.ts tests/unit/webhook-stores.test.ts
-pnpm --filter express-admin-and-storefront-api test -- --runInBand src/application/loyalty/reconciliation.test.ts src/services/loyalty
+pnpm --filter express-admin-and-storefront-api test -- --runInBand src/application/loyalty/reconciliation.test.ts src/application/loyalty/module-boundaries.test.ts src/services/loyalty
 ```
 
 Expected before implementation: FAIL on the new recovery assertions. Implement bounded retry,
 lookup-before-retry for ambiguous mutations, signed webhook dedupe, sanitized metrics/logs, and
-audited resolution. Re-run the same commands; expected after implementation: all exit `0`.
+audited resolution by extending `tasks.ts`, the existing LIP transport, lifecycle functions, webhook
+validation, and storefront idempotency seam. `reconciliation.ts` coordinates those responsibilities;
+it does not create a second queue, retry policy, HTTP client, signature validator, or idempotency
+store. Re-run the same commands; expected after implementation: all exit `0`.
 
 - [ ] **Step 4: Rehearse runbook scenarios**
 
@@ -736,7 +831,8 @@ git commit -m "loyalty: add reconciliation operations"
 ```
 
 **Gate:** an operator can determine and recover every ambiguous outcome from safe IDs without raw
-replay, plaintext secrets, or database edits.
+replay, plaintext secrets, or database edits. The reuse inventory and module test show one recovery
+journal, queue/retry policy, LIP transport, signature-validation path, and idempotency seam.
 
 ## Task 7: Publish and promote one exact compatible release set
 
@@ -828,13 +924,16 @@ triaged; no high/critical finding is unapproved; and direct-connection and consu
 pnpm --filter './packages/*' build
 pnpm --filter express-admin-and-storefront-api test -- --runInBand src/application/loyalty src/services/loyalty src/controllers/loyalty
 pnpm --filter @craveup/storefront-sdk test
+pnpm --filter nextjs-partner-web test
+! rg -n "rewardDiscountCodes|rewardMappings|reward-mappings|RewardMappingEditor" apps packages -g '!**/module-boundaries.test.ts'
 pnpm lint
 pnpm check-types
 git diff --check
 ```
 
 Expected: every command exits `0`; the adapter imports only the published SDK or uses raw versioned
-HTTP, and it consumes `@workspace/security` rather than a loyalty-specific crypto module.
+HTTP; it consumes the shared Crave crypto/validation/idempotency/domain seams; module-boundary tests
+find no duplicate client or domain calculation; and the obsolete-reference scan is empty.
 
 - [ ] **Step 5: Publish exact LIP artifacts**
 
@@ -858,17 +957,22 @@ release to production. Run bounded live success/denial/recovery smoke, verify li
 the compatibility record, re-check risk-record expiry and zero unapproved high/critical findings, and
 monitor the agreed soak window before declaring production-approved.
 
-- [ ] **Step 8: Rehearse rollback before cleanup**
+- [ ] **Step 8: Rehearse rollback of the clean candidate**
 
 Roll back Crave and LIP independently, restore service without destructive schema contraction, and
-reconcile admitted operations. Keep old credential overlap and transitional reward mapping until the
-approved rollback window closes. Cleanup ships as a later PR.
+reconcile admitted operations. Crave rollback selects a pinned prior application artifact and
+compatible expand-contract data state; it does not keep reward-mapping aliases, duplicate clients, or
+dual draft paths in the new source. Retain old credential overlap only where the audited provider
+rotation contract requires it. LIP rollback follows its published protocol/SDK compatibility and
+persisted-ledger migration rules rather than the Crave greenfield cleanup rule.
 
 **Gate:** running LIP and Crave revisions, packages, image digest, protocol/profile, migrations,
 manifest, live request IDs, and rollback targets all match the reviewed compatibility record. The
 release manifest pins the exact lockfile, canonical audit report, CycloneDX SBOM, risk register, and
 provenance digests; every finding has a current fix-or-risk record; and production has zero unapproved
-high or critical findings.
+high or critical findings. Crave acceptance also proves clean module ownership and zero obsolete draft
+references, while LIP/external compatibility and persisted-data rollback remain versioned and
+evidence-backed.
 
 ## Definition of done
 
@@ -885,6 +989,13 @@ high or critical findings.
       conflict, and reconciled states without receiving LIP identifiers or secrets.
 - [ ] Exact Crave API/adapter, Storefront SDK, LIP packages/image, protocol/profile, migration, release
       manifest, deployment, and rollback identities match the running environments.
+- [ ] Every new Crave loyalty module passed reuse-before-create review; LIP transport, crypto,
+      validation, idempotency, retry, and cart/discount calculation each have one owning seam, with no
+      premature provider abstraction or duplicate domain math.
+- [ ] All in-scope Crave callers use native `loyalty_reward` adjustments and the obsolete mapping
+      route/editor/DTO/config/tests have zero source references; no alias or dual draft path remains.
+- [ ] Published LIP/API/SDK/provider contracts, external consumers, persisted ledger data, and
+      operational rollback retain their evidence-backed versioning/migration protections.
 - [ ] The release's unchanged lockfile hash, canonical audit report, CycloneDX SBOM, risk register,
       package/image provenance, and LIP manifest agree; every dependency finding is triaged and no
       high or critical finding remains unapproved at production approval.
