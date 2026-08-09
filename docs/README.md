@@ -104,6 +104,8 @@ Enable MCP: [`mcp.json`](../mcp.json) · Skills: [`skills/README.md`](../skills/
   exports, signed messaging connectors, jobs, retry, and adapter contracts.
 - [Punchh compatibility](punchh-compatibility.md): map a restaurant loyalty
   migration against current LIP coverage and adapter gaps.
+- [Crave integration delivery plan](plans/2026-08-09-crave-integration-delivery.md): keep Crave and
+  LIP independently deployed while proving provisioning, lifecycle, reconciliation and joint release.
 
 ## API reference
 
