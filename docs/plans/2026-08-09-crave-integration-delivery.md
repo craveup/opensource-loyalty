@@ -59,6 +59,15 @@ At the recorded baseline, LIP already provides:
 - Admin, CLI, MCP, import/export, health, metrics, webhooks and release tooling; and
 - documentation warning that session-lease paths need direct/unpooled Postgres connections.
 
+The 2026-08-09 planning checkout also established this dependency-audit baseline: `npm ci` with Node
+`24.10.0` and npm `11.6.1` against `package-lock.json` SHA-256
+`07a5ce9ab72e9911190d1a7574264a2d02391c695aa52579b348af056edf9201` reported four moderate and four
+high findings. This count is observed evidence, not completed advisory triage, an accepted risk, or a
+production approval. Implementation must reproduce the audit under the declared release toolchain,
+record every package/advisory/dependency path, and resolve each finding through a reviewed fix or an
+explicit, expiring risk decision. Do not run `npm audit fix`; dependency remediation belongs in a
+separate reviewed dependency PR with a newly generated lockfile and evidence baseline.
+
 Crave currently owns its customer identity, carts, pricing, payments, orders, public promotions and
 customer-facing loyalty UI. The integration gap is not a second loyalty engine. It is the hardened
 mapping, provisioning, shared Crave-side credential encryption, native adjustment, lifecycle,
@@ -164,6 +173,20 @@ export interface LipReleaseManifestV1 {
   packages: Array<{ name: string; version: string; integrity: string }>;
   image: { reference: string; digest: `sha256:${string}`; provenanceUrl: string };
   database: { migrationSetSha256: string; connectionMode: "direct" };
+  dependencies: {
+    lockfileSha256: string;
+    auditReportSha256: string;
+    sbomSha256: string;
+    riskRegisterSha256: string;
+    toolchain: { node: string; npm: string };
+    findings: {
+      moderate: number;
+      high: number;
+      critical: number;
+      unapprovedHigh: 0;
+      unapprovedCritical: 0;
+    };
+  };
   verification: { runUrl: string; conformanceReportSha256: string };
 }
 ```
@@ -203,8 +226,9 @@ but promotion always pins exact artifacts.
 - [ ] **Step 1: Write the failing manifest tests**
 
 Test deterministic key ordering/digest, exact Git SHA/tag, OpenAPI and migration digests, every
-published package version/integrity, OCI digest/provenance URL, direct connection mode, and rejection
-of placeholders or missing evidence.
+published package version/integrity, OCI digest/provenance URL, direct connection mode, exact
+lockfile/audit/SBOM/risk-register hashes, zero unapproved high/critical findings, and rejection of
+placeholders or missing evidence.
 
 ```ts
 expect(validateLipReleaseManifest(validFixture)).toEqual({ ok: true });
@@ -223,16 +247,17 @@ Expected: FAIL because the schema and generator do not exist.
 - [ ] **Step 3: Implement generation and validation**
 
 Generate source values from the checked-out tag/SHA, protocol values from generated OpenAPI,
-migration digest from every ordered SQL migration, package integrities from registry/pack output, and
-image digest/provenance from workflow outputs. Canonicalize JSON before hashing. Never accept manual
-CLI overrides for commit, package integrity, or image digest.
+migration digest from every ordered SQL migration, package integrities from registry/pack output,
+image digest/provenance from workflow outputs, and dependency evidence from the exact-lockfile audit,
+CycloneDX SBOM, and reviewed risk register produced in Task 7. Canonicalize JSON before hashing. Never
+accept manual CLI overrides for commit, package integrity, image digest, or dependency evidence.
 
 - [ ] **Step 4: Wire release checks**
 
-Add `release:manifest` and `release:manifest:check` scripts. The release workflow runs full verify,
-publishes with provenance, builds/pushes the OCI image, generates the manifest from resulting
-artifacts, validates it, uploads it to the GitHub release, and records its digest as a workflow
-artifact.
+Add `release:manifest` and `release:manifest:check` scripts. The release workflow runs full verify and
+the Task 7 dependency gate, publishes with provenance, builds/pushes the OCI image, generates the
+manifest from resulting artifacts, validates it, uploads the audit/SBOM/manifest to the GitHub
+release, and records their digests as workflow artifacts.
 
 - [ ] **Step 5: Run GREEN gates**
 
@@ -721,8 +746,15 @@ replay, plaintext secrets, or database edits.
 
 **Files:**
 
+- Create: `docs/releases/dependency-risk-register.schema.json`
+- Create: `docs/releases/dependency-risk-register.json`
+- Create: `scripts/generate-release-dependency-evidence.ts`
+- Create: `scripts/check-release-dependencies.ts`
+- Create: `tests/unit/release-dependencies.test.ts`
 - Modify: `.github/workflows/ci.yml`
 - Modify: `.github/workflows/release.yml`
+- Modify: `.gitignore`
+- Modify: `package.json`
 - Modify: `Dockerfile`
 - Modify: `render.yaml`
 - Modify: `docs/releasing.md`
@@ -731,29 +763,66 @@ replay, plaintext secrets, or database edits.
 - Update through automation: `docs/releases/lip-release-manifest.example.json`
 - Update in the separate Crave release-evidence PR: `docs/releases/ecosystem-compatibility.json`
 
-- [ ] **Step 1: Add release-path tests and protected ordering**
+- [ ] **Step 1: Add exact-lockfile dependency evidence and tests**
+
+Pin the release job to its reviewed Node version and the repository-declared npm `10.9.4`; fail if
+the executing toolchain differs. `generate-release-dependency-evidence.ts` hashes the unchanged
+`package-lock.json`, captures `npm audit --package-lock-only --json` even when npm exits non-zero for
+findings, generates a CycloneDX SBOM from that exact lockfile, canonicalizes both documents, and writes
+them under ignored `.release-evidence/`. It must not run an automatic fix, install an unpinned package,
+or modify `package.json`/`package-lock.json`.
+
+`release-dependencies.test.ts` and `check-release-dependencies.ts` fail when the audit or SBOM names a
+different lockfile/toolchain, an SBOM component cannot be reconciled to the lock, a report/risk/SBOM
+digest differs from the release manifest, or any finding lacks exactly one current triage record.
+
+Each `dependency-risk-register.json` entry records:
+
+- package and installed version;
+- advisory ID, canonical advisory URL, severity, and every dependency path;
+- affected workspace, npm package, OCI/runtime artifact, and reachability assessment;
+- disposition `fixed` or `risk-accepted`;
+- for `fixed`, the patched version and reviewed dependency-PR/lockfile evidence;
+- for `risk-accepted`, rationale, compensating controls, Umair as accountable owner, Ali's release
+  review, approval evidence, expiry date, and tracked remediation; and
+- first-observed and last-verified audit/toolchain/lockfile identities.
+
+Every moderate, high, and critical finding requires triage. Missing or expired decisions fail the
+gate. Production requires `unapprovedHigh === 0` and `unapprovedCritical === 0`; a high/critical risk
+exception is valid only when the time-bounded record and both exact-candidate reviews are present.
+
+- [ ] **Step 2: Triage the observed baseline and protect release ordering**
+
+Umair reconciles the recorded four moderate/four high `npm ci` baseline with the exact npm `10.9.4`
+JSON report and creates the package/advisory/path/fix-or-risk records. A changed count is recorded as a
+new observation, not used to erase the earlier baseline. Ali reviews the complete register and the
+audit/SBOM usability at the exact candidate commit.
 
 CI must prove source/spec/SDK/package/image/migration consistency, direct connection policy,
-consumer conformance, secret scans, and immutable provenance. Release order is: migrations, compatible
-LIP service, LIP manifest, Crave adapter/API, sandbox joint smoke, then production promotion. No
-workflow depends on repository transfer.
+consumer conformance, secret scans, exact-lockfile audit/SBOM/risk evidence, and immutable provenance.
+Release order is: dependency gate, migrations, compatible LIP service, LIP manifest, Crave adapter/API,
+sandbox joint smoke, then production promotion. No workflow depends on repository transfer.
 
-- [ ] **Step 2: Run the complete LIP candidate matrix**
+- [ ] **Step 3: Run the complete LIP candidate matrix**
 
 ```bash
 npm ci
+npm run release:dependencies:evidence -- --out .release-evidence
+npm run release:dependencies:check -- --evidence .release-evidence --risk-register docs/releases/dependency-risk-register.json
 npm run spec:check
 npm run typecheck
 npm run conformance
 npm run verify
 npm run release:manifest:check
+git diff --exit-code -- package.json package-lock.json
 git diff --check
 ```
 
 Expected: every command exits `0`; generated sources are clean; package and image identities match the
-manifest; direct-connection and consumer suites pass.
+manifest; the lockfile, audit, SBOM, risk-register, and manifest hashes agree; all findings are
+triaged; no high/critical finding is unapproved; and direct-connection and consumer suites pass.
 
-- [ ] **Step 3: Run the complete Crave candidate matrix**
+- [ ] **Step 4: Run the complete Crave candidate matrix**
 
 ```bash
 pnpm --filter './packages/*' build
@@ -767,33 +836,39 @@ git diff --check
 Expected: every command exits `0`; the adapter imports only the published SDK or uses raw versioned
 HTTP, and it consumes `@workspace/security` rather than a loyalty-specific crypto module.
 
-- [ ] **Step 4: Publish exact LIP artifacts**
+- [ ] **Step 5: Publish exact LIP artifacts**
 
 Publish npm packages with provenance and the OCI image by digest from the exact reviewed tag. Verify
-registry integrity and provenance, generate/attach the LIP manifest, and deploy that image digest to
-LIP sandbox using its direct database roles.
+registry integrity and provenance; attach the canonical npm audit report and CycloneDX SBOM; generate
+the LIP manifest with their hashes and the exact lockfile/risk-register hashes; then deploy that image
+digest to LIP sandbox using its direct database roles. The provenance attestation and release assets
+must resolve to the same source commit, package integrities, image digest, and dependency evidence.
 
-- [ ] **Step 5: Execute sandbox joint conformance and soak**
+- [ ] **Step 6: Execute sandbox joint conformance and soak**
 
 Run provisioning, rotation, verified enroll, earn, reserve/capture/reverse, cancellation, full/partial
 refund, guest claim, cross-tenant denial, outage, replay, reconciliation, backup/restore, and rollback.
 Record exact LIP/Crave revisions, deployment IDs, manifest digest, migration digest, request IDs, test
 run URLs, and rollback targets. No credentials or customer data enter the record.
 
-- [ ] **Step 6: Promote and verify production**
+- [ ] **Step 7: Promote and verify production**
 
 After both owners approve the sandbox record, deploy the same LIP image digest and compatible Crave
 release to production. Run bounded live success/denial/recovery smoke, verify live revisions against
-the compatibility record, and monitor the agreed soak window before declaring production-approved.
+the compatibility record, re-check risk-record expiry and zero unapproved high/critical findings, and
+monitor the agreed soak window before declaring production-approved.
 
-- [ ] **Step 7: Rehearse rollback before cleanup**
+- [ ] **Step 8: Rehearse rollback before cleanup**
 
 Roll back Crave and LIP independently, restore service without destructive schema contraction, and
 reconcile admitted operations. Keep old credential overlap and transitional reward mapping until the
 approved rollback window closes. Cleanup ships as a later PR.
 
 **Gate:** running LIP and Crave revisions, packages, image digest, protocol/profile, migrations,
-manifest, live request IDs, and rollback targets all match the reviewed compatibility record.
+manifest, live request IDs, and rollback targets all match the reviewed compatibility record. The
+release manifest pins the exact lockfile, canonical audit report, CycloneDX SBOM, risk register, and
+provenance digests; every finding has a current fix-or-risk record; and production has zero unapproved
+high or critical findings.
 
 ## Definition of done
 
@@ -810,6 +885,9 @@ manifest, live request IDs, and rollback targets all match the reviewed compatib
       conflict, and reconciled states without receiving LIP identifiers or secrets.
 - [ ] Exact Crave API/adapter, Storefront SDK, LIP packages/image, protocol/profile, migration, release
       manifest, deployment, and rollback identities match the running environments.
+- [ ] The release's unchanged lockfile hash, canonical audit report, CycloneDX SBOM, risk register,
+      package/image provenance, and LIP manifest agree; every dependency finding is triaged and no
+      high or critical finding remains unapproved at production approval.
 - [ ] Repository transfer remains optional administration and did not gate implementation or launch.
 
 ## Deferred
