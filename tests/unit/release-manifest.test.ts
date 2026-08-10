@@ -7,6 +7,13 @@ import {
   validateLipReleaseManifest,
   type LipReleaseManifestV1
 } from "../../scripts/check-release-manifest.js";
+import {
+  generateLipReleaseManifest,
+  migrationSetSha256,
+  normalizeRepository,
+  parseNpmPack,
+  type ReleaseArtifactInputs
+} from "../../scripts/generate-release-manifest.js";
 
 const root = resolve(import.meta.dirname, "../..");
 const examplePath = resolve(root, "docs/releases/lip-release-manifest.example.json");
@@ -105,5 +112,65 @@ describe("LIP release manifest", () => {
         verification: { ...manifest.verification, runUrl: "https://github.com/TODO/run" }
       })
     ).toThrow(/placeholder/);
+  });
+
+  it("normalizes supported GitHub remote URLs", () => {
+    expect(normalizeRepository("https://github.com/craveup/opensource-loyalty.git")).toBe(
+      "craveup/opensource-loyalty"
+    );
+    expect(normalizeRepository("git@github.com:craveup/opensource-loyalty.git")).toBe(
+      "craveup/opensource-loyalty"
+    );
+  });
+
+  it("parses npm pack integrity evidence", () => {
+    expect(parseNpmPack(JSON.stringify([
+      {
+        name: "@loyalty-interchange/sdk",
+        version: "0.1.2",
+        integrity: "sha512-abc="
+      }
+    ]), "@loyalty-interchange/sdk")).toEqual({
+      name: "@loyalty-interchange/sdk",
+      version: "0.1.2",
+      integrity: "sha512-abc="
+    });
+  });
+
+  it("generates a valid manifest from collected release evidence", async () => {
+    const manifest = exampleManifest();
+    const artifacts: ReleaseArtifactInputs = {
+      imageReference: manifest.image.reference,
+      imageDigest: manifest.image.digest,
+      imageProvenanceUrl: manifest.image.provenanceUrl,
+      auditReportSha256: manifest.dependencies.auditReportSha256,
+      sbomSha256: manifest.dependencies.sbomSha256,
+      riskRegisterSha256: manifest.dependencies.riskRegisterSha256,
+      findings: manifest.dependencies.findings,
+      verificationRunUrl: manifest.verification.runUrl,
+      conformanceReportSha256: manifest.verification.conformanceReportSha256
+    };
+
+    const generated = await generateLipReleaseManifest({
+      root,
+      artifacts,
+      collectors: {
+        collectPackages: async () => manifest.packages,
+        git: async (args) => {
+          if (args.join(" ") === "rev-parse HEAD") return `${manifest.source.commit}\n`;
+          if (args.join(" ") === "tag --points-at HEAD") return `${manifest.source.tag}\n`;
+          if (args.join(" ") === "remote get-url origin") return "https://github.com/craveup/opensource-loyalty.git\n";
+          throw new Error(`unexpected git args ${args.join(" ")}`);
+        },
+        npm: async (args) => {
+          if (args.join(" ") === "--version") return `${manifest.dependencies.toolchain.npm}\n`;
+          throw new Error(`unexpected npm args ${args.join(" ")}`);
+        }
+      }
+    });
+
+    expect(generated.source).toEqual(manifest.source);
+    expect(generated.database.migrationSetSha256).toBe(await migrationSetSha256(root));
+    expect(generated.protocol.openapiSha256).toBe(manifest.protocol.openapiSha256);
   });
 });
