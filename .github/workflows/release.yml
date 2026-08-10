@@ -28,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: npm run spec:check
+      - run: npm run release:manifest:check
       - name: Inspect package contents
         run: npm run test:packages
       - name: Publish packages in dependency order
