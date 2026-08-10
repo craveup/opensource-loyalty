@@ -31,6 +31,10 @@ session-lease paths, GitHub Actions/npm provenance, OCI images, and Crave's Expr
 **Current repository:** `craveup/opensource-loyalty`. The completed GitHub organization transfer is
 administrative history; release evidence records the repository coordinate actually used.
 
+**Development branch:** `dev`, initialized from the recorded `origin/main` baseline before this plan
+is merged. All implementation branches start from the latest verified `origin/dev` and target `dev`.
+`main` remains the release branch and receives only a reviewed `dev -> main` promotion.
+
 **Implementation owner:** Umair owns every LIP and Crave code change, schema/contract change,
 conformance fixture, migration, and rollout command in this plan.
 
@@ -46,7 +50,24 @@ owner. Each shared production gate requires both reviews on the exact candidate 
 - The LIP release manifest is generated from release artifacts. Crave's ecosystem compatibility
   record references its digest; neither file is hand-edited to manufacture compatibility.
 - Implementation uses separate PRs in the LIP and Crave repositories. No cross-repository commit
-  combines their histories.
+  combines their histories. Feature PRs target each repository's `dev`; `main` is updated only by a
+  separately verified release-promotion PR.
+
+## Branch and promotion workflow
+
+1. Fetch first and branch each LIP task from the exact latest `origin/dev`; record dependency SHAs
+   when it consumes a Crave contract or an earlier LIP task.
+2. Use one reviewable concern per branch and PR. Run the task's focused gates plus `npm run verify`,
+   review the exact diff, and fix every actionable finding before pushing.
+3. Open the PR against `dev`, inspect the exact head, GitHub checks, comments, reviews, and unresolved
+   threads, then repeat `review -> fix -> verify -> push -> refresh` until a fresh pass is clean.
+4. Normally merge the reviewed head into `dev`; do not squash or rebase away the reviewed commit
+   identity. Prove `origin/dev` contains the reviewed head and rerun the relevant merged-tree gates.
+5. Promote `dev` to `main` only through the release task after package/image, migration, conformance,
+   joint Crave smoke, rollback, and dependency-risk evidence all match the exact candidate.
+
+The initial creation of `dev` from the recorded `main` baseline is repository setup, not product or
+release completion. It does not publish packages, deploy services, or change the default branch.
 
 ## Current evidence
 
@@ -225,7 +246,11 @@ export interface LipReleaseManifestV1 {
     openapiSha256: string;
   };
   packages: Array<{ name: string; version: string; integrity: string }>;
-  image: { reference: string; digest: `sha256:${string}`; provenanceUrl: string };
+  image: {
+    reference: string;
+    digest: `sha256:${string}`;
+    provenanceUrl: string;
+  };
   database: { migrationSetSha256: string; connectionMode: "direct" };
   dependencies: {
     lockfileSha256: string;
@@ -286,10 +311,18 @@ placeholders or missing evidence.
 
 ```ts
 expect(validateLipReleaseManifest(validFixture)).toEqual({ ok: true });
-expect(() => validateLipReleaseManifest({ ...validFixture, source: { ...validFixture.source, commit: "main" } }))
-  .toThrow(/40-character commit/);
-expect(() => validateLipReleaseManifest({ ...validFixture, database: { ...validFixture.database, connectionMode: "pooled" } }))
-  .toThrow(/direct/);
+expect(() =>
+  validateLipReleaseManifest({
+    ...validFixture,
+    source: { ...validFixture.source, commit: "main" },
+  }),
+).toThrow(/40-character commit/);
+expect(() =>
+  validateLipReleaseManifest({
+    ...validFixture,
+    database: { ...validFixture.database, connectionMode: "pooled" },
+  }),
+).toThrow(/direct/);
 ```
 
 - [ ] **Step 2: Run the focused test and verify RED**
@@ -360,15 +393,19 @@ digest without copying or editing LIP release facts.
 - [ ] **Step 1: Write failing connection-policy tests**
 
 ```ts
-expect(() => assertSessionLeaseCompatibleUrl(
-  "postgresql://user:pass@ep-demo-pooler.us-east-2.aws.neon.tech/loyalty",
-  "LIP_CLOUD_DATA_PLANE_DATABASE_URL"
-)).toThrow(/direct.*session advisory lease/i);
+expect(() =>
+  assertSessionLeaseCompatibleUrl(
+    "postgresql://user:pass@ep-demo-pooler.us-east-2.aws.neon.tech/loyalty",
+    "LIP_CLOUD_DATA_PLANE_DATABASE_URL",
+  ),
+).toThrow(/direct.*session advisory lease/i);
 
-expect(() => assertSessionLeaseCompatibleUrl(
-  "postgresql://user:pass@ep-demo.us-east-2.aws.neon.tech/loyalty",
-  "LIP_CLOUD_DATA_PLANE_DATABASE_URL"
-)).not.toThrow();
+expect(() =>
+  assertSessionLeaseCompatibleUrl(
+    "postgresql://user:pass@ep-demo.us-east-2.aws.neon.tech/loyalty",
+    "LIP_CLOUD_DATA_PLANE_DATABASE_URL",
+  ),
+).not.toThrow();
 ```
 
 Also assert that missing URLs, identical sandbox/production URLs in deployment validation, malformed
@@ -798,11 +835,23 @@ export interface CraveLoyaltyOperationJournal {
   locationHash?: string;
   lipRequestId?: string;
   idempotencyFingerprint: string;
-  operation: "enroll" | "evaluate" | "reserve" | "capture" | "accrue" | "adjust" | "claim";
+  operation:
+    | "enroll"
+    | "evaluate"
+    | "reserve"
+    | "capture"
+    | "accrue"
+    | "adjust"
+    | "claim";
   state: "pending" | "succeeded" | "ambiguous" | "exhausted" | "resolved";
   attempts: number;
   nextAttemptAt?: string;
-  resolution?: { outcome: string; reason: string; actorId: string; resolvedAt: string };
+  resolution?: {
+    outcome: string;
+    reason: string;
+    actorId: string;
+    resolvedAt: string;
+  };
 }
 ```
 
