@@ -68,7 +68,7 @@
     "provenanceUrl": "https://github.com/craveup/opensource-loyalty/actions/runs/1234567890/attestations/sha256:3333333333333333333333333333333333333333333333333333333333333333"
   },
   "database": {
-    "migrationSetSha256": "edfcead4f35363aa4b2b55abae77a083717832bd37ee6cec214435f6deb9e61e",
+    "migrationSetSha256": "af3fc9e622fcc1f65693db90da2056945d8eec7613ec7a7cdf12a28b99ff1df6",
     "connectionMode": "direct"
   },
   "dependencies": {

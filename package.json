@@ -30,6 +30,7 @@
     "lip": "tsx packages/cli/src/cli.ts",
     "mcp": "tsx packages/mcp/src/server.ts",
     "quickstart": "npm run build:admin && tsx packages/cli/src/cli.ts quickstart",
+    "release:evidence": "tsx scripts/prepare-release-evidence.ts",
     "release:manifest": "tsx scripts/generate-release-manifest.ts",
     "release:manifest:check": "tsx scripts/check-release-manifest.ts",
     "serve": "npm run build:admin && tsx packages/cli/src/cli.ts serve",

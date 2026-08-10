@@ -8,6 +8,7 @@ import {
   type LipReleaseManifestV1
 } from "../../scripts/check-release-manifest.js";
 import {
+  deployedMigrationPaths,
   generateLipReleaseManifest,
   migrationSetSha256,
   normalizeRepository,
@@ -17,6 +18,7 @@ import {
 
 const root = resolve(import.meta.dirname, "../..");
 const examplePath = resolve(root, "docs/releases/lip-release-manifest.example.json");
+const schemaPath = resolve(root, "docs/releases/lip-release-manifest.schema.json");
 
 function exampleManifest(): LipReleaseManifestV1 {
   return validateLipReleaseManifest(JSON.parse(readFileSync(examplePath, "utf8")) as unknown);
@@ -98,9 +100,26 @@ describe("LIP release manifest", () => {
     expect(() =>
       validateLipReleaseManifest({
         ...manifest,
+        packages: [{ ...manifest.packages[0], integrity: "sha512-abc=" }]
+      })
+    ).toThrow(/canonical SHA-512 digest/);
+
+    expect(() =>
+      validateLipReleaseManifest({
+        ...manifest,
         image: { ...manifest.image, reference: "ghcr.io/craveup/opensource-loyalty:latest" }
       })
     ).toThrow(/image\.reference/);
+
+    expect(() =>
+      validateLipReleaseManifest({
+        ...manifest,
+        image: {
+          ...manifest.image,
+          digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      })
+    ).toThrow(/image\.reference must be pinned to image\.digest/);
   });
 
   it("rejects placeholders in release evidence", () => {
@@ -112,6 +131,58 @@ describe("LIP release manifest", () => {
         verification: { ...manifest.verification, runUrl: "https://github.com/TODO/run" }
       })
     ).toThrow(/placeholder/);
+  });
+
+  it("rejects unknown manifest fields", () => {
+    const manifest = exampleManifest();
+
+    expect(() =>
+      validateLipReleaseManifest({
+        ...manifest,
+        extra: true
+      })
+    ).toThrow(/manifest\.extra/);
+
+    expect(() =>
+      validateLipReleaseManifest({
+        ...manifest,
+        dependencies: {
+          ...manifest.dependencies,
+          findings: { ...manifest.dependencies.findings, note: "approved later" }
+        }
+      })
+    ).toThrow(/dependencies\.findings\.note/);
+  });
+
+  it("requires the complete published package set", () => {
+    const manifest = exampleManifest();
+
+    expect(() =>
+      validateLipReleaseManifest({
+        ...manifest,
+        packages: manifest.packages.slice(0, -1)
+      })
+    ).toThrow(/packages must include @loyalty-interchange\/mcp/);
+
+    expect(() =>
+      validateLipReleaseManifest({
+        ...manifest,
+        packages: [
+          ...manifest.packages.slice(1),
+          { ...manifest.packages[0], name: "@loyalty-interchange/admin" }
+        ]
+      })
+    ).toThrow(/published package names/);
+  });
+
+  it("publishes the semantic validator requirement with the JSON Schema", () => {
+    const schema = JSON.parse(readFileSync(schemaPath, "utf8")) as {
+      $comment?: string;
+      properties?: { image?: { description?: string } };
+    };
+
+    expect(schema.$comment).toMatch(/semantic validator/);
+    expect(schema.properties?.image?.description).toMatch(/image\.reference is pinned to image\.digest/);
   });
 
   it("normalizes supported GitHub remote URLs", () => {
@@ -135,6 +206,17 @@ describe("LIP release manifest", () => {
       version: "0.1.2",
       integrity: "sha512-abc="
     });
+  });
+
+  it("includes every deployed SQL migration in the migration-set digest", async () => {
+    await expect(deployedMigrationPaths(root)).resolves.toEqual([
+      "apps/cloud/migrations/001_control_plane.sql",
+      "apps/cloud/migrations/002_identity_memberships.sql",
+      "apps/cloud/migrations/003_customer_identity.sql",
+      "apps/cloud/migrations/004_environment_key_fingerprint.sql",
+      "apps/cloud/migrations/005_operators.sql",
+      "packages/storage-postgres/migrations/001_normalized_engine.sql"
+    ]);
   });
 
   it("generates a valid manifest from collected release evidence", async () => {

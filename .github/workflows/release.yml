@@ -11,8 +11,11 @@ on:
         default: true
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
+  packages: write
+  attestations: write
+  artifact-metadata: write
 
 jobs:
   publish:
@@ -25,10 +28,156 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - name: Use declared npm version
+        run: |
+          declared_npm="$(node -p "const m = require('./package.json').packageManager.match(/^npm@(.+)$/); if (!m) throw new Error('packageManager must be npm@<version>'); m[1]")"
+          npm install -g "npm@${declared_npm}"
+          actual_npm="$(npm --version)"
+          if [ "$actual_npm" != "$declared_npm" ]; then
+            echo "Expected npm ${declared_npm}, got ${actual_npm}" >&2
+            exit 1
+          fi
       - run: npm ci
       - run: npm run verify
       - run: npm run spec:check
       - run: npm run release:manifest:check
+      - name: Generate conformance report
+        if: github.event_name == 'release' || inputs.dry_run == false
+        run: |
+          mkdir -p .lip
+          npm exec -- vitest run tests/conformance --reporter=json --outputFile=.lip/conformance-report.json
+      - name: Build release evidence
+        id: release-evidence
+        if: github.event_name == 'release' || inputs.dry_run == false
+        env:
+          LIP_RELEASE_RISK_REGISTER_PATH: ${{ vars.LIP_RELEASE_RISK_REGISTER_PATH }}
+        run: |
+          mkdir -p .lip
+
+          set +e
+          npm audit --package-lock-only --json > .lip/npm-audit.json
+          audit_status=$?
+          set -e
+          if [ "$audit_status" -gt 1 ]; then
+            exit "$audit_status"
+          fi
+
+          npm sbom --sbom-format cyclonedx --json > .lip/sbom.cdx.json
+
+          npm run release:evidence -- \
+            --audit .lip/npm-audit.json \
+            --sbom .lip/sbom.cdx.json \
+            --risk-register "$LIP_RELEASE_RISK_REGISTER_PATH" \
+            --conformance-report .lip/conformance-report.json \
+            --out-dir .lip
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        id: image-meta
+        if: github.event_name == 'release' || inputs.dry_run == false
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+            type=sha,format=long
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        if: github.event_name == 'release' || inputs.dry_run == false
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        id: candidate-image
+        if: github.event_name == 'release' || inputs.dry_run == false
+        with:
+          context: .
+          push: false
+          outputs: type=oci,dest=.lip/candidate-image.oci.tar
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          labels: |
+            ${{ steps.image-meta.outputs.labels }}
+            org.opencontainers.image.revision=${{ github.sha }}
+      - name: Install image copy tooling
+        if: github.event_name == 'release' || inputs.dry_run == false
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+      - name: Read candidate image digest
+        id: candidate-image-digest
+        if: github.event_name == 'release' || inputs.dry_run == false
+        run: |
+          digest="$(skopeo inspect --raw oci-archive:.lip/candidate-image.oci.tar | sha256sum | awk '{print "sha256:" $1}')"
+          if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Candidate image digest is missing or invalid: $digest" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@8beda2b7ed98355c0e97c0a63bec38ae472e66c4 # v4
+        id: image-provenance
+        if: github.event_name == 'release' || inputs.dry_run == false
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.candidate-image-digest.outputs.digest }}
+          create-storage-record: true
+      - name: Generate candidate release manifest
+        if: github.event_name == 'release' || inputs.dry_run == false
+        env:
+          LIP_RELEASE_IMAGE_REFERENCE: ghcr.io/${{ github.repository }}@${{ steps.candidate-image-digest.outputs.digest }}
+          LIP_RELEASE_IMAGE_DIGEST: ${{ steps.candidate-image-digest.outputs.digest }}
+          LIP_RELEASE_IMAGE_PROVENANCE_URL: ${{ steps.image-provenance.outputs.attestation-url }}
+          LIP_RELEASE_AUDIT_REPORT_SHA256: ${{ steps.release-evidence.outputs.audit_report_sha256 }}
+          LIP_RELEASE_SBOM_SHA256: ${{ steps.release-evidence.outputs.sbom_sha256 }}
+          LIP_RELEASE_RISK_REGISTER_SHA256: ${{ steps.release-evidence.outputs.risk_register_sha256 }}
+          LIP_RELEASE_FINDINGS_MODERATE: ${{ steps.release-evidence.outputs.moderate }}
+          LIP_RELEASE_FINDINGS_HIGH: ${{ steps.release-evidence.outputs.high }}
+          LIP_RELEASE_FINDINGS_CRITICAL: ${{ steps.release-evidence.outputs.critical }}
+          LIP_RELEASE_UNAPPROVED_HIGH: ${{ steps.release-evidence.outputs.unapproved_high }}
+          LIP_RELEASE_UNAPPROVED_CRITICAL: ${{ steps.release-evidence.outputs.unapproved_critical }}
+          LIP_RELEASE_VERIFICATION_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LIP_RELEASE_CONFORMANCE_REPORT_SHA256: ${{ steps.release-evidence.outputs.conformance_report_sha256 }}
+        run: |
+          npm run release:manifest -- --out .lip/release-manifest.json
+          npm run release:manifest:check -- .lip/release-manifest.json
+      - name: Publish candidate image to GHCR
+        if: github.event_name == 'release' || inputs.dry_run == false
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USERNAME: ${{ github.actor }}
+          IMAGE_DIGEST: ${{ steps.candidate-image-digest.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.image-meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            skopeo copy --all --preserve-digests \
+              --dest-creds "${GHCR_USERNAME}:${GHCR_TOKEN}" \
+              oci-archive:.lip/candidate-image.oci.tar \
+              "docker://${tag}"
+            published_digest="$(skopeo inspect --raw \
+              --creds "${GHCR_USERNAME}:${GHCR_TOKEN}" \
+              "docker://${tag}" | sha256sum | awk '{print "sha256:" $1}')"
+            if [ "$published_digest" != "$IMAGE_DIGEST" ]; then
+              echo "Published ${tag} as ${published_digest}, expected ${IMAGE_DIGEST}" >&2
+              exit 1
+            fi
+          done <<< "$IMAGE_TAGS"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: github.event_name == 'release' || inputs.dry_run == false
+        with:
+          name: lip-release-evidence
+          path: |
+            .lip/release-manifest.json
+            .lip/npm-audit.json
+            .lip/sbom.cdx.json
+            .lip/risk-register.json
+            .lip/conformance-report.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Attach release evidence to GitHub release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            .lip/release-manifest.json \
+            .lip/npm-audit.json \
+            .lip/sbom.cdx.json \
+            .lip/risk-register.json \
+            .lip/conformance-report.json \
+            --clobber
       - name: Inspect package contents
         run: npm run test:packages
       - name: Publish packages in dependency order

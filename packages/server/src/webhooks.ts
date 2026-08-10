@@ -458,7 +458,7 @@ export class WebhookDispatcher {
     });
   }
 
-  private schedule(entry: WebhookOutboxEntry, subscription: WebhookSubscription): void {
+  private schedule(entry: WebhookOutboxEntry, subscription: ManagedWebhookSubscription): void {
     if (this.pending.has(entry.delivery_id)) return;
     const delivery = this.deliver(subscription, entry).catch((error: unknown) => {
       this.onError?.(`webhook delivery crashed: ${error instanceof Error ? error.message : String(error)}`);
@@ -467,8 +467,19 @@ export class WebhookDispatcher {
     void delivery.finally(() => this.pending.delete(entry.delivery_id));
   }
 
+  private subscriptionDeliveryState(
+    subscription: ManagedWebhookSubscription
+  ): "active" | "paused" | "removed" {
+    const configured = this.subscriptions.find((candidate) =>
+      candidate.subscription_id === subscription.subscription_id &&
+      candidate.url === subscription.url
+    );
+    if (!configured) return "removed";
+    return configured.active ? "active" : "paused";
+  }
+
   private async deliver(
-    subscription: WebhookSubscription,
+    subscription: ManagedWebhookSubscription,
     entry: WebhookOutboxEntry
   ): Promise<void> {
     const body = JSON.stringify(entry.event);
@@ -480,19 +491,25 @@ export class WebhookDispatcher {
     // Each attempt replaces the queued entry with a fresh snapshot; the
     // snapshot handed to persist() is never mutated afterwards, so what lands
     // in the outbox is the state at enqueue time.
-    const advance = (next: WebhookOutboxEntry): void => {
+    const advance = (next: WebhookOutboxEntry): "active" | "paused" | "removed" => {
+      const state = this.subscriptionDeliveryState(subscription);
+      if (state === "removed") {
+        return "removed";
+      }
       current = next;
       this.queued.set(next.delivery_id, next);
       this.persist(() => this.outbox.put(next));
+      return state;
     };
     for (let cycleAttempt = 1; cycleAttempt <= maxAttempts; cycleAttempt += 1) {
       if (cycleAttempt > 1) await sleep(backoffMs * 2 ** (cycleAttempt - 2));
+      if (this.subscriptionDeliveryState(subscription) !== "active") return;
       const { last_error: _cleared, ...rest } = current;
-      advance({
+      if (advance({
         ...rest,
         attempts: current.attempts + 1,
         updated_at: this.now().toISOString()
-      });
+      }) !== "active") return;
       const timestamp = Math.floor(this.now().getTime() / 1000);
       try {
         const response = await this.fetchImpl(subscription.url, {
@@ -525,11 +542,11 @@ export class WebhookDispatcher {
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
       }
-      advance({
+      if (advance({
         ...current,
         last_error: lastError,
         updated_at: this.now().toISOString()
-      });
+      }) !== "active") return;
     }
     this.record({
       delivery_id: current.delivery_id,

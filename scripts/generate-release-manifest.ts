@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -23,6 +23,7 @@ const packageWorkspaces = [
   "@loyalty-interchange/cli",
   "@loyalty-interchange/mcp"
 ];
+const migrationDirectories = ["apps/cloud/migrations", "packages/storage-postgres/migrations"];
 
 interface NpmPackResult {
   name: string;
@@ -115,7 +116,7 @@ export async function generateLipReleaseManifest(options: GenerateManifestOption
 }
 
 export async function migrationSetSha256(root: string): Promise<string> {
-  const migrations = ["packages/storage-postgres/migrations/001_normalized_engine.sql"];
+  const migrations = await deployedMigrationPaths(root);
   const entries = await Promise.all(
     migrations.map(async (path) => ({
       path,
@@ -123,6 +124,25 @@ export async function migrationSetSha256(root: string): Promise<string> {
     }))
   );
   return sha256Hex(canonicalJson(entries));
+}
+
+export async function deployedMigrationPaths(root: string): Promise<string[]> {
+  const migrations = (
+    await Promise.all(
+      migrationDirectories.map(async (directory) => {
+        const entries = await readdir(resolve(root, directory), { withFileTypes: true });
+        return entries
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+          .map((entry) => `${directory}/${entry.name}`);
+      })
+    )
+  ).flat().sort();
+
+  if (migrations.length === 0) {
+    throw new Error("No deployed SQL migrations found");
+  }
+
+  return migrations;
 }
 
 export function normalizeRepository(remoteUrl: string): string {
@@ -172,7 +192,7 @@ async function releaseTagForHead(root: string, git: ReleaseCollectors["git"]): P
     .map((tag) => tag.trim())
     .filter(Boolean)
     .filter((tag) => /^v?[0-9]+\.[0-9]+\.[0-9]+/.test(tag));
-  if (tags.length === 1) return tags[0];
+  if (tags.length === 1 && tags[0]) return tags[0];
 
   if (process.env.GITHUB_REF_TYPE === "tag" && process.env.GITHUB_REF_NAME) {
     return process.env.GITHUB_REF_NAME;

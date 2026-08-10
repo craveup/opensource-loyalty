@@ -1,15 +1,30 @@
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const GIT_SHA = /^[0-9a-f]{40}$/;
-const NPM_SRI = /^sha512-[A-Za-z0-9+/]+={0,2}$/;
+const NPM_SRI_PREFIX = "sha512-";
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const SEMVER = /^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/;
 const TAG = /^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/;
 const IMAGE_DIGEST = /^sha256:[0-9a-f]{64}$/;
 const IMAGE_REFERENCE = /^[^\s]+@sha256:[0-9a-f]{64}$/;
 const PACKAGE_NAME = /^@loyalty-interchange\/[a-z0-9-]+$/;
+const PUBLISHED_PACKAGE_NAMES = [
+  "@loyalty-interchange/protocol",
+  "@loyalty-interchange/storage",
+  "@loyalty-interchange/reference",
+  "@loyalty-interchange/storage-sqlite",
+  "@loyalty-interchange/storage-postgres",
+  "@loyalty-interchange/server",
+  "@loyalty-interchange/sdk",
+  "@loyalty-interchange/identity",
+  "@loyalty-interchange/cli",
+  "@loyalty-interchange/mcp"
+] as const;
+const PUBLISHED_PACKAGE_NAME_SET = new Set<string>(PUBLISHED_PACKAGE_NAMES);
 
 export interface LipReleaseManifestV1 {
   schemaVersion: 1;
@@ -89,10 +104,12 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
   const root = objectAt(value, "manifest", errors);
 
   if (!root) throw new ManifestValidationError(errors);
+  expectOnlyKeys(root, ["schemaVersion", "source", "protocol", "packages", "image", "database", "dependencies", "verification"], "manifest", errors);
   expectExact(root.schemaVersion, 1, "schemaVersion", errors);
 
   const source = objectAt(root.source, "source", errors);
   if (source) {
+    expectOnlyKeys(source, ["repository", "commit", "tag"], "source", errors);
     expectPattern(source.repository, /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "source.repository", errors);
     expectPattern(source.commit, GIT_SHA, "source.commit", errors);
     expectPattern(source.tag, TAG, "source.tag", errors);
@@ -102,6 +119,7 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
 
   const protocol = objectAt(root.protocol, "protocol", errors);
   if (protocol) {
+    expectOnlyKeys(protocol, ["version", "profile", "openapiSha256"], "protocol", errors);
     expectExact(protocol.version, "1.0", "protocol.version", errors);
     expectExact(protocol.profile, "foodservice/1.0", "protocol.profile", errors);
     expectPattern(protocol.openapiSha256, SHA256_HEX, "protocol.openapiSha256", errors);
@@ -109,24 +127,34 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
 
   const packages = arrayAt(root.packages, "packages", errors);
   if (packages) {
-    if (packages.length === 0) errors.push("packages must contain at least one package");
+    if (packages.length !== PUBLISHED_PACKAGE_NAMES.length) {
+      errors.push(`packages must contain exactly ${PUBLISHED_PACKAGE_NAMES.length} published packages`);
+    }
     const seen = new Set<string>();
     packages.forEach((entry, index) => {
       const item = objectAt(entry, `packages[${index}]`, errors);
       if (!item) return;
+      expectOnlyKeys(item, ["name", "version", "integrity"], `packages[${index}]`, errors);
       const name = stringAt(item.name, `packages[${index}].name`, errors);
       if (name) {
         if (!PACKAGE_NAME.test(name)) errors.push(`packages[${index}].name must be an @loyalty-interchange package`);
+        if (!PUBLISHED_PACKAGE_NAME_SET.has(name)) {
+          errors.push(`packages[${index}].name must be one of the published package names`);
+        }
         if (seen.has(name)) errors.push(`packages contains duplicate package ${name}`);
         seen.add(name);
       }
       expectPattern(item.version, SEMVER, `packages[${index}].version`, errors);
-      expectPattern(item.integrity, NPM_SRI, `packages[${index}].integrity`, errors);
+      expectNpmSri(item.integrity, `packages[${index}].integrity`, errors);
     });
+    for (const expected of PUBLISHED_PACKAGE_NAMES) {
+      if (!seen.has(expected)) errors.push(`packages must include ${expected}`);
+    }
   }
 
   const image = objectAt(root.image, "image", errors);
   if (image) {
+    expectOnlyKeys(image, ["reference", "digest", "provenanceUrl"], "image", errors);
     expectPattern(image.reference, IMAGE_REFERENCE, "image.reference", errors);
     expectPattern(image.digest, IMAGE_DIGEST, "image.digest", errors);
     expectHttpsUrl(image.provenanceUrl, "image.provenanceUrl", errors);
@@ -141,12 +169,19 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
 
   const database = objectAt(root.database, "database", errors);
   if (database) {
+    expectOnlyKeys(database, ["migrationSetSha256", "connectionMode"], "database", errors);
     expectPattern(database.migrationSetSha256, SHA256_HEX, "database.migrationSetSha256", errors);
     expectExact(database.connectionMode, "direct", "database.connectionMode", errors);
   }
 
   const dependencies = objectAt(root.dependencies, "dependencies", errors);
   if (dependencies) {
+    expectOnlyKeys(
+      dependencies,
+      ["lockfileSha256", "auditReportSha256", "sbomSha256", "riskRegisterSha256", "toolchain", "findings"],
+      "dependencies",
+      errors
+    );
     expectPattern(dependencies.lockfileSha256, SHA256_HEX, "dependencies.lockfileSha256", errors);
     expectPattern(dependencies.auditReportSha256, SHA256_HEX, "dependencies.auditReportSha256", errors);
     expectPattern(dependencies.sbomSha256, SHA256_HEX, "dependencies.sbomSha256", errors);
@@ -154,12 +189,19 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
 
     const toolchain = objectAt(dependencies.toolchain, "dependencies.toolchain", errors);
     if (toolchain) {
+      expectOnlyKeys(toolchain, ["node", "npm"], "dependencies.toolchain", errors);
       expectPattern(toolchain.node, SEMVER, "dependencies.toolchain.node", errors);
       expectPattern(toolchain.npm, SEMVER, "dependencies.toolchain.npm", errors);
     }
 
     const findings = objectAt(dependencies.findings, "dependencies.findings", errors);
     if (findings) {
+      expectOnlyKeys(
+        findings,
+        ["moderate", "high", "critical", "unapprovedHigh", "unapprovedCritical"],
+        "dependencies.findings",
+        errors
+      );
       expectNonNegativeInteger(findings.moderate, "dependencies.findings.moderate", errors);
       expectNonNegativeInteger(findings.high, "dependencies.findings.high", errors);
       expectNonNegativeInteger(findings.critical, "dependencies.findings.critical", errors);
@@ -170,6 +212,7 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
 
   const verification = objectAt(root.verification, "verification", errors);
   if (verification) {
+    expectOnlyKeys(verification, ["runUrl", "conformanceReportSha256"], "verification", errors);
     expectHttpsUrl(verification.runUrl, "verification.runUrl", errors);
     expectPattern(verification.conformanceReportSha256, SHA256_HEX, "verification.conformanceReportSha256", errors);
   }
@@ -234,6 +277,35 @@ function expectPattern(value: unknown, pattern: RegExp, path: string, errors: st
   const text = stringAt(value, path, errors);
   if (text && !pattern.test(text)) {
     errors.push(`${path} has invalid format`);
+  }
+}
+
+function expectNpmSri(value: unknown, path: string, errors: string[]): void {
+  const text = stringAt(value, path, errors);
+  if (!text) return;
+  if (!text.startsWith(NPM_SRI_PREFIX)) {
+    errors.push(`${path} has invalid format`);
+    return;
+  }
+
+  const digest = text.slice(NPM_SRI_PREFIX.length);
+  if (!BASE64.test(digest)) {
+    errors.push(`${path} has invalid format`);
+    return;
+  }
+
+  const decoded = Buffer.from(digest, "base64");
+  if (decoded.length !== 64 || decoded.toString("base64") !== digest) {
+    errors.push(`${path} must contain a canonical SHA-512 digest`);
+  }
+}
+
+function expectOnlyKeys(value: JsonRecord, allowed: readonly string[], path: string, errors: string[]): void {
+  const allowedKeys = new Set(allowed);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      errors.push(`${path}.${key} is not allowed`);
+    }
   }
 }
 

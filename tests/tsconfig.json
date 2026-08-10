@@ -18,6 +18,7 @@
     { "path": "../packages/server" },
     { "path": "../packages/cli" },
     { "path": "../packages/mcp" },
-    { "path": "../packages/sdk" }
+    { "path": "../packages/sdk" },
+    { "path": "../scripts" }
   ]
 }

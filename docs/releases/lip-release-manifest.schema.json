@@ -2,6 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://loyalty-interchange.org/schema/releases/lip-release-manifest-v1.json",
   "title": "LIP release manifest v1",
+  "description": "Structural JSON Schema for LIP release manifests. Consumers MUST also run the LIP release manifest semantic validator so cross-field evidence bindings, including image.reference ending with image.digest, are enforced.",
+  "$comment": "Schema validation alone is not sufficient for the complete release manifest contract; run the semantic validator in scripts/check-release-manifest.ts after JSON Schema validation.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -47,7 +49,8 @@
     },
     "packages": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 10,
+      "maxItems": 10,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -60,10 +63,23 @@
           "version": { "$ref": "#/$defs/semver" },
           "integrity": { "$ref": "#/$defs/npmSri" }
         }
-      }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/containsProtocolPackage" },
+        { "$ref": "#/$defs/containsStoragePackage" },
+        { "$ref": "#/$defs/containsReferencePackage" },
+        { "$ref": "#/$defs/containsStorageSqlitePackage" },
+        { "$ref": "#/$defs/containsStoragePostgresPackage" },
+        { "$ref": "#/$defs/containsServerPackage" },
+        { "$ref": "#/$defs/containsSdkPackage" },
+        { "$ref": "#/$defs/containsIdentityPackage" },
+        { "$ref": "#/$defs/containsCliPackage" },
+        { "$ref": "#/$defs/containsMcpPackage" }
+      ]
     },
     "image": {
       "type": "object",
+      "description": "The semantic validator MUST verify that image.reference is pinned to image.digest.",
       "additionalProperties": false,
       "required": ["reference", "digest", "provenanceUrl"],
       "properties": {
@@ -157,7 +173,117 @@
     },
     "npmSri": {
       "type": "string",
-      "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$"
+      "pattern": "^sha512-[A-Za-z0-9+/]{86}==$"
+    },
+    "containsProtocolPackage": {
+      "contains": { "$ref": "#/$defs/protocolPackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsStoragePackage": {
+      "contains": { "$ref": "#/$defs/storagePackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsReferencePackage": {
+      "contains": { "$ref": "#/$defs/referencePackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsStorageSqlitePackage": {
+      "contains": { "$ref": "#/$defs/storageSqlitePackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsStoragePostgresPackage": {
+      "contains": { "$ref": "#/$defs/storagePostgresPackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsServerPackage": {
+      "contains": { "$ref": "#/$defs/serverPackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsSdkPackage": {
+      "contains": { "$ref": "#/$defs/sdkPackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsIdentityPackage": {
+      "contains": { "$ref": "#/$defs/identityPackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsCliPackage": {
+      "contains": { "$ref": "#/$defs/cliPackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "containsMcpPackage": {
+      "contains": { "$ref": "#/$defs/mcpPackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "protocolPackage": { "$ref": "#/$defs/packageNamedProtocol" },
+    "storagePackage": { "$ref": "#/$defs/packageNamedStorage" },
+    "referencePackage": { "$ref": "#/$defs/packageNamedReference" },
+    "storageSqlitePackage": { "$ref": "#/$defs/packageNamedStorageSqlite" },
+    "storagePostgresPackage": { "$ref": "#/$defs/packageNamedStoragePostgres" },
+    "serverPackage": { "$ref": "#/$defs/packageNamedServer" },
+    "sdkPackage": { "$ref": "#/$defs/packageNamedSdk" },
+    "identityPackage": { "$ref": "#/$defs/packageNamedIdentity" },
+    "cliPackage": { "$ref": "#/$defs/packageNamedCli" },
+    "mcpPackage": { "$ref": "#/$defs/packageNamedMcp" },
+    "packageNamedProtocol": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/protocol" } }
+    },
+    "packageNamedStorage": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/storage" } }
+    },
+    "packageNamedReference": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/reference" } }
+    },
+    "packageNamedStorageSqlite": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/storage-sqlite" } }
+    },
+    "packageNamedStoragePostgres": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/storage-postgres" } }
+    },
+    "packageNamedServer": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/server" } }
+    },
+    "packageNamedSdk": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/sdk" } }
+    },
+    "packageNamedIdentity": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/identity" } }
+    },
+    "packageNamedCli": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/cli" } }
+    },
+    "packageNamedMcp": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/mcp" } }
     },
     "semver": {
       "type": "string",
