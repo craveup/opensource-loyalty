@@ -2,7 +2,7 @@
 
 Persistence contracts for Loyalty Interchange reference platforms.
 
-Part of the [Loyalty Interchange Protocol (LIP)](https://github.com/alvinjchoi/opensource-loyalty)
+Part of the [Loyalty Interchange Protocol (LIP)](https://github.com/craveup/opensource-loyalty)
 — an open, vendor-neutral loyalty protocol and reference platform for
 restaurant, QSR, coffee, and franchise ordering systems.
 
@@ -15,7 +15,7 @@ npm install @loyalty-interchange/storage
 ## Documentation
 
 - Docs site: https://loyalty-interchange.mintlify.app
-- Source and issues: https://github.com/alvinjchoi/opensource-loyalty
+- Source and issues: https://github.com/craveup/opensource-loyalty
 - npm scope: https://www.npmjs.com/org/loyalty-interchange
 
 ## License
