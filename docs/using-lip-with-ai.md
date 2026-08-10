@@ -6,6 +6,9 @@ build a restaurant loyalty integration, or wiring an automation that reacts to
 loyalty events, these guides cover the fastest path from zero to a correct
 implementation.
 
+Canonical source and install examples use
+[`craveup/opensource-loyalty`](https://github.com/craveup/opensource-loyalty).
+
 LIP is not an identity provider. Your app or backend-for-frontend (BFF) owns
 customer sign-in; LIP owns the loyalty ledger. Agents should follow that split
 unless you are building a provider adapter.
@@ -39,15 +42,15 @@ Install one skill:
 npx skills add . --skill lip-checkout
 ```
 
-| Skill | When to use |
-| --- | --- |
-| `lip` | **Router** — start here |
-| `lip-cli` | `serve`, `doctor`, `test`, `validate` |
-| `lip-sdk` | `LipClient`, idempotency, errors |
-| `lip-checkout` | evaluate → reserve → accrue → capture → refund |
-| `lip-webhooks` | signed CloudEvents, receivers |
-| `lip-bff` | customer app + backend-for-frontend |
-| `lip-conformance` | doctor, test, e2e patterns |
+| Skill             | When to use                                    |
+| ----------------- | ---------------------------------------------- |
+| `lip`             | **Router** — start here                        |
+| `lip-cli`         | `serve`, `doctor`, `test`, `validate`          |
+| `lip-sdk`         | `LipClient`, idempotency, errors               |
+| `lip-checkout`    | evaluate → reserve → accrue → capture → refund |
+| `lip-webhooks`    | signed CloudEvents, receivers                  |
+| `lip-bff`         | customer app + backend-for-frontend            |
+| `lip-conformance` | doctor, test, e2e patterns                     |
 
 Works with Cursor, Claude Code, Codex, Windsurf, GitHub Copilot, and other
 agents that support skills. See [`skills/README.md`](../skills/README.md).
@@ -68,15 +71,15 @@ npm run lip -- test http://127.0.0.1:3210 --api-key lip-dev-key
 
 Useful commands for agent workflows:
 
-| Command | Purpose |
-| --- | --- |
-| `lip init` | Create `lip.config.json` with default base URL and API key env var |
-| `lip serve` | Start the reference API, Admin dashboard, and SQLite sandbox |
-| `lip serve --program ./my-program.json` | Boot with a custom program definition |
-| `lip doctor` | Check discovery, health, auth, and capabilities |
-| `lip test` | Run baseline non-destructive HTTP conformance checks |
-| `lip validate -s FoodserviceOrder ./order.json` | Validate a payload against a schema |
-| `lip schemas` | List schema names accepted by `lip validate` |
+| Command                                         | Purpose                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------ |
+| `lip init`                                      | Create `lip.config.json` with default base URL and API key env var |
+| `lip serve`                                     | Start the reference API, Admin dashboard, and SQLite sandbox       |
+| `lip serve --program ./my-program.json`         | Boot with a custom program definition                              |
+| `lip doctor`                                    | Check discovery, health, auth, and capabilities                    |
+| `lip test`                                      | Run baseline non-destructive HTTP conformance checks               |
+| `lip validate -s FoodserviceOrder ./order.json` | Validate a payload against a schema                                |
+| `lip schemas`                                   | List schema names accepted by `lip validate`                       |
 
 Load a custom program when building a brand-specific integration (for example
 a demo rewards program in a companion app):
@@ -95,14 +98,14 @@ for the full local setup path.
 LIP's contract is machine-readable. Before implementing or modifying loyalty
 behavior, agents should load:
 
-| Resource | Path | Use when |
-| --- | --- | --- |
-| OpenAPI 3.1 binding | [`spec/openapi.yaml`](../spec/openapi.yaml) | HTTP paths, auth, request/response shapes |
-| JSON Schemas | [`spec/schemas/`](../spec/schemas/) | Payload validation and code generation |
-| Lifecycle rules | [`spec/lifecycle.md`](../spec/lifecycle.md) | Reserve → capture → reverse, refunds, idempotency |
-| Foodservice profile | [`spec/profiles/foodservice.md`](../spec/profiles/foodservice.md) | Order lines, modifiers, tenders, earning rules |
-| Webhook profile | [`spec/webhooks.md`](../spec/webhooks.md) | Signature verification and deduplication |
-| Full lifecycle example | [`examples/typescript/full-lifecycle.ts`](../examples/typescript/full-lifecycle.ts) | End-to-end SDK usage |
+| Resource               | Path                                                                                | Use when                                          |
+| ---------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------- |
+| OpenAPI 3.1 binding    | [`spec/openapi.yaml`](../spec/openapi.yaml)                                         | HTTP paths, auth, request/response shapes         |
+| JSON Schemas           | [`spec/schemas/`](../spec/schemas/)                                                 | Payload validation and code generation            |
+| Lifecycle rules        | [`spec/lifecycle.md`](../spec/lifecycle.md)                                         | Reserve → capture → reverse, refunds, idempotency |
+| Foodservice profile    | [`spec/profiles/foodservice.md`](../spec/profiles/foodservice.md)                   | Order lines, modifiers, tenders, earning rules    |
+| Webhook profile        | [`spec/webhooks.md`](../spec/webhooks.md)                                           | Signature verification and deduplication          |
+| Full lifecycle example | [`examples/typescript/full-lifecycle.ts`](../examples/typescript/full-lifecycle.ts) | End-to-end SDK usage                              |
 
 When docs and spec disagree, treat `spec/` as canonical.
 
@@ -126,12 +129,12 @@ import { LipClient } from "@loyalty-interchange/sdk";
 const lip = new LipClient({
   baseUrl: process.env.LIP_URL!,
   apiKey: process.env.LIP_API_KEY!,
-  source: { system: "my-ordering-app", instance: "production" }
+  source: { system: "my-ordering-app", instance: "production" },
 });
 
 const evaluation = await lip.orders.evaluate({
   member_id: memberId,
-  order: draftOrder
+  order: draftOrder,
 });
 ```
 
@@ -141,7 +144,7 @@ Mutations must use stable idempotency keys derived from business identifiers
 ```ts
 await lip.accruals.post(
   { member_id: memberId, order },
-  { idempotencyKey: `accrual:${order.order_id}` }
+  { idempotencyKey: `accrual:${order.order_id}` },
 );
 ```
 
@@ -240,15 +243,15 @@ npm run mcp
 
 ### MCP tools
 
-| Tool | Purpose |
-| --- | --- |
-| `lip_index` | Return `llms.txt` |
-| `lip_read_doc` | Read allowed docs/spec files |
-| `lip_list_api_operations` | Summarize `spec/openapi.yaml` |
-| `lip_list_schemas` | Schema names for validation |
-| `lip_validate_json` | Validate JSON against a schema |
-| `lip_checkout_flow` | Checkout + refund lifecycle checklist |
-| `lip_sdk_snippet` | TypeScript snippet for an operation |
+| Tool                      | Purpose                               |
+| ------------------------- | ------------------------------------- |
+| `lip_index`               | Return `llms.txt`                     |
+| `lip_read_doc`            | Read allowed docs/spec files          |
+| `lip_list_api_operations` | Summarize `spec/openapi.yaml`         |
+| `lip_list_schemas`        | Schema names for validation           |
+| `lip_validate_json`       | Validate JSON against a schema        |
+| `lip_checkout_flow`       | Checkout + refund lifecycle checklist |
+| `lip_sdk_snippet`         | TypeScript snippet for an operation   |
 
 ## MCP terminology
 

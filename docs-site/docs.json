@@ -97,7 +97,7 @@
       },
       {
         "label": "GitHub",
-        "href": "https://github.com/alvinjchoi/opensource-loyalty"
+        "href": "https://github.com/craveup/opensource-loyalty"
       }
     ],
     "primary": {
@@ -108,7 +108,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/alvinjchoi/opensource-loyalty"
+      "github": "https://github.com/craveup/opensource-loyalty"
     }
   }
 }

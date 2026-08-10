@@ -13,7 +13,7 @@ Use `spec/` for the normative protocol contract.
 Fastest path with Docker:
 
 ```sh
-git clone https://github.com/alvinjchoi/opensource-loyalty.git
+git clone https://github.com/craveup/opensource-loyalty.git
 cd opensource-loyalty
 docker compose up --build
 ```
@@ -22,7 +22,7 @@ Developer path from source. Use npm; this repo uses npm workspaces and
 `package-lock.json`.
 
 ```sh
-git clone https://github.com/alvinjchoi/opensource-loyalty.git
+git clone https://github.com/craveup/opensource-loyalty.git
 cd opensource-loyalty
 npm install
 npm start
@@ -104,6 +104,8 @@ Enable MCP: [`mcp.json`](../mcp.json) · Skills: [`skills/README.md`](../skills/
   exports, signed messaging connectors, jobs, retry, and adapter contracts.
 - [Punchh compatibility](punchh-compatibility.md): map a restaurant loyalty
   migration against current LIP coverage and adapter gaps.
+- [Crave integration delivery plan](plans/2026-08-09-crave-integration-delivery.md): keep Crave and
+  LIP independently deployed while proving provisioning, lifecycle, reconciliation and joint release.
 
 ## API reference
 
