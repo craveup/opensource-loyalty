@@ -1,0 +1,89 @@
+# Loyalty Interchange Protocol: full agent context
+
+LIP is an open, vendor-neutral loyalty transaction protocol and Apache-2.0
+reference platform for foodservice ordering. The protocol is not customer
+authentication, payment processing, or Cloud billing. A server-side BFF
+verifies customer identity, retains the merchant key, and maps payment outcomes
+to LIP operations.
+
+## Product layers
+
+- Protocol: `spec/`, generated OpenAPI/JSON Schemas, conformance.
+- Reference Platform: protocol/reference/server/storage/SDK/CLI/Admin packages.
+- Adapter layer: `packages/adapter-kit`, source fixtures, ordering BFF.
+- Managed layer: `apps/cloud`; non-normative organizations, environments,
+  billing, encrypted credentials/recovery, customer gateway, and operations.
+
+Read `spec/core.md`, `spec/lifecycle.md`, and
+`spec/profiles/foodservice.md` before changing behavior. When prose differs,
+`spec/` is authoritative. Package release `0.2.0` contains protocol working
+draft `0.1.0`; these versions are intentionally independent.
+
+## Safe checkout model
+
+1. BFF maps open order and calls evaluate.
+2. BFF optionally reserves a reward.
+3. Payment provider authorizes/settles outside LIP.
+4. On failure, reverse the reservation.
+5. On success, post the paid-order accrual and capture the reservation.
+6. On void/refund, post a source-linked adjustment with exact signed deltas.
+
+Use distinct deterministic keys for evaluate, accrue, reserve, capture,
+reverse, and each adjustment. Preserve the same key on retry. Reusing a key
+with changed business content is a conflict. Never silently retry a financial
+mutation under a new key.
+
+## Foodservice adapter evidence
+
+`FoodserviceOrderingAdapter` maps source orders/adjustments and derives keys.
+`certifyFoodserviceAdapter` requires all shared scenarios and validates protocol
+structure, total reconciliation,
+determinism, capability declarations, expected line/tender kinds, adjustment
+source linkage, and operation-scoped keys. The fixture corpus covers modifiers,
+combos, split tenders, comps, discounts, tax, tip, offline/duplicate delivery,
+void, and partial refund. A report covers its exact adapter and fixtures only;
+it is not vendor partner certification.
+
+## Migration
+
+`lip migration plan` accepts JSON/CSV member rows, rejects duplicate identities,
+derives stable opaque ids, and creates migration-classified opening-balance
+operations in a private checksummed plan. `lip migration reconcile` compares
+the plan with a checksummed full-state archive. Rich source semantics such as
+expiration lots, banked offers, or households need an explicit source adapter.
+
+## Cloud trust boundaries
+
+- Cloud routes are `/cloud/v1`; they never extend normative `/lip/v1`.
+- Operator API keys are hashed and scoped; customer routes verify an external
+  OIDC token for every request and never issue sessions.
+- Local runtime credential envelopes are AES-256-GCM v3 with operator-supplied
+  keys. Plaintext v1/v2 loads only under an explicit migration flag and is
+  rewritten encrypted.
+- Local SQLite backup quiesces, encrypts, checksums, atomically writes, and resumes;
+  restore validates checksum, paths, encryption binding, and metadata. Postgres
+  requires provider-native backup/PITR.
+- Stripe webhook signatures are verified before subscription state changes.
+
+## Primary developer paths
+
+- Browser walkthrough: `landing/index.html#walkthrough` (synthetic, no key).
+- Self-host: `docs/getting-started.md` and `docs/quickstart.md`.
+- Design partner: `docs/design-partners.md`.
+- SDK: `docs/typescript-sdk.md` and `examples/typescript/full-lifecycle.ts`.
+- BFF: `examples/typescript/ordering-bff.ts`.
+- Adapters: `docs/ordering-adapters.md`.
+- Migration: `docs/member-migration.md` and `MIGRATION.md`.
+- Security: `docs/security-and-operations.md`.
+- Provider evaluation: `docs/provider-selection.md` and `docs/comparison.md`.
+
+## Verification
+
+Use Node 22 and npm. Run `npm run verify`, `npm run spec:check`,
+`npm run docs:check`, `npm run release:manifest:check`, and the launch-surface
+check. PostgreSQL tests require the CI database; a local skip is not a passing
+database result. Visible changes require desktop and 390px render inspection.
+
+Never infer customer adoption, performance, compatibility, production SLOs,
+search ranking, or partner endorsement from repository code, tests, stars,
+downloads, synthetic demos, or this file.

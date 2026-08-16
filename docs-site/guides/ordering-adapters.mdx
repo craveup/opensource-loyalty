@@ -1,0 +1,30 @@
+---
+title: "Foodservice ordering adapters"
+description: "Map source orders deterministically and certify restaurant edge cases with the LIP adapter kit."
+---
+
+`@loyalty-interchange/adapter-kit` defines a source-to-LIP contract and emits a
+`lip.adapter-certification/1` report. It checks valid/reconciled foodservice
+orders, deterministic replay, distinct operation keys, declared capabilities,
+adjustments, line kinds, and tender types.
+
+The reference corpus covers modifiers, combos, split tenders, comps,
+discounts, taxes, tips, offline replay, duplicate delivery, voids, and partial
+refunds. A green report covers only the supplied adapter and fixtures; it is not
+a vendor endorsement.
+
+For Square, Toast, Olo, PAR Brink, NCR Aloha, or Oracle Simphony, first map
+stable order/check id, scope, item/modifier/combo hierarchy, discount vs comp,
+tax/tip/fee eligibility, multiple tenders, business date, event time, and
+source-linked refund deltas. Partner payload and retry details vary and must be
+verified in an authorized sandbox before compatibility is claimed.
+
+```ts
+import { certifyFoodserviceAdapter } from "@loyalty-interchange/adapter-kit";
+
+const report = certifyFoodserviceAdapter(adapter, sanitizedFixtures);
+if (!report.passed) throw new Error(JSON.stringify(report.cases));
+```
+
+Use `certifyAdapter` only for a clearly labeled partial run; it does not require
+the complete shared foodservice scenario set.

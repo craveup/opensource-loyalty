@@ -1,0 +1,24 @@
+name: Protocol proposal
+description: Propose a normative LIP behavior or schema change
+labels: ["protocol-proposal"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Interoperability problem
+      description: Describe the provider-neutral problem, not one vendor's payload.
+    validations:
+      required: true
+  - type: textarea
+    id: semantics
+    attributes:
+      label: Proposed semantics and compatibility
+      description: Include idempotency, errors, money, retries, and versioning impact.
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example requests, responses, and conformance cases
+    validations:
+      required: true

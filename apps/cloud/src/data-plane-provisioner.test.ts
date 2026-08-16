@@ -1,9 +1,14 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { LocalDataPlaneProvisioner, type ProvisionedRuntime } from "./data-plane-provisioner.js";
+import {
+  LocalDataPlaneProvisioner,
+  readLocalCredential,
+  type ProvisionedRuntime
+} from "./data-plane-provisioner.js";
 import { MemoryCloudRepository } from "./memory-repository.js";
 import { CloudOperatorService } from "./operator-service.js";
 import { CloudProvisioningWorker } from "./provisioning.js";
@@ -17,6 +22,7 @@ const owner = {
   subject: "user_clerk_001",
   email: "owner@example.com"
 };
+const credentialEncryptionKey = Buffer.alloc(32, 7);
 
 function requestContext() {
   return {
@@ -77,6 +83,7 @@ async function fixture(input: { programId?: string } = {}) {
   const provisioner = new LocalDataPlaneProvisioner({
     programDirectory,
     dataDirectory,
+    credentialEncryptionKey,
     onProvisioned: (runtime) => provisioned.push(runtime)
   });
   const repository = new MemoryCloudRepository();
@@ -223,6 +230,119 @@ describe("LocalDataPlaneProvisioner", () => {
     expect(provisioned).toHaveLength(1);
   });
 
+  it("suspends, resumes, backs up, and restores a local environment", async () => {
+    const {
+      provisioner,
+      provisioned,
+      repository,
+      environment,
+      worker,
+      programDirectory,
+      dataDirectory
+    } = await fixture();
+    expect(await worker.runOnce()).toBe("succeeded");
+    const ready = await repository.environmentById(environment.environment_id);
+    const original = provisioned[0]!;
+
+    await provisioner.suspend(environment.environment_id);
+    expect(provisioner.runtimes()).toHaveLength(0);
+    await expect(fetch(`${ready!.api_url}/health`)).rejects.toThrow();
+    const resumed = await provisioner.resume(environment.environment_id);
+    expect(resumed.api_url).toBe(original.api_url);
+    expect(await fetch(`${resumed.api_url}/health`).then((response) => response.status)).toBe(200);
+
+    const backupPath = join(dataDirectory, "environment.backup.json");
+    const backup = await provisioner.backup(environment.environment_id, backupPath, {
+      now: () => new Date("2026-08-15T20:00:00.000Z")
+    });
+    expect(backup).toMatchObject({
+      format: "lip-cloud-local-backup",
+      environment_id: environment.environment_id,
+      tenant_id: original.tenant_id,
+      sqlite_database: {
+        algorithm: "aes-256-gcm",
+        key_id: expect.any(String),
+        ciphertext: expect.any(String)
+      }
+    });
+    expect(backup).not.toHaveProperty("sqlite_database_base64");
+    expect(statSync(backupPath).mode & 0o777).toBe(0o600);
+    expect(provisioner.runtimes()).toHaveLength(1);
+
+    const tamperedBackupPath = join(dataDirectory, "environment.tampered.backup.json");
+    const tamperedBackup = JSON.parse(readFileSync(backupPath, "utf8")) as {
+      sqlite_database: { ciphertext: string };
+      checksum: { value: string };
+      [key: string]: unknown;
+    };
+    tamperedBackup.sqlite_database.ciphertext =
+      `${tamperedBackup.sqlite_database.ciphertext.startsWith("A") ? "B" : "A"}` +
+      tamperedBackup.sqlite_database.ciphertext.slice(1);
+    const { checksum: _checksum, ...tamperedWithoutChecksum } = tamperedBackup;
+    tamperedBackup.checksum.value = createHash("sha256")
+      .update(JSON.stringify(tamperedWithoutChecksum))
+      .digest("hex");
+    writeFileSync(tamperedBackupPath, JSON.stringify(tamperedBackup));
+    const tamperedProvisioner = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory: mkdtempSync(join(tmpdir(), "lip-cloud-tampered-restore-")),
+      credentialEncryptionKey
+    });
+    await expect(tamperedProvisioner.restoreBackup(tamperedBackupPath)).rejects.toThrow(
+      /Backup database authentication failed/
+    );
+    await tamperedProvisioner.close();
+
+    await provisioner.close();
+    rmSync(original.credentials_path);
+    rmSync(join(dataDirectory, `${original.tenant_id}.db`));
+    const restoredProvisioner = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory,
+      credentialEncryptionKey
+    });
+    close = () => restoredProvisioner.close();
+    const restored = await restoredProvisioner.restoreBackup(backupPath);
+    expect(restored).toMatchObject({
+      environment_id: original.environment_id,
+      tenant_id: original.tenant_id,
+      api_url: original.api_url
+    });
+    expect(await fetch(`${restored.api_url}/health`).then((response) => response.status)).toBe(200);
+  });
+
+  it("rejects tampered encrypted credentials and plaintext unless migration is explicit", async () => {
+    const { provisioner, provisioned, repository, environment, worker, programDirectory,
+      dataDirectory } = await fixture();
+    expect(await worker.runOnce()).toBe("succeeded");
+    await repository.environmentById(environment.environment_id);
+    const runtime = provisioned[0]!;
+    await provisioner.close();
+
+    const envelope = JSON.parse(readFileSync(runtime.credentials_path, "utf8")) as {
+      ciphertext: string;
+    };
+    envelope.ciphertext = `${envelope.ciphertext.startsWith("A") ? "B" : "A"}${envelope.ciphertext.slice(1)}`;
+    writeFileSync(runtime.credentials_path, JSON.stringify(envelope));
+    const tampered = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory,
+      credentialEncryptionKey
+    });
+    close = () => tampered.close();
+    expect(await tampered.restore()).toEqual([]);
+
+    writeFileSync(runtime.credentials_path, JSON.stringify({
+      environment_id: runtime.environment_id,
+      tenant_id: runtime.tenant_id,
+      program_id: runtime.program_id,
+      api_url: runtime.api_url,
+      api_key: runtime.api_key,
+      port: runtime.port
+    }));
+    expect(await tampered.restore()).toEqual([]);
+  });
+
   it("bootstraps a rotatable merchant key alongside the deprecated root key", async () => {
     const { provisioner, provisioned, repository, environment, worker } = await fixture();
     close = () => provisioner.close();
@@ -235,7 +355,14 @@ describe("LocalDataPlaneProvisioner", () => {
     expect(runtime.merchant_api_key).not.toBe(runtime.api_key);
     expect(runtime.merchant_api_key_id).toMatch(/^key_/);
 
-    const credential = JSON.parse(readFileSync(runtime.credentials_path, "utf8")) as {
+    const encrypted = readFileSync(runtime.credentials_path, "utf8");
+    expect(encrypted).not.toContain(runtime.api_key);
+    expect(encrypted).not.toContain(runtime.merchant_api_key);
+    expect(JSON.parse(encrypted)).toMatchObject({ version: 3, algorithm: "aes-256-gcm" });
+    const credential = await readLocalCredential(
+      runtime.credentials_path,
+      credentialEncryptionKey
+    ) as {
       version: number;
       api_key: string;
       api_key_deprecated: boolean;
@@ -279,7 +406,7 @@ describe("LocalDataPlaneProvisioner", () => {
     expect(rotated.merchant_api_key_id).not.toBe(before.merchant_api_key_id);
 
     // File and in-memory runtime reflect the new credential.
-    const credential = JSON.parse(readFileSync(before.credentials_path, "utf8")) as {
+    const credential = await readLocalCredential(before.credentials_path, credentialEncryptionKey) as {
       merchant_api_key: string;
     };
     expect(credential.merchant_api_key).toBe(rotated.merchant_api_key);
@@ -323,7 +450,7 @@ describe("LocalDataPlaneProvisioner", () => {
     expect(await fetch(`${ready!.api_url}/admin/api/v1/snapshot`, {
       headers: { authorization: `Bearer ${rotated.merchant_api_key}` }
     }).then((r) => r.status)).toBe(200);
-    const file = JSON.parse(readFileSync(before.credentials_path, "utf8")) as {
+    const file = await readLocalCredential(before.credentials_path, credentialEncryptionKey) as {
       merchant_api_key: string;
     };
     expect(file.merchant_api_key).toBe(rotated.merchant_api_key);
@@ -337,7 +464,7 @@ describe("LocalDataPlaneProvisioner", () => {
     const current = provisioner.runtimes()[0]!;
     expect([first.merchant_api_key, second.merchant_api_key])
       .toContain(current.merchant_api_key);
-    const fileAfter = JSON.parse(readFileSync(before.credentials_path, "utf8")) as {
+    const fileAfter = await readLocalCredential(before.credentials_path, credentialEncryptionKey) as {
       merchant_api_key: string;
     };
     expect(fileAfter.merchant_api_key).toBe(current.merchant_api_key);
@@ -364,7 +491,11 @@ describe("LocalDataPlaneProvisioner", () => {
     await provisioner.close();
     rmSync(before.credentials_path);
 
-    const second = new LocalDataPlaneProvisioner({ programDirectory, dataDirectory });
+    const second = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory,
+      credentialEncryptionKey
+    });
     close = () => second.close();
     await second.provision({ environment: ready!, job: makeJob(environment.environment_id) });
     const runtime = second.runtimes()[0]!;
@@ -405,7 +536,11 @@ describe("LocalDataPlaneProvisioner", () => {
       blocker.once("error", reject);
       blocker.listen(before.port, "127.0.0.1", resolve);
     });
-    const second = new LocalDataPlaneProvisioner({ programDirectory, dataDirectory });
+    const second = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory,
+      credentialEncryptionKey
+    });
     close = () => second.close();
     try {
       await expect(
@@ -432,7 +567,7 @@ describe("LocalDataPlaneProvisioner", () => {
     expect(merchantKeys.filter((key) => !key.expires_at)).toHaveLength(1);
   });
 
-  it("revokes the freshly minted merchant key when persisting credentials fails", async () => {
+  it("fails before minting when an existing credential path is unreadable", async () => {
     const {
       provisioner, provisioned, repository, environment, worker, programDirectory, dataDirectory
     } = await fixture();
@@ -444,7 +579,11 @@ describe("LocalDataPlaneProvisioner", () => {
     rmSync(before.credentials_path);
     mkdirSync(before.credentials_path);
 
-    const second = new LocalDataPlaneProvisioner({ programDirectory, dataDirectory });
+    const second = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory,
+      credentialEncryptionKey
+    });
     close = () => second.close();
     await expect(
       second.provision({ environment: ready!, job: makeJob(environment.environment_id) })
@@ -464,11 +603,11 @@ describe("LocalDataPlaneProvisioner", () => {
     const merchantKeys = body.access_control.api_keys.filter((key) =>
       key.name === "cloud-merchant"
     );
-    // The key minted during the failed attempt was revoked (compensation), so
-    // only one live no-expiry lineage survives.
+    // Fail-closed credential reads abort before minting. The successful retry
+    // rotates the old standing key, so no failed-attempt key needs revocation.
     expect(merchantKeys.filter((key) => key.active)).toHaveLength(2);
     expect(merchantKeys.filter((key) => key.active && !key.expires_at)).toHaveLength(1);
-    expect(merchantKeys.some((key) => !key.active && key.revoked_at)).toBe(true);
+    expect(merchantKeys.some((key) => !key.active && key.revoked_at)).toBe(false);
   });
 
   it("does not seed tenant runtimes from host-level webhook env vars", async () => {
@@ -513,7 +652,12 @@ describe("LocalDataPlaneProvisioner", () => {
     const consoleError = console.error;
     console.error = (...args: unknown[]) => { errors.push(args); };
     let restored;
-    const second = new LocalDataPlaneProvisioner({ programDirectory, dataDirectory });
+    const second = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory,
+      credentialEncryptionKey,
+      allowLegacyPlaintextCredentials: true
+    });
     close = () => second.close();
     try {
       restored = await second.restore();
@@ -532,7 +676,11 @@ describe("LocalDataPlaneProvisioner", () => {
     const programDirectory = mkdtempSync(join(tmpdir(), "lip-cloud-programs-"));
     const dataDirectory = mkdtempSync(join(tmpdir(), "lip-cloud-data-"));
     writeFileSync(join(programDirectory, "acme-rewards.json"), JSON.stringify(program));
-    const provisioner = new LocalDataPlaneProvisioner({ programDirectory, dataDirectory });
+    const provisioner = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory,
+      credentialEncryptionKey
+    });
     const repository = new MemoryCloudRepository();
     const cloud = new CloudControlPlane({ repository });
     // PLA-442: a platform-admin operator key replaces the shared key + subject
@@ -699,7 +847,11 @@ describe("LocalDataPlaneProvisioner", () => {
     const programDirectory = mkdtempSync(join(tmpdir(), "lip-cloud-programs-"));
     const dataDirectory = mkdtempSync(join(tmpdir(), "lip-cloud-data-"));
     writeFileSync(join(programDirectory, "acme-rewards.json"), JSON.stringify(program));
-    const provisioner = new LocalDataPlaneProvisioner({ programDirectory, dataDirectory });
+    const provisioner = new LocalDataPlaneProvisioner({
+      programDirectory,
+      dataDirectory,
+      credentialEncryptionKey
+    });
     const repository = new MemoryCloudRepository();
     const cloud = new CloudControlPlane({ repository });
     const worker = new CloudProvisioningWorker({
@@ -780,6 +932,7 @@ describe("LocalDataPlaneProvisioner", () => {
     const first = new LocalDataPlaneProvisioner({
       programDirectory,
       dataDirectory,
+      credentialEncryptionKey,
       basePort: 18_210
     });
     const repository = new MemoryCloudRepository();
@@ -824,6 +977,8 @@ describe("LocalDataPlaneProvisioner", () => {
     const second = new LocalDataPlaneProvisioner({
       programDirectory,
       dataDirectory,
+      credentialEncryptionKey,
+      allowLegacyPlaintextCredentials: true,
       basePort: 18_210
     });
     close = () => second.close();
@@ -837,8 +992,14 @@ describe("LocalDataPlaneProvisioner", () => {
     });
     expect(await fetch(`${original.api_url}/health`).then((r) => r.status)).toBe(200);
 
-    // The legacy file was upgraded to v2 with a freshly minted merchant key.
-    const upgraded = JSON.parse(readFileSync(original.credentials_path, "utf8")) as {
+    // The legacy file was upgraded to an authenticated v3 envelope containing
+    // a freshly minted merchant key.
+    expect(JSON.parse(readFileSync(original.credentials_path, "utf8")))
+      .toMatchObject({ version: 3, algorithm: "aes-256-gcm" });
+    const upgraded = await readLocalCredential(
+      original.credentials_path,
+      credentialEncryptionKey
+    ) as {
       version: number;
       api_key: string;
       merchant_api_key: string;

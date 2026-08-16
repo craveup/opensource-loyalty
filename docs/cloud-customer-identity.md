@@ -6,11 +6,11 @@ Identity providers keep responsibility for credentials, authentication,
 recovery, token issuance, session revocation, and bot protection. CraveUp keeps
 the stable customer record and its program-scoped LIP member mappings.
 
-This first slice is a server-side TypeScript contract in
-`@loyalty-interchange/cloud`. It includes in-memory and Postgres repositories,
-OIDC and Clerk token verification adapters, customer/profile/consent lifecycle
-services, loyalty enrollment orchestration, and provider contract tests. It
-does not yet publish a customer SDK or expose hosted HTTP routes.
+The `@loyalty-interchange/cloud` implementation includes in-memory and Postgres
+repositories, OIDC/Clerk/Auth0 verification adapters, customer/profile/consent
+lifecycle services, loyalty enrollment orchestration, provider contract tests,
+and optional authenticated HTTP routes for a merchant BFF. It does not publish
+a customer SDK or sign-up/sign-in UI and never issues an identity-provider token.
 
 ## Stable identity model
 
@@ -88,6 +88,13 @@ Verified email or phone is returned only when both the value and its
 - `deleteAccount` performs local privacy deletion and provider cleanup; and
 - `close` releases repository resources.
 
+When configured, the same operations are exposed below `/cloud/v1/customer`.
+Every request carries the external provider Bearer token plus fixed
+`X-LIP-Tenant-Id` and `X-LIP-Customer-Provider` headers; the gateway verifies
+the token again and reconstructs `CustomerSession` server-side. Routes cover
+session introspection, profile, consent, identity linking, loyalty enrollment,
+account export, and deletion. They are Cloud/BFF routes, never `/lip/v1`.
+
 The service does not persist raw tokens, passwords, refresh tokens, or sessions.
 Every operation is tenant-scoped. Instantiate provider adapters with a fixed
 tenant; never accept a tenant solely from an unverified token or client claim.
@@ -124,8 +131,7 @@ the access token only to its BFF/customer gateway. The BFF should:
    checkout LIP operations; and
 5. call `deleteAccount` before clearing the native token.
 
-An app should not remove its existing auth implementation until a published
-customer package or hosted customer gateway exposes this contract. The current
-slice is ready for server integration and conformance testing, but it does not
-yet provide hosted sign-up/sign-in UI, refresh handling, native secure-storage
-helpers, or retry processing for pending provider deletion.
+An app must retain its existing authentication implementation. The hosted
+gateway verifies existing tokens but does not provide sign-up/sign-in UI,
+refresh handling, native secure-storage helpers, or durable retry processing
+for pending provider deletion.

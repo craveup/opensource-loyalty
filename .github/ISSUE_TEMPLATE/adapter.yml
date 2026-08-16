@@ -1,0 +1,25 @@
+name: Adapter proposal
+description: Propose or certify a foodservice ordering adapter
+labels: ["adapter"]
+body:
+  - type: input
+    id: source
+    attributes:
+      label: Source platform
+    validations:
+      required: true
+  - type: checkboxes
+    id: capabilities
+    attributes:
+      label: Covered fixtures
+      options:
+        - label: Modifiers and combos
+        - label: Split tenders, comps, discounts, tax, and tip
+        - label: Duplicate and offline delivery
+        - label: Voids and partial refunds
+  - type: textarea
+    id: mapping
+    attributes:
+      label: Mapping and unresolved semantics
+    validations:
+      required: true

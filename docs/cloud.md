@@ -34,10 +34,13 @@ The `@loyalty-interchange/cloud` workspace includes:
 - idempotent monthly usage events and counters;
 - hard quota enforcement under a transaction lock;
 - an authenticated management API with direct OIDC or trusted-gateway modes;
-- a provider boundary for Stripe or another billing system.
+- a Stripe billing adapter with signed webhook verification, plus a provider
+  boundary for alternate billing systems.
 
-The control plane does not yet collect payment; new organizations use the
-`manual` billing provider on the Free plan. New environments remain `pending`
+New organizations use the `manual` billing provider on the Free plan. When
+Stripe secret, webhook secret, and plan price ids are configured, owners,
+admins, or billing members can create Checkout sessions and signed subscription
+webhooks update the Cloud subscription. New environments remain `pending`
 until a provisioning adapter processes their job. A local adapter ships today
 (see below); regional infrastructure adapters remain future work.
 
@@ -55,9 +58,12 @@ environment inside the control-plane process. Each `create` job:
    `13210`) recorded in `<data-dir>/ports.json`;
 4. bootstraps an owner-role **merchant API key** through the tenant's own
    access-control service (hashed, audited, rotatable) and writes a `0600`
-   credentials file (`<data-dir>/<environment_id>.credentials.json`, format
-   v2: `merchant_api_key` + a deprecated root `api_key` kept for backward
-   compatibility; legacy v1 files are upgraded in place on restore); and
+   AES-256-GCM credential envelope
+   (`<data-dir>/<environment_id>.credentials.json`, format v3). The encrypted
+   payload retains a v2 merchant credential plus a deprecated root key for
+   backward-compatible runtime restore; legacy plaintext v1/v2 loads only when
+   `LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION=true` and is immediately
+   rewritten as v3; and
 5. marks the environment `ready` with its reachable `api_url` and `admin_url`.
 
 Merchant credentials are retrieved and rotated through the control plane:
@@ -100,9 +106,15 @@ with a `cloud_environment_restore_failed` log line instead of aborting the
 other tenants' restore. Set `LIP_CLOUD_DATA_PLANE_HOST` to control the bind
 address and `LIP_CLOUD_DATA_PLANE_PUBLIC_HOST` to control the hostname written
 into each runtime's `api_url` (for example a private-network service name).
-Only `create` operations are supported; credentials remain files (`0600`,
-written atomically) rather than an encrypted secret store. Regional adapters
-still replace this for production.
+Set `LIP_CLOUD_CREDENTIAL_KEY` to a 32-byte base64url key from an approved
+secret manager. Credential files are `0600`, authenticated, and written
+atomically. The local SQLite adapter also exposes audited operations at
+`POST /cloud/v1/environments/{id}/operations/{suspend|resume|backup|restore}`.
+Backup quiesces and resumes the runtime, writes a private checksummed encrypted
+artifact under `LIP_CLOUD_BACKUP_DIR`, and restore requires a `backup_id` while
+the environment is suspended. Local backup refuses Postgres; use
+provider-native PITR there. Regional adapters still replace the local
+provisioner for production.
 
 `npm run cloud:migrate` applies the engine and control-plane schemas ahead of
 boot (for release/preDeploy steps), and `npm run cloud:provision` onboards one
@@ -208,6 +220,18 @@ Configuration:
 - `LIP_CLOUD_REGIONS`, comma-separated
 - `LIP_CLOUD_DEFAULT_PLAN`
 - `LIP_CLOUD_ALLOWED_ORIGINS`, comma-separated
+- `LIP_CLOUD_CREDENTIAL_KEY`, required 32-byte base64url key when local
+  provisioning is enabled
+- `LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION=true`, one-time plaintext v1/v2
+  migration switch
+- `LIP_CLOUD_BACKUP_DIR`, private local backup directory
+- `LIP_CLOUD_STRIPE_SECRET_KEY`, `LIP_CLOUD_STRIPE_WEBHOOK_SECRET`, and
+  `LIP_CLOUD_STRIPE_PRICE_PRO` / `LIP_CLOUD_STRIPE_PRICE_BUSINESS`
+- `LIP_CLOUD_CUSTOMER_OIDC_ISSUER`, `LIP_CLOUD_CUSTOMER_TENANT_ID`, and
+  `LIP_CLOUD_CUSTOMER_PROVIDER_ID` to enable managed customer BFF routes;
+  also set `LIP_CLOUD_CUSTOMER_OIDC_AUDIENCE` or the comma-separated
+  `LIP_CLOUD_CUSTOMER_AUTHORIZED_PARTIES` so tokens cannot be replayed from an
+  unintended client
 
 ## Authentication boundary
 
@@ -278,8 +302,14 @@ details.
 - `GET|POST /cloud/v1/projects/{project_id}/environments`
 - `POST /cloud/v1/environments/{environment_id}/attach`
 - `POST /cloud/v1/environments/{environment_id}/credentials/rotate`
+- `POST /cloud/v1/environments/{environment_id}/operations/{suspend|resume|backup|restore}`
 - `POST /cloud/v1/environments/{environment_id}/usage-events`
 - `GET /cloud/v1/environments/{environment_id}/usage`
+- `POST /cloud/v1/organizations/{organization_id}/billing/checkout`
+- `POST /cloud/v1/organizations/{organization_id}/billing/cancel`
+- `POST /cloud/v1/billing/webhooks/stripe` (Stripe signature, no Cloud bearer)
+- `/cloud/v1/customer/{session|profile|consents|identities/link|loyalty/enroll|export|account}`
+  (external customer bearer plus fixed tenant/provider headers)
 
 Example:
 
@@ -310,9 +340,8 @@ points issued are not a billing metric.
 1. Replace the local provisioner with regional adapters that create durable
    data-plane runtimes (stable hosts, restarts, suspend/delete/upgrade jobs)
    through the existing claim-safe worker.
-2. Implement the Stripe adapter behind `CloudBillingProvider`, including signed
-   webhook handling.
-3. Add encrypted environment credentials (API-key rotation shipped with
-   PLA-416; the credentials file itself is still plaintext-on-disk `0600`).
-4. Aggregate runtime usage into the control plane automatically.
-5. Add backups, restore, region migration, and suspension workflows.
+2. Move credential encryption from the local operator key into managed KMS
+   envelope encryption and drill rotation.
+3. Aggregate runtime usage into the control plane automatically.
+4. Add regional restore/migration drills, durable pending-provider-deletion
+   retries, and measured SLO evidence.

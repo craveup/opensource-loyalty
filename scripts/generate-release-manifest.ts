@@ -13,6 +13,7 @@ const exec = promisify(execFile);
 
 const packageWorkspaces = [
   "@loyalty-interchange/protocol",
+  "@loyalty-interchange/adapter-kit",
   "@loyalty-interchange/storage",
   "@loyalty-interchange/reference",
   "@loyalty-interchange/storage-sqlite",

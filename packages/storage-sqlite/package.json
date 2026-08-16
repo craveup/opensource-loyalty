@@ -1,13 +1,24 @@
 {
   "name": "@loyalty-interchange/storage-sqlite",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "SQLite state store for the Loyalty Interchange reference platform.",
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "git+https://github.com/craveup/opensource-loyalty.git", "directory": "packages/storage-sqlite" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craveup/opensource-loyalty.git",
+    "directory": "packages/storage-sqlite"
+  },
   "homepage": "https://github.com/craveup/opensource-loyalty#readme",
-  "bugs": { "url": "https://github.com/craveup/opensource-loyalty/issues" },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "bugs": {
+    "url": "https://github.com/craveup/opensource-loyalty/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,13 +29,15 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@loyalty-interchange/storage": "0.1.2",
+    "@loyalty-interchange/storage": "0.2.0",
     "better-sqlite3": "^12.11.1"
   },
   "devDependencies": {

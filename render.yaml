@@ -123,9 +123,41 @@ services:
         value: /data/programs # setting this enables the provisioning worker
       - key: LIP_CLOUD_DATA_DIR
         value: /data/lip-cloud # credentials files + ports.json (survive deploys)
+      # Required 32-byte unpadded base64url key for AES-256-GCM credential and
+      # local-backup encryption. Source it from an approved secret manager and
+      # retain the old key until every restore drill has moved to the new one.
+      - key: LIP_CLOUD_CREDENTIAL_KEY
+        sync: false
+      # Set true only for the first rollout that rewrites legacy plaintext v1/v2
+      # credential files, verify the encrypted v3 files, then return it to false.
+      - key: LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION
+        value: "false"
+      - key: LIP_CLOUD_BACKUP_DIR
+        value: /data/lip-cloud/backups
       - key: LIP_CLOUD_DATA_PLANE_HOST
         value: 0.0.0.0 # tenant runtimes reachable over Render private network
       - key: LIP_CLOUD_DATA_PLANE_PUBLIC_HOST
         value: lip-shared-data-plane # private-network hostname written into api_url
       - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
         value: "13210"
+      # --- optional commercial billing adapter ---
+      # Set the key and webhook secret together. Price ids are plan mappings,
+      # not protocol configuration.
+      - key: LIP_CLOUD_STRIPE_SECRET_KEY
+        sync: false
+      - key: LIP_CLOUD_STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: LIP_CLOUD_STRIPE_PRICE_PRO
+        sync: false
+      - key: LIP_CLOUD_STRIPE_PRICE_BUSINESS
+        sync: false
+      # --- optional externally authenticated customer BFF routes ---
+      # Issuer, tenant, provider, and audience must be configured as one set.
+      - key: LIP_CLOUD_CUSTOMER_OIDC_ISSUER
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_OIDC_AUDIENCE
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_TENANT_ID
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_PROVIDER_ID
+        sync: false

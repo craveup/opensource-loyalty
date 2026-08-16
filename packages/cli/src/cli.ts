@@ -7,6 +7,10 @@ import { defaultConfig, initializeConfig, readConfig } from "./config.js";
 import { formatReport, runBaselineConformance, runDoctor } from "./diagnostics.js";
 import { runStateExport, runStateImport, type StateExportOptions, type StateImportOptions } from "./migration.js";
 import { runMockServer } from "./mock.js";
+import {
+  runMemberImportPlan,
+  runMemberImportReconciliation
+} from "./member-migration.js";
 import { schemaNames, validateFile } from "./validate.js";
 
 interface ConnectionFlags {
@@ -150,6 +154,40 @@ state
   .option("--force", "replace an existing archive file")
   .action(async (options: StateExportOptions) => {
     await runStateExport(options);
+  });
+
+const migration = program
+  .command("migration")
+  .description("Plan and reconcile a member/balance migration without writing to a live host");
+
+migration
+  .command("plan")
+  .description("Create a checksummed LIP enrollment and opening-balance plan from JSON or CSV")
+  .requiredOption("--program-id <id>", "target LIP program id")
+  .requiredOption("-i, --input <path>", "JSON array or CSV source")
+  .requiredOption("-o, --output <path>", "private plan output path")
+  .option("--force", "replace an existing plan")
+  .action(async (options: { programId: string; input: string; output: string; force?: boolean }) => {
+    const plan = await runMemberImportPlan(options);
+    console.log(
+      `Planned ${plan.summary.members} members and ${plan.summary.nonzero_balances} opening balances`
+    );
+    console.log(`Plan: ${resolve(options.output)}`);
+  });
+
+migration
+  .command("reconcile")
+  .description("Compare a member import plan with a checksummed LIP state archive")
+  .requiredOption("--plan <path>", "member import plan")
+  .requiredOption("--archive <path>", "LIP state archive exported after migration")
+  .option("-o, --output <path>", "optional private reconciliation report")
+  .option("--force", "replace an existing report")
+  .action(async (options: { plan: string; archive: string; output?: string; force?: boolean }) => {
+    const report = await runMemberImportReconciliation(options);
+    console.log(
+      `${report.passed ? "[pass]" : "[fail]"} ${report.summary.matched}/${report.summary.expected_members} members reconciled`
+    );
+    if (!report.passed) process.exitCode = 1;
   });
 
 state

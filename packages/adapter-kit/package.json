@@ -1,0 +1,33 @@
+{
+  "name": "@loyalty-interchange/adapter-kit",
+  "version": "0.2.0",
+  "description": "Foodservice ordering adapter contract, fixtures, and certification runner for LIP.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craveup/opensource-loyalty.git",
+    "directory": "packages/adapter-kit"
+  },
+  "homepage": "https://github.com/craveup/opensource-loyalty#readme",
+  "bugs": { "url": "https://github.com/craveup/opensource-loyalty/issues" },
+  "engines": { "node": ">=22" },
+  "publishConfig": { "access": "public", "provenance": true },
+  "sideEffects": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -b",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@loyalty-interchange/protocol": "0.2.0"
+  }
+}

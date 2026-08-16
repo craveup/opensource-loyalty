@@ -3,7 +3,7 @@
   "source": {
     "repository": "craveup/opensource-loyalty",
     "commit": "7cd6a6a18d1bc7f0091c824fb711864f37780ba9",
-    "tag": "v0.1.2"
+    "tag": "v0.2.0"
   },
   "protocol": {
     "version": "1.0",
@@ -13,52 +13,57 @@
   "packages": [
     {
       "name": "@loyalty-interchange/protocol",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-FtlgOQCTMloNi1G2uek9nNfQ6Vbgbk0JcuTiV+7okR3zF431POzVnMxbed3dkrM15HAIUHPcNbM2f3AxWSa5iA=="
     },
     {
+      "name": "@loyalty-interchange/adapter-kit",
+      "version": "0.2.0",
+      "integrity": "sha512-aKHoOQCTMloNi1G2uek9nNfQ6Vbgbk0JcuTiV+7okR3zF431POzVnMxbed3dkrM15HAIUHPcNbM2f3AxWSa5iA=="
+    },
+    {
       "name": "@loyalty-interchange/storage",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-rQ96x7Cz8z90zD30Mphfu8HiVwDWcpVWNOEUNUb+w2isfjKuQvu3/r6ygIo8+OipUQYw5tCIF37W8zRMGW04wQ=="
     },
     {
       "name": "@loyalty-interchange/reference",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-4mVokG8ULH/T6v0KxST9yqsxT6XsK8wUFTs6tX1T95pCg37KNdV6aC5E0YYk/Q7gS+wfDNMvVYM12R5x+9e7Ng=="
     },
     {
       "name": "@loyalty-interchange/storage-sqlite",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-Lsxsn6Ngcyb3jTKfzhlUzTLoeFw4LJDOPN82k67otfzFayRU0hJoaSxKgSLIx0v/C1m/BmcBpLg+G9c5G6s1BA=="
     },
     {
       "name": "@loyalty-interchange/storage-postgres",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-lBq2vvZxX4B3jOZm3J2sHWvfgiSiNhwJUcp3u+tCypW/VueVJyNf9R6o8c1AqfHfgRgjuvkNDOBuZhpoLTsw3g=="
     },
     {
       "name": "@loyalty-interchange/server",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-VLP/uOcA2NrOXQkQ+YOdojcLJdB79hQQTGBm1VC9GHM3ynGGHs+nmolfsMC4t7f2B1s/RE75P4JBR3+cDV1EjQ=="
     },
     {
       "name": "@loyalty-interchange/sdk",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-r4dCZw3DF90sSTXMeIW6U75hW7FNBvn2mQx1zlZmkBGm0J6o8awE1r7x6jyiXq0LTSRBCDOoWPTnQEDi/f4Whg=="
     },
     {
       "name": "@loyalty-interchange/identity",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-ZqUb2JCKjrla/+bBwTSWLvjbBQDqXLByCUQlZRvhJFhCVtKAgdB4JjuAzMmwSpumHrJRS7PjxpDoJCbt9ZQ6xA=="
     },
     {
       "name": "@loyalty-interchange/cli",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-2Jq7nIRupMmm30G2bdtBeLzF75UfUVaTqLmza5JsBkbPWiBEOiOpDgAsQlYFiwMzFtqyDi4u8HUxRcvPyHB5Hw=="
     },
     {
       "name": "@loyalty-interchange/mcp",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "integrity": "sha512-7i6CFw3O2s92a1IC6WPFGim/LwPsGb+D7a0k0D7ru6K2L7Ue9lA0YBVWs0/3+KPwNOsZFizNiwlQGA18m9GDqg=="
     }
   ],
@@ -77,12 +82,12 @@
     "sbomSha256": "5555555555555555555555555555555555555555555555555555555555555555",
     "riskRegisterSha256": "6666666666666666666666666666666666666666666666666666666666666666",
     "toolchain": {
-      "node": "24.10.0",
+      "node": "22.22.0",
       "npm": "10.9.4"
     },
     "findings": {
-      "moderate": 4,
-      "high": 4,
+      "moderate": 0,
+      "high": 0,
       "critical": 0,
       "unapprovedHigh": 0,
       "unapprovedCritical": 0

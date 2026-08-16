@@ -1,6 +1,12 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { MAX_ROTATION_OVERLAP_SECONDS } from "@loyalty-interchange/server";
 import { RemoteEnvironmentAttacher } from "./remote-attach.js";
+import {
+  UnconfiguredBillingProvider,
+  type BillingCheckout,
+  type BillingSubscriptionUpdate,
+  type CloudBillingProvider
+} from "./billing.js";
 import { CloudRepositoryConflictError } from "./types.js";
 import type {
   CloudDashboard,
@@ -55,6 +61,15 @@ export interface CloudControlPlaneOptions {
   defaultPlanId?: string;
   now?: () => Date;
   attacher?: RemoteEnvironmentAttacher;
+  billing?: CloudBillingProvider;
+}
+
+export type LocalEnvironmentOperation = "suspend" | "resume" | "backup" | "restore";
+export interface LocalEnvironmentOperationResult {
+  api_url?: string;
+  admin_url?: string;
+  backup_id?: string;
+  checksum?: string;
 }
 
 function identifier(prefix: string): string {
@@ -107,6 +122,7 @@ export class CloudControlPlane {
   private readonly defaultPlanId: string;
   private readonly clock: () => Date;
   private readonly attacher: RemoteEnvironmentAttacher;
+  private readonly billing: CloudBillingProvider;
 
   public constructor(options: CloudControlPlaneOptions) {
     this.repository = options.repository;
@@ -115,6 +131,7 @@ export class CloudControlPlane {
     this.defaultPlanId = options.defaultPlanId ?? "free";
     this.clock = options.now ?? (() => new Date());
     this.attacher = options.attacher ?? new RemoteEnvironmentAttacher();
+    this.billing = options.billing ?? new UnconfiguredBillingProvider();
   }
 
   public async migrate(): Promise<void> {
@@ -391,6 +408,142 @@ export class CloudControlPlane {
       plan,
       projects: await this.repository.projectsForOrganization(organizationId)
     };
+  }
+
+  public async createBillingCheckout(
+    principal: CloudPrincipal,
+    organizationId: string,
+    input: { plan_id: string; return_url: string }
+  ): Promise<BillingCheckout> {
+    await this.requireRole(principal, organizationId, billingRoles);
+    const organization = await this.requiredOrganization(organizationId);
+    const plan = await this.requiredPlan(input.plan_id);
+    if (plan.monthly_price_minor < 1) {
+      throw new CloudError(422, "checkout_not_required", "The selected plan is free");
+    }
+    let returnUrl: URL;
+    try {
+      returnUrl = new URL(input.return_url);
+    } catch {
+      throw new CloudError(422, "validation_failed", "return_url must be an absolute URL");
+    }
+    if (
+      returnUrl.protocol !== "https:" &&
+      !(returnUrl.protocol === "http:" && ["localhost", "127.0.0.1", "::1"].includes(returnUrl.hostname))
+    ) {
+      throw new CloudError(422, "validation_failed", "return_url must use HTTPS outside localhost");
+    }
+    try {
+      return await this.billing.createCheckout({
+        organization,
+        plan,
+        return_url: returnUrl.toString()
+      });
+    } catch (error) {
+      throw new CloudError(
+        409,
+        "billing_provider_unavailable",
+        error instanceof Error ? error.message : "Billing provider is unavailable"
+      );
+    }
+  }
+
+  public async cancelBillingSubscription(
+    principal: CloudPrincipal,
+    organizationId: string
+  ): Promise<CloudSubscription> {
+    await this.requireRole(principal, organizationId, billingRoles);
+    const subscription = await this.repository.subscriptionForOrganization(organizationId);
+    if (!subscription || subscription.billing_provider !== "stripe") {
+      throw new CloudError(409, "stripe_subscription_missing", "No Stripe subscription exists");
+    }
+    let update: BillingSubscriptionUpdate;
+    try {
+      update = await this.billing.cancelSubscription(subscription);
+    } catch (error) {
+      throw new CloudError(
+        409,
+        "billing_provider_unavailable",
+        error instanceof Error ? error.message : "Billing provider is unavailable"
+      );
+    }
+    if (update.organization_id !== organizationId) {
+      throw new CloudError(
+        409,
+        "subscription_mismatch",
+        "Stripe returned a subscription for a different organization"
+      );
+    }
+    return this.persistBillingUpdate(update, principal);
+  }
+
+  /** Verifies the provider signature before applying a subscription update. */
+  public async applyBillingWebhook(
+    payload: string | Buffer,
+    signature: string
+  ): Promise<CloudSubscription | undefined> {
+    let update: BillingSubscriptionUpdate | undefined;
+    try {
+      update = this.billing.parseWebhook(payload, signature);
+    } catch (error) {
+      throw new CloudError(
+        400,
+        "invalid_billing_webhook",
+        error instanceof Error ? error.message : "Billing webhook verification failed"
+      );
+    }
+    if (!update) return undefined;
+    return this.persistBillingUpdate(update, {
+      issuer: "https://stripe.com",
+      subject: "stripe-webhook"
+    });
+  }
+
+  private async persistBillingUpdate(
+    update: BillingSubscriptionUpdate,
+    principal: CloudPrincipal
+  ): Promise<CloudSubscription> {
+    await this.requiredOrganization(update.organization_id);
+    await this.requiredPlan(update.plan_id);
+    const existing = await this.repository.subscriptionForOrganization(update.organization_id);
+    if (!existing) {
+      throw new CloudError(409, "subscription_missing", "Organization has no subscription record");
+    }
+    if (
+      existing.provider_subscription_id &&
+      existing.provider_subscription_id !== update.provider_subscription_id
+    ) {
+      throw new CloudError(
+        409,
+        "subscription_mismatch",
+        "Stripe subscription does not match the organization's active subscription"
+      );
+    }
+    const timestamp = this.clock().toISOString();
+    const subscription: CloudSubscription = {
+      ...existing,
+      plan_id: update.plan_id,
+      status: update.status,
+      billing_provider: "stripe",
+      provider_customer_id: update.provider_customer_id,
+      provider_subscription_id: update.provider_subscription_id,
+      current_period_start: update.current_period_start,
+      current_period_end: update.current_period_end,
+      updated_at: timestamp
+    };
+    await this.repository.replaceSubscription(
+      subscription,
+      this.audit(
+        update.organization_id,
+        principal,
+        "cloud.subscription.updated",
+        "subscription",
+        subscription.subscription_id,
+        timestamp,
+        { provider: "stripe", status: subscription.status, plan_id: subscription.plan_id }
+      )
+    );
+    return subscription;
   }
 
   public async createProject(
@@ -699,6 +852,76 @@ export class CloudControlPlane {
       api_key_fingerprint: result.binding.api_key_fingerprint,
       status: "ready"
     });
+  }
+
+  public async operateLocalEnvironment(
+    principal: CloudPrincipal,
+    environmentId: string,
+    operation: LocalEnvironmentOperation,
+    operate?: (
+      environmentId: string,
+      operation: LocalEnvironmentOperation,
+      input: { backup_id?: string }
+    ) => Promise<LocalEnvironmentOperationResult>,
+    input: { backup_id?: string } = {}
+  ): Promise<{ environment: CloudEnvironment; operation: LocalEnvironmentOperation } &
+    LocalEnvironmentOperationResult> {
+    const environment = await this.requiredEnvironment(environmentId);
+    const project = await this.requiredProject(environment.project_id);
+    await this.requireRole(principal, project.organization_id, managementRoles);
+    if (!operate) {
+      throw new CloudError(
+        409,
+        "local_operation_unavailable",
+        "This control plane has no local environment operator configured"
+      );
+    }
+    if (operation === "suspend" && environment.status !== "ready") {
+      throw new CloudError(409, "environment_not_ready", "Only a ready environment can suspend");
+    }
+    if (["resume", "restore"].includes(operation) && environment.status !== "suspended") {
+      throw new CloudError(
+        409,
+        "environment_not_suspended",
+        `${operation} requires a suspended environment`
+      );
+    }
+    if (operation === "restore" && !input.backup_id) {
+      throw new CloudError(422, "validation_failed", "backup_id is required for restore");
+    }
+    let result: LocalEnvironmentOperationResult;
+    try {
+      result = await operate(environmentId, operation, input);
+    } catch (error) {
+      throw new CloudError(
+        409,
+        "local_operation_failed",
+        error instanceof Error ? error.message : "Local environment operation failed"
+      );
+    }
+    let updated = environment;
+    if (operation === "suspend") {
+      updated = await this.repository.updateEnvironmentStatus(environmentId, {
+        status: "suspended"
+      });
+    } else if (operation === "resume" || operation === "restore") {
+      updated = await this.repository.updateEnvironmentStatus(environmentId, {
+        status: "ready",
+        ...(result.api_url ? { api_url: result.api_url } : {}),
+        ...(result.admin_url ? { admin_url: result.admin_url } : {})
+      });
+    }
+    const timestamp = this.clock().toISOString();
+    await this.repository.recordAudit(this.audit(
+      project.organization_id,
+      principal,
+      `cloud.environment.${operation}`,
+      "environment",
+      environmentId,
+      timestamp,
+      input.backup_id ? { backup_id: input.backup_id } : undefined
+    ));
+    return { environment: updated, operation, ...result };
   }
 
   public async usage(

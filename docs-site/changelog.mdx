@@ -3,6 +3,24 @@ title: "Changelog"
 description: "Release notes and product updates for the Loyalty Interchange Protocol"
 ---
 
+<Update label="0.2.0" description="2026-08-15">
+  ## Foodservice integration and managed operations
+
+  - `@loyalty-interchange/adapter-kit` and a certified edge-case corpus cover
+    modifiers, combos, split tenders, comps, discounts, tax, tip, offline
+    replay, duplicate delivery, void, and partial refund.
+  - A runnable ordering BFF keeps the merchant key server-side and maps payment
+    outcomes to evaluate, accrue, reserve, capture, reverse, and adjust.
+  - The CLI creates checksummed member/balance import plans and reconciliation
+    reports.
+  - Local Cloud credentials use AES-256-GCM; local environments can suspend,
+    resume, back up, and restore with checksummed atomic artifacts.
+  - Stripe subscription updates require signed webhooks, and managed-customer
+    routes re-verify external identity tokens without turning LIP into a sign-in
+    provider.
+  - Node 22 is the tested source, CI, and release runtime.
+</Update>
+
 <Update label="0.1.2" description="2026-07-19">
   ## Write-freeze / maintenance mode
 

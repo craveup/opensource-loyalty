@@ -743,6 +743,36 @@ export class PostgresCloudRepository implements CloudRepository {
     return environment(row);
   }
 
+  public async updateEnvironmentStatus(
+    environmentId: string,
+    input: {
+      status: ProvisioningStatus;
+      status_message?: string;
+      api_url?: string;
+      admin_url?: string;
+    }
+  ): Promise<CloudEnvironment> {
+    const result = await this.pool.query(`
+      UPDATE lip_cloud_environments
+      SET status = $2,
+          status_message = $3,
+          api_url = COALESCE($4, api_url),
+          admin_url = COALESCE($5, admin_url),
+          updated_at = now()
+      WHERE environment_id = $1
+      RETURNING *
+    `, [
+      environmentId,
+      input.status,
+      input.status_message ?? null,
+      input.api_url ?? null,
+      input.admin_url ?? null
+    ]);
+    const row = result.rows[0];
+    if (!row) throw new Error(`Environment ${environmentId} was not found`);
+    return environment(row);
+  }
+
   public async plans(): Promise<CloudPlan[]> {
     const result = await this.pool.query(
       "SELECT * FROM lip_cloud_plans WHERE active = true ORDER BY monthly_price_minor"

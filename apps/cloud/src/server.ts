@@ -7,11 +7,17 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { CloudAuthenticator } from "./auth.js";
+import { CustomerPlatformError } from "./customer-errors.js";
+import type { CustomerPlatform } from "./customer-service.js";
 import {
   OPERATOR_KEY_PREFIX,
   type CloudOperatorService
 } from "./operator-service.js";
 import { CloudControlPlane, CloudError } from "./service.js";
+import type {
+  LocalEnvironmentOperation,
+  LocalEnvironmentOperationResult
+} from "./service.js";
 import {
   TRUSTED_GATEWAY_ISSUER,
   type CloudOperatorRole,
@@ -60,6 +66,13 @@ export interface CloudServerOptions {
     environmentId: string,
     options: EnvironmentCredentialRotationOptions
   ) => Promise<EnvironmentCredentialRotation>;
+  /** Optional managed-customer BFF contract; it verifies external tokens and never issues them. */
+  customers?: CustomerPlatform;
+  operateLocalEnvironment?: (
+    environmentId: string,
+    operation: LocalEnvironmentOperation,
+    input: { backup_id?: string }
+  ) => Promise<LocalEnvironmentOperationResult>;
 }
 
 export interface RunningCloudServer {
@@ -224,8 +237,9 @@ function corsHeaders(
     return {
       "access-control-allow-origin": origin,
       "access-control-allow-headers":
-        "Authorization, Content-Type, X-LIP-Cloud-Subject, X-LIP-Cloud-Email",
-      "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
+        "Authorization, Content-Type, Stripe-Signature, X-LIP-Cloud-Subject, " +
+        "X-LIP-Cloud-Email, X-LIP-Tenant-Id, X-LIP-Customer-Provider",
+      "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
       vary: "Origin"
     };
   }
@@ -269,6 +283,20 @@ function sendProblem(
 }
 
 async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const raw = await readRawBody(request);
+  if (raw.length === 0) return {};
+  try {
+    const value: unknown = JSON.parse(raw.toString("utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("body is not an object");
+    }
+    return value as Record<string, unknown>;
+  } catch {
+    throw new CloudError(400, "invalid_json", "Request body must be a JSON object");
+  }
+}
+
+async function readRawBody(request: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
@@ -279,16 +307,7 @@ async function readBody(request: IncomingMessage): Promise<Record<string, unknow
     }
     chunks.push(buffer);
   }
-  if (chunks.length === 0) return {};
-  try {
-    const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new Error("body is not an object");
-    }
-    return value as Record<string, unknown>;
-  } catch {
-    throw new CloudError(400, "invalid_json", "Request body must be a JSON object");
-  }
+  return Buffer.concat(chunks);
 }
 
 function requiredString(
@@ -305,6 +324,117 @@ function requiredString(
 function pathId(path: string, pattern: RegExp): string | undefined {
   const match = pattern.exec(path);
   return match?.[1] ? decodeURIComponent(match[1]) : undefined;
+}
+
+async function customerSession(
+  request: IncomingMessage,
+  customers: CustomerPlatform
+) {
+  const tenantId = request.headers["x-lip-tenant-id"];
+  const providerId = request.headers["x-lip-customer-provider"];
+  const token = bearer(request);
+  if (typeof tenantId !== "string" || !tenantId.trim()) {
+    throw new CustomerPlatformError(400, "tenant_required", "X-LIP-Tenant-Id is required");
+  }
+  if (typeof providerId !== "string" || !providerId.trim()) {
+    throw new CustomerPlatformError(
+      400,
+      "provider_required",
+      "X-LIP-Customer-Provider is required"
+    );
+  }
+  if (!token) throw new CustomerPlatformError(401, "invalid_token", "Bearer token is required");
+  return customers.introspectSession({
+    tenant_id: tenantId,
+    provider_id: providerId,
+    token
+  });
+}
+
+async function handleCustomerRoute(input: {
+  method: string;
+  path: string;
+  request: IncomingMessage;
+  customers?: CustomerPlatform;
+}): Promise<{ status: number; body: unknown } | undefined> {
+  if (!input.path.startsWith("/cloud/v1/customer")) return undefined;
+  if (!input.customers) {
+    throw new CloudError(
+      409,
+      "customer_platform_unavailable",
+      "Managed customer routes are not configured"
+    );
+  }
+  const session = await customerSession(input.request, input.customers);
+  if (input.method === "POST" && input.path === "/cloud/v1/customer/session") {
+    return { status: 200, body: { data: session } };
+  }
+  if (input.method === "GET" && input.path === "/cloud/v1/customer/profile") {
+    return { status: 200, body: { data: await input.customers.getProfile(session) } };
+  }
+  if (input.method === "PATCH" && input.path === "/cloud/v1/customer/profile") {
+    const body = await readBody(input.request);
+    return {
+      status: 200,
+      body: {
+        data: await input.customers.updateProfile(session, {
+          ...(body["given_name"] === null || typeof body["given_name"] === "string"
+            ? { given_name: body["given_name"] }
+            : {}),
+          ...(body["family_name"] === null || typeof body["family_name"] === "string"
+            ? { family_name: body["family_name"] }
+            : {}),
+          ...(body["locale"] === null || typeof body["locale"] === "string"
+            ? { locale: body["locale"] }
+            : {})
+        })
+      }
+    };
+  }
+  if (input.method === "POST" && input.path === "/cloud/v1/customer/consents") {
+    const body = await readBody(input.request);
+    return {
+      status: 200,
+      body: {
+        data: await input.customers.setConsent(session, {
+          purpose: requiredString(body, "purpose"),
+          status: requiredString(body, "status") as "granted" | "denied" | "withdrawn",
+          policy_version: requiredString(body, "policy_version"),
+          source: requiredString(body, "source")
+        })
+      }
+    };
+  }
+  if (input.method === "POST" && input.path === "/cloud/v1/customer/identities/link") {
+    const body = await readBody(input.request);
+    return {
+      status: 201,
+      body: {
+        data: await input.customers.linkIdentity(session, {
+          provider_id: requiredString(body, "provider_id"),
+          token: requiredString(body, "token")
+        })
+      }
+    };
+  }
+  if (input.method === "POST" && input.path === "/cloud/v1/customer/loyalty/enroll") {
+    const body = await readBody(input.request);
+    return {
+      status: 201,
+      body: {
+        data: await input.customers.enrollLoyalty(session, {
+          program_id: requiredString(body, "program_id")
+        })
+      }
+    };
+  }
+  if (input.method === "GET" && input.path === "/cloud/v1/customer/export") {
+    return { status: 200, body: { data: await input.customers.exportAccount(session) } };
+  }
+  if (input.method === "DELETE" && input.path === "/cloud/v1/customer/account") {
+    return { status: 200, body: { data: await input.customers.deleteAccount(session) } };
+  }
+  throw new CloudError(404, "not_found", "Managed customer route was not found");
 }
 
 interface OperatorRouteResult {
@@ -461,6 +591,31 @@ export function createCloudServer(
         sendJson(response, 200, { status: "ok", service: "lip-cloud-control-plane" });
         return;
       }
+      if (method === "POST" && path === "/cloud/v1/billing/webhooks/stripe") {
+        const signature = request.headers["stripe-signature"];
+        if (typeof signature !== "string" || !signature) {
+          throw new CloudError(400, "missing_billing_signature", "Stripe-Signature is required");
+        }
+        const subscription = await controlPlane.applyBillingWebhook(
+          await readRawBody(request),
+          signature
+        );
+        sendJson(response, 200, {
+          received: true,
+          applied: Boolean(subscription)
+        }, headers);
+        return;
+      }
+      const customerResponse = await handleCustomerRoute({
+        method,
+        path,
+        request,
+        ...(resolvedOptions.customers ? { customers: resolvedOptions.customers } : {})
+      });
+      if (customerResponse) {
+        sendJson(response, customerResponse.status, customerResponse.body, headers);
+        return;
+      }
       const actor = await principal(request, resolvedOptions, { method, path });
 
       const operatorResponse = await handleOperatorRoutes(
@@ -514,6 +669,30 @@ export function createCloudServer(
           { data: await controlPlane.dashboard(actor, organizationId) },
           headers
         );
+        return;
+      }
+      const organizationBillingCheckoutId = pathId(
+        path,
+        /^\/cloud\/v1\/organizations\/([^/]+)\/billing\/checkout$/
+      );
+      if (organizationBillingCheckoutId && method === "POST") {
+        const body = await readBody(request);
+        sendJson(response, 201, {
+          data: await controlPlane.createBillingCheckout(actor, organizationBillingCheckoutId, {
+            plan_id: requiredString(body, "plan_id"),
+            return_url: requiredString(body, "return_url")
+          })
+        }, headers);
+        return;
+      }
+      const organizationBillingCancelId = pathId(
+        path,
+        /^\/cloud\/v1\/organizations\/([^/]+)\/billing\/cancel$/
+      );
+      if (organizationBillingCancelId && method === "POST") {
+        sendJson(response, 200, {
+          data: await controlPlane.cancelBillingSubscription(actor, organizationBillingCancelId)
+        }, headers);
         return;
       }
       const organizationProjectsId = pathId(
@@ -671,6 +850,24 @@ export function createCloudServer(
         return;
       }
 
+      const environmentOperation = /^\/cloud\/v1\/environments\/([^/]+)\/operations\/(suspend|resume|backup|restore)$/.exec(path);
+      if (environmentOperation?.[1] && environmentOperation[2] && method === "POST") {
+        const body = await readBody(request);
+        const operation = environmentOperation[2] as LocalEnvironmentOperation;
+        sendJson(response, 200, {
+          data: await controlPlane.operateLocalEnvironment(
+            actor,
+            decodeURIComponent(environmentOperation[1]),
+            operation,
+            options.operateLocalEnvironment,
+            typeof body["backup_id"] === "string"
+              ? { backup_id: body["backup_id"] }
+              : {}
+          )
+        }, headers);
+        return;
+      }
+
       const environmentUsageEventsId = pathId(
         path,
         /^\/cloud\/v1\/environments\/([^/]+)\/usage-events$/
@@ -723,6 +920,16 @@ export function createCloudServer(
       if (error instanceof CloudError) {
         if (error.status === 401) response.setHeader("www-authenticate", "Bearer");
         sendProblem(response, error, headers);
+        return;
+      }
+      if (error instanceof CustomerPlatformError) {
+        sendJson(response, error.status, {
+          type: `https://opensource-loyalty.dev/problems/${error.code}`,
+          title: error.code,
+          status: error.status,
+          detail: error.message,
+          code: error.code
+        }, { "content-type": "application/problem+json; charset=utf-8", ...headers });
         return;
       }
       console.error("[lip-cloud] request failed", error);

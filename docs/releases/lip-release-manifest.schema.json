@@ -49,8 +49,8 @@
     },
     "packages": {
       "type": "array",
-      "minItems": 10,
-      "maxItems": 10,
+      "minItems": 11,
+      "maxItems": 11,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -66,6 +66,7 @@
       },
       "allOf": [
         { "$ref": "#/$defs/containsProtocolPackage" },
+        { "$ref": "#/$defs/containsAdapterKitPackage" },
         { "$ref": "#/$defs/containsStoragePackage" },
         { "$ref": "#/$defs/containsReferencePackage" },
         { "$ref": "#/$defs/containsStorageSqlitePackage" },
@@ -185,6 +186,11 @@
       "minContains": 1,
       "maxContains": 1
     },
+    "containsAdapterKitPackage": {
+      "contains": { "$ref": "#/$defs/adapterKitPackage" },
+      "minContains": 1,
+      "maxContains": 1
+    },
     "containsReferencePackage": {
       "contains": { "$ref": "#/$defs/referencePackage" },
       "minContains": 1,
@@ -226,6 +232,7 @@
       "maxContains": 1
     },
     "protocolPackage": { "$ref": "#/$defs/packageNamedProtocol" },
+    "adapterKitPackage": { "$ref": "#/$defs/packageNamedAdapterKit" },
     "storagePackage": { "$ref": "#/$defs/packageNamedStorage" },
     "referencePackage": { "$ref": "#/$defs/packageNamedReference" },
     "storageSqlitePackage": { "$ref": "#/$defs/packageNamedStorageSqlite" },
@@ -239,6 +246,11 @@
       "type": "object",
       "required": ["name"],
       "properties": { "name": { "const": "@loyalty-interchange/protocol" } }
+    },
+    "packageNamedAdapterKit": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "const": "@loyalty-interchange/adapter-kit" } }
     },
     "packageNamedStorage": {
       "type": "object",

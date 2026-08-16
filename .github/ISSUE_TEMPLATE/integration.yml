@@ -1,0 +1,22 @@
+name: Integration request
+description: Propose an ordering, commerce, identity, CRM, or messaging integration
+labels: ["integration"]
+body:
+  - type: input
+    id: system
+    attributes:
+      label: System and public documentation
+    validations:
+      required: true
+  - type: textarea
+    id: lifecycle
+    attributes:
+      label: Lifecycle and use case
+      description: Explain evaluate, payment, accrual, redemption, void, refund, and retry needs.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Available evidence
+      description: Link public docs or describe a sandbox. Do not share partner credentials.

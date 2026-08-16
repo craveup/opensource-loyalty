@@ -12,7 +12,7 @@ cd opensource-loyalty
 docker compose up --build
 ```
 
-If you want to develop against the source code, use Node.js 20.19 or newer and
+If you want to develop against the source code, use Node.js 22 or newer and
 npm. The repo uses npm workspaces with `package-lock.json`; pnpm is not the
 supported install path unless the project is intentionally migrated later.
 

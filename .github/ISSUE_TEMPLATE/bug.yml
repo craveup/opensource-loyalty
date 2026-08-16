@@ -1,0 +1,34 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include secrets or customer data. Use SECURITY.md for vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: LIP version
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options: [Protocol, Reference engine, Server, SDK, CLI, Admin, Storage, Cloud, Docs]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include commands and redacted request/response data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

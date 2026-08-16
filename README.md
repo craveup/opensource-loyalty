@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/%40loyalty-interchange%2Fsdk?logo=npm&label=%40loyalty-interchange)](https://www.npmjs.com/org/loyalty-interchange)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?logo=typescript&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-20.19%2B-339933?logo=nodedotjs&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white)
 ![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Working_Draft_0.1-orange)
@@ -124,7 +124,7 @@ curl http://127.0.0.1:3210/lip/v1/capabilities \
 
 ### Installation from Source 🛠️
 
-Requirements: Git, Node.js 20.19 or newer, and npm.
+Requirements: Git, Node.js 22 or newer, and npm.
 
 > [!NOTE]
 > This repo uses npm workspaces with `package-lock.json`. pnpm is not the supported install path. For a clean lockfile-only install, use `npm ci` instead of `npm install`.
@@ -254,6 +254,11 @@ Or add the SDK to your app:
 npm install @loyalty-interchange/sdk
 ```
 
+Evaluating before install? Run the browser-only lifecycle walkthrough at
+[opensource-loyalty.dev/#walkthrough](https://opensource-loyalty.dev/#walkthrough).
+It uses synthetic foodservice data and does not collect an API key. Teams with
+a real ordering/refund edge can review the [design-partner path](docs/design-partners.md).
+
 See [the release guide](docs/releasing.md) for how releases are cut and verified.
 
 ## Project Structure 🗂️
@@ -266,6 +271,7 @@ See [the release guide](docs/releasing.md) for how releases are cut and verified
 |-- examples/
 |   `-- typescript/         # Runnable SDK lifecycle examples
 |-- packages/
+|   |-- adapter-kit/        # Ordering adapter contract and certification report
 |   |-- cli/                # CLI: serve, quickstart, validation, doctor, conformance
 |   |-- identity/           # External OIDC validation and customer/member mapping
 |   |-- protocol/           # TypeScript types, schemas, validation, protocol contracts
@@ -282,7 +288,7 @@ See [the release guide](docs/releasing.md) for how releases are cut and verified
 
 ## Tech Stack 🧱
 
-- **Language:** TypeScript on Node.js 20.19+
+- **Language:** TypeScript on Node.js 22+
 - **Frontend:** React, Vite, Tailwind CSS, lucide-react
 - **API:** Node HTTP server with OpenAPI 3.1 contract
 - **Cloud:** Separate Node management API with PostgreSQL control-plane state
@@ -302,6 +308,7 @@ npm run lip -- test   # Run baseline HTTP conformance checks
 npm run lip -- schemas                 # List supported JSON schemas
 npm run lip -- validate spec/examples/paid-order.json --schema FoodserviceOrder
 npm run example:sdk   # Run the full TypeScript SDK lifecycle
+npm run example:bff   # Run the server-side ordering BFF example
 npm run typecheck     # Type-check all packages and Admin app
 npm test              # Run the full test suite
 npm run build         # Build TypeScript packages and Admin assets
@@ -324,6 +331,9 @@ Developer guides (rendered on the docs site; sources live in [`docs/`](docs/READ
 - [PostgreSQL storage](https://loyalty-interchange.mintlify.app/guides/postgres) — multi-instance engine store, location scoping, and the lock-free report path
 - [Cloud control plane](https://loyalty-interchange.mintlify.app/guides/cloud) — organizations, projects, environments, provisioning, operator auth, and metering
 - [Punchh migration](https://loyalty-interchange.mintlify.app/guides/punchh-migration) — mapping restaurant loyalty capabilities to vendor-neutral LIP contracts
+- [Ordering adapters](https://loyalty-interchange.mintlify.app/guides/ordering-adapters) — deterministic source mapping and edge-case certification
+- [Member import](https://loyalty-interchange.mintlify.app/guides/member-migration) — checksummed plans and balance reconciliation
+- [Design partners](https://loyalty-interchange.mintlify.app/about/design-partners) — prove one source integration without protocol lock-in
 
 Repo-only docs (no published page):
 
@@ -345,14 +355,11 @@ Normative specification (canonical when docs and generated artifacts disagree):
 
 ## What's Next? 🌟
 
-Current priorities are tracked in [PLAN.md](PLAN.md). Near-term focus:
-
-- Minimal developer onboarding
-- Program-as-code configuration drafts with validation, preview, publish, and rollback
-- Reward wallet and reward management APIs
-- Webhook subscription management
-- Cloud provisioning worker, direct OIDC validation, and Stripe billing adapter
-- More SDK examples and machine-readable docs
+The [0.2 launch plan](PLAN.md) records completed repository acceptance criteria
+and the external evidence that remains intentionally open: independent sandbox
+users, design partners, a referenceable integration, measured search visibility,
+and production SLO attainment. Those outcomes will not be inferred from tests,
+stars, or downloads.
 
 ## Contributing 🤝
 
@@ -368,4 +375,6 @@ This project is licensed under [Apache-2.0](LICENSE).
 
 ## Support 💬
 
-If you have any questions, suggestions, or need assistance, please [open an issue](https://github.com/craveup/opensource-loyalty/issues) — let's build open loyalty infrastructure together! 💪
+Use [GitHub Discussions](https://github.com/craveup/opensource-loyalty/discussions)
+for questions and ideas, structured issues for reproducible work, and
+[SUPPORT.md](SUPPORT.md) for the support boundary.

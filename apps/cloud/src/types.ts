@@ -346,6 +346,15 @@ export interface CloudRepository {
       status_message?: string;
     }
   ): Promise<CloudEnvironment>;
+  updateEnvironmentStatus(
+    environmentId: string,
+    input: {
+      status: ProvisioningStatus;
+      status_message?: string;
+      api_url?: string;
+      admin_url?: string;
+    }
+  ): Promise<CloudEnvironment>;
   plans(): Promise<CloudPlan[]>;
   planById(planId: string): Promise<CloudPlan | undefined>;
   subscriptionForOrganization(

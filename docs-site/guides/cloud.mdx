@@ -36,10 +36,10 @@ The `@loyalty-interchange/cloud` workspace includes:
 - Free, Pro, and Business plan definitions, and one subscription per organization
 - Idempotent monthly usage events and counters, with hard quota enforcement under a transaction lock
 - An authenticated management API with operator-key or direct OIDC modes
-- A provider boundary for Stripe or another billing system
+- A Stripe adapter with signed webhook verification and a provider boundary for alternate billing systems
 
 <Warning>
-  The control plane does not yet collect payment. New organizations use the `manual` billing provider on the Free plan, and new environments stay `pending` until a provisioning adapter processes their job. A local adapter ships today; regional infrastructure adapters remain future work.
+  New organizations use manual billing on Free. Configured Stripe Checkout and signed subscription webhooks can manage paid subscriptions. New environments stay `pending` until a provisioning adapter processes their job; the local adapter is for evaluation/design partners, while regional infrastructure remains future work.
 </Warning>
 
 ## Local data-plane provisioner
@@ -57,7 +57,7 @@ Setting `LIP_CLOUD_PROGRAM_DIR` starts a provisioning worker with `LocalDataPlan
     From `LIP_CLOUD_DATA_PLANE_BASE_PORT` (default `13210`), recorded in `<data-dir>/ports.json`.
   </Step>
   <Step title="Bootstrap a merchant API key">
-    An owner-role key minted through the tenant's own access-control service — hashed, audited, rotatable — written to a `0600` credentials file.
+    An owner-role key minted through tenant access control and stored inside a `0600` AES-256-GCM v3 credential envelope.
   </Step>
   <Step title="Mark the environment ready">
     With its reachable `api_url` and `admin_url`.
@@ -89,9 +89,26 @@ On startup the provisioner calls `restore()` and relaunches every credentialed e
 
 Set `LIP_CLOUD_DATA_PLANE_HOST` to control the bind address, and `LIP_CLOUD_DATA_PLANE_PUBLIC_HOST` to control the hostname written into each runtime's `api_url` — a private-network service name, for example.
 
-<Warning>
-  Only `create` operations are supported, and credentials remain files (`0600`, written atomically) rather than an encrypted secret store. Regional adapters still replace this for production.
-</Warning>
+`LIP_CLOUD_CREDENTIAL_KEY` is a required 32-byte base64url secret whenever the
+local provisioner runs. Plaintext v1/v2 files are rejected unless the one-time
+`LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION=true` switch is set; a successful
+restore immediately rewrites them encrypted.
+
+Local SQLite environments support audited
+`/operations/suspend`, `/operations/resume`, `/operations/backup`, and
+`/operations/restore`. Backup quiesces then resumes the runtime and writes a
+private checksummed encrypted artifact. Restore verifies checksum, safe ids,
+authenticated encryption, and metadata before atomically replacing data.
+Postgres backup is deliberately refused here; use provider PITR. Regional
+adapters still replace local mode in production.
+
+Managed customer routes require
+`LIP_CLOUD_CUSTOMER_OIDC_ISSUER`, `LIP_CLOUD_CUSTOMER_TENANT_ID`, and
+`LIP_CLOUD_CUSTOMER_PROVIDER_ID`, plus either
+`LIP_CLOUD_CUSTOMER_OIDC_AUDIENCE` or the comma-separated
+`LIP_CLOUD_CUSTOMER_AUTHORIZED_PARTIES`. The audience/authorized-party gate
+prevents a valid token minted for an unrelated client from crossing this BFF
+boundary.
 
 ## Attaching a data-plane host
 
@@ -219,8 +236,13 @@ All successful payloads use a `data` envelope; errors use RFC 9457 problem detai
 | `GET\|POST /cloud/v1/projects/{project_id}/environments` | |
 | `POST /cloud/v1/environments/{environment_id}/attach` | Bind a host you run |
 | `POST /cloud/v1/environments/{environment_id}/credentials/rotate` | Merchant key |
+| `POST /cloud/v1/environments/{environment_id}/operations/{operation}` | Local suspend, resume, backup, or restore |
 | `POST /cloud/v1/environments/{environment_id}/usage-events` | Idempotent |
 | `GET /cloud/v1/environments/{environment_id}/usage` | |
+| `POST /cloud/v1/organizations/{organization_id}/billing/checkout` | Stripe Checkout |
+| `POST /cloud/v1/organizations/{organization_id}/billing/cancel` | Cancel Stripe subscription |
+| `POST /cloud/v1/billing/webhooks/stripe` | Signed provider webhook |
+| `/cloud/v1/customer/*` | Externally authenticated BFF customer contract |
 
 ```bash
 curl -X POST http://127.0.0.1:3220/cloud/v1/organizations \

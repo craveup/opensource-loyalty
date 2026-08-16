@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   resolve: {
     alias: {
+      "@loyalty-interchange/adapter-kit": fileURLToPath(new URL("./packages/adapter-kit/src/index.ts", import.meta.url)),
       "@loyalty-interchange/protocol": fileURLToPath(new URL("./packages/protocol/src/index.ts", import.meta.url)),
       "@loyalty-interchange/reference": fileURLToPath(new URL("./packages/reference/src/index.ts", import.meta.url)),
       "@loyalty-interchange/storage": fileURLToPath(new URL("./packages/storage/src/index.ts", import.meta.url)),

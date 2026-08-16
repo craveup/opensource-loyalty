@@ -1,6 +1,6 @@
 {
   "name": "loyalty-interchange-protocol",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "description": "An open interoperability protocol for loyalty, starting with foodservice.",
   "type": "module",
@@ -10,7 +10,7 @@
     "apps/*"
   ],
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22"
   },
   "scripts": {
     "build": "npm run build:ts && npm run build:admin",
@@ -24,8 +24,10 @@
     "clean": "tsc -b --clean && rm -rf coverage spec/schemas",
     "conformance": "vitest run tests/conformance",
     "docs:check": "tsx scripts/check-docs-mirror.ts",
+    "launch:check": "tsx scripts/check-launch-surface.ts",
     "dev": "tsx packages/server/src/cli.ts",
     "example:sdk": "tsx examples/typescript/full-lifecycle.ts",
+    "example:bff": "tsx examples/typescript/ordering-bff.ts",
     "generate": "tsx scripts/generate-spec.ts && tsx scripts/generate-sdk.ts",
     "lip": "tsx packages/cli/src/cli.ts",
     "mcp": "tsx packages/mcp/src/server.ts",
@@ -39,9 +41,10 @@
     "test": "vitest run",
     "test:examples": "tsx scripts/test-examples.ts",
     "test:packages": "tsx scripts/verify-packages.ts",
+    "test:visual": "node scripts/verify-rendered-surfaces.mjs",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -b --pretty false && npm run typecheck --workspace @loyalty-interchange/admin",
-    "verify": "npm run generate && npm run typecheck && npm run test:coverage && npm run test:examples && npm run build && npm run test:packages"
+    "verify": "npm run generate && npm run typecheck && npm run test:coverage && npm run test:examples && npm run build && npm run test:packages && npm run docs:check && npm run launch:check"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",

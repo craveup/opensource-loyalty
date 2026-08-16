@@ -14,6 +14,7 @@ const IMAGE_REFERENCE = /^[^\s]+@sha256:[0-9a-f]{64}$/;
 const PACKAGE_NAME = /^@loyalty-interchange\/[a-z0-9-]+$/;
 const PUBLISHED_PACKAGE_NAMES = [
   "@loyalty-interchange/protocol",
+  "@loyalty-interchange/adapter-kit",
   "@loyalty-interchange/storage",
   "@loyalty-interchange/reference",
   "@loyalty-interchange/storage-sqlite",
@@ -102,6 +103,7 @@ export function manifestDigest(value: LipReleaseManifestV1): string {
 export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1 {
   const errors: string[] = [];
   const root = objectAt(value, "manifest", errors);
+  let releaseVersion: string | undefined;
 
   if (!root) throw new ManifestValidationError(errors);
   expectOnlyKeys(root, ["schemaVersion", "source", "protocol", "packages", "image", "database", "dependencies", "verification"], "manifest", errors);
@@ -111,8 +113,12 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
   if (source) {
     expectOnlyKeys(source, ["repository", "commit", "tag"], "source", errors);
     expectPattern(source.repository, /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "source.repository", errors);
+    expectExact(source.repository, "craveup/opensource-loyalty", "source.repository", errors);
     expectPattern(source.commit, GIT_SHA, "source.commit", errors);
     expectPattern(source.tag, TAG, "source.tag", errors);
+    if (typeof source.tag === "string" && TAG.test(source.tag)) {
+      releaseVersion = source.tag.replace(/^v/, "");
+    }
     rejectMutable(source.commit, "source.commit", errors);
     rejectMutable(source.tag, "source.tag", errors);
   }
@@ -145,6 +151,9 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
         seen.add(name);
       }
       expectPattern(item.version, SEMVER, `packages[${index}].version`, errors);
+      if (releaseVersion && item.version !== releaseVersion) {
+        errors.push(`packages[${index}].version must match release tag ${releaseVersion}`);
+      }
       expectNpmSri(item.integrity, `packages[${index}].integrity`, errors);
     });
     for (const expected of PUBLISHED_PACKAGE_NAMES) {

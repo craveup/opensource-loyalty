@@ -1,13 +1,24 @@
 {
   "name": "@loyalty-interchange/sdk",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Idiomatic TypeScript SDK for Loyalty Interchange Protocol.",
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "git+https://github.com/craveup/opensource-loyalty.git", "directory": "packages/sdk" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craveup/opensource-loyalty.git",
+    "directory": "packages/sdk"
+  },
   "homepage": "https://github.com/craveup/opensource-loyalty#readme",
-  "bugs": { "url": "https://github.com/craveup/opensource-loyalty/issues" },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "bugs": {
+    "url": "https://github.com/craveup/opensource-loyalty/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,13 +29,15 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@loyalty-interchange/protocol": "0.1.2",
+    "@loyalty-interchange/protocol": "0.2.0",
     "@sinclair/typebox": "^0.34.52"
   }
 }

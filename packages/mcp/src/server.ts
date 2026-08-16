@@ -19,7 +19,7 @@ function textResult(body: string) {
 
 export function createLipMcpServer(): McpServer {
   const server = new McpServer(
-    { name: "lip", version: "0.1.0" },
+    { name: "lip", version: "0.2.0" },
     {
       instructions: [
         "Loyalty Interchange Protocol (LIP) MCP server.",
@@ -43,7 +43,7 @@ export function createLipMcpServer(): McpServer {
     "lip_read_doc",
     {
       description:
-        "Read an allowed doc or spec file from the LIP repo (docs/, spec/, skills/, examples/typescript/, llms.txt).",
+        "Read an allowed doc or spec file from the LIP repo (docs/, spec/, skills/, examples/typescript/, llms.txt, llms-full.txt).",
       inputSchema: z.object({
         path: z.string().describe("Repo-relative path, e.g. docs/using-lip-with-ai.md")
       })

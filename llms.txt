@@ -11,6 +11,7 @@ npm install && npm start
 npm run lip -- doctor http://127.0.0.1:3210 --api-key lip-dev-key
 npm run lip -- test http://127.0.0.1:3210 --api-key lip-dev-key
 npm run example:sdk
+npm run example:bff
 npm run test
 
 ## Agent setup
@@ -33,6 +34,10 @@ Agent docs:
 - docs/api-endpoints.md — HTTP operations and curl examples
 - docs/webhook-delivery.md — signed CloudEvents and receiver setup
 - docs/reference-platform.md — server, Admin, SQLite sandbox
+- docs/ordering-adapters.md — source mapping + adapter certification
+- docs/member-migration.md — checksummed member/balance planning
+- docs/security-and-operations.md — boundaries, recovery, production gates
+- llms-full.txt — expanded product, integration, and operations map
 
 ## Normative spec (read before changing behavior)
 
@@ -46,6 +51,7 @@ Agent docs:
 ## Runnable examples
 
 - examples/typescript/full-lifecycle.ts — enroll → evaluate → accrue → reserve → capture → reverse → adjust
+- examples/typescript/ordering-bff.ts — merchant-key-safe checkout orchestration
 
 ## SDK (prefer over raw fetch)
 
@@ -115,6 +121,7 @@ Failed deliveries persist in the SQLite outbox and resume after restart.
 ## Implementation map (change behavior here)
 
 - packages/protocol/src — schema source, generated types
+- packages/adapter-kit/src — ordering adapter contract and certification runner
 - packages/reference/src/engine.ts — loyalty engine rules
 - packages/server/src/server.ts — HTTP routes
 - packages/server/src/program-management.ts — non-normative draft/publish/rollback
@@ -135,7 +142,8 @@ Reference: docs/customer-identity.md (BFF integration pattern and mapping contra
 ## Not in LIP (build in your app or wait for platform)
 
 - Customer auth (OTP, social, sessions)
-- Campaigns, segments, push, CRM, analytics
+- Hosted sign-up/sign-in UI and customer session issuance
+- Universal vendor-certified adapters (mappings require source fixtures)
 - Portable program-authoring APIs (the reference Admin has non-normative local draft/publish)
 - Live loyalty operations over MCP (official MCP supplies docs, schemas, and validation only)
 

@@ -175,6 +175,26 @@ describe("LIP release manifest", () => {
     ).toThrow(/published package names/);
   });
 
+  it("binds the canonical repository, tag, and every package version", () => {
+    const manifest = exampleManifest();
+
+    expect(() => validateLipReleaseManifest({
+      ...manifest,
+      source: { ...manifest.source, repository: "someone/fork" }
+    })).toThrow(/source\.repository/);
+    expect(() => validateLipReleaseManifest({
+      ...manifest,
+      source: { ...manifest.source, tag: "v0.2.1" }
+    })).toThrow(/must match release tag 0\.2\.1/);
+    expect(() => validateLipReleaseManifest({
+      ...manifest,
+      packages: [
+        { ...manifest.packages[0], version: "0.2.1" },
+        ...manifest.packages.slice(1)
+      ]
+    })).toThrow(/must match release tag 0\.2\.0/);
+  });
+
   it("publishes the semantic validator requirement with the JSON Schema", () => {
     const schema = JSON.parse(readFileSync(schemaPath, "utf8")) as {
       $comment?: string;
