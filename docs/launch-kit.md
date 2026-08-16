@@ -15,7 +15,7 @@ independent adoption, or benchmark results until first-party evidence exists.
 > reference platform. Feedback target: which source order or refund semantic
 > still cannot map cleanly?
 
-CTA: `https://opensource-loyalty.dev/#walkthrough`
+CTA: `https://opensource-loyalty.vercel.app/#walkthrough`
 
 ## LinkedIn launch post
 

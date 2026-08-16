@@ -21,7 +21,7 @@ async function files(directory: string): Promise<string[]> {
 
 const landing = await readFile(join(root, "landing/index.html"), "utf8");
 for (const [needle, label] of [
-  ['rel="canonical" href="https://opensource-loyalty.dev/"', "canonical URL"],
+  ['rel="canonical" href="https://opensource-loyalty.vercel.app/"', "canonical URL"],
   ['type="application/ld+json"', "structured data"],
   ['id="walkthrough"', "browser walkthrough"],
   ["Evaluate", "evaluate step"],
@@ -56,8 +56,8 @@ try {
 const robots = await readFile(join(root, "landing/robots.txt"), "utf8");
 const sitemap = await readFile(join(root, "landing/sitemap.xml"), "utf8");
 requireText(robots, "Allow: /", "robots.txt");
-requireText(robots, "https://opensource-loyalty.dev/sitemap.xml", "robots.txt sitemap");
-requireText(sitemap, "<loc>https://opensource-loyalty.dev/</loc>", "sitemap canonical");
+requireText(robots, "https://opensource-loyalty.vercel.app/sitemap.xml", "robots.txt sitemap");
+requireText(sitemap, "<loc>https://opensource-loyalty.vercel.app/</loc>", "sitemap canonical");
 
 const technicalPages = [
   "docs/open-source-loyalty-api.md",

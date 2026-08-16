@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://opensource-loyalty.dev/sitemap.xml
+Sitemap: https://opensource-loyalty.vercel.app/sitemap.xml
