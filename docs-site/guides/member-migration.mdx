@@ -1,0 +1,34 @@
+---
+title: "Member and balance import"
+description: "Create a checksummed import plan and reconcile opening balances without disguising migration as purchase activity."
+---
+
+Create a private plan from JSON or CSV:
+
+```bash
+npm run lip -- migration plan \
+  --program-id acme-rewards \
+  --input members.csv \
+  --output .lip/member-plan.json
+```
+
+Required fields are `external_member_id`, `identity_value`, and integer
+`available_balance`; optional fields are `identity_type`, `member_id`, and
+`unit`. Duplicate ids/identities are rejected. Opening balances are explicit
+`migration` adjustments with `qualifies_for_tier: false`. The `0600` output
+contains identity data and must not be committed.
+
+After applying the operations through the normal API, export target state and
+reconcile:
+
+```bash
+npm run lip -- migration reconcile \
+  --plan .lip/member-plan.json \
+  --archive .lip/target-state.json \
+  --output .lip/reconciliation.json
+```
+
+Punchh- or Paytronix-style sources may also contain household links, locked
+balances, expiration lots, banked rewards, tier history, and consent. Those
+require an explicit source adapter; a generic CSV import is not a claim of
+vendor compatibility.

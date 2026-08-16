@@ -260,6 +260,130 @@ describe("WebhookDispatcher", () => {
     expect(policyAttempts).toHaveLength(2);
   });
 
+  it("does not resurrect pending deliveries after subscription removal", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "lip-webhook-remove-"));
+    const databasePath = join(directory, "reference.db");
+    let resolveStarted!: () => void;
+    let resolveFetch!: (response: Response) => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    const blockingFetch: typeof fetch = async () => {
+      resolveStarted();
+      return new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+    };
+
+    try {
+      const outbox = await WebhookOutboxJournal.create({
+        store: new AsyncSqliteStateStore<WebhookOutboxState>({
+          path: databasePath,
+          key: "webhook-outbox"
+        })
+      });
+      const dispatcher = await WebhookDispatcher.create({
+        subscriptions: [{ url: "https://receiver.example/hooks", secret: "hook-secret" }],
+        outbox,
+        fetch: blockingFetch,
+        maxAttempts: 1
+      });
+      const [subscription] = dispatcher.listSubscriptions();
+      expect(subscription).toBeDefined();
+
+      dispatcher.emit(makeEvent());
+      await fetchStarted;
+      expect(dispatcher.removeSubscription(subscription!.subscription_id)).toBe(true);
+      resolveFetch(new Response(null, { status: 500 }));
+      await dispatcher.flush();
+
+      expect(dispatcher.pendingDeliveries()).toEqual([]);
+      expect(await outbox.list()).toEqual([]);
+      await outbox.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves pending deliveries when subscription delivery is paused", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "lip-webhook-pause-"));
+    const databasePath = join(directory, "reference.db");
+    let resolveStarted!: () => void;
+    let resolveFetch!: (response: Response) => void;
+    let attempts = 0;
+    const fetchStarted = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    const pausingFetch: typeof fetch = async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        resolveStarted();
+        return new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        });
+      }
+      return new Response(null, { status: 204 });
+    };
+
+    try {
+      const outbox = await WebhookOutboxJournal.create({
+        store: new AsyncSqliteStateStore<WebhookOutboxState>({
+          path: databasePath,
+          key: "webhook-outbox"
+        })
+      });
+      const dispatcher = await WebhookDispatcher.create({
+        subscriptions: [{ url: "https://receiver.example/hooks", secret: "hook-secret-value" }],
+        outbox,
+        fetch: pausingFetch,
+        maxAttempts: 2,
+        backoffMs: 1
+      });
+      const [subscription] = dispatcher.listSubscriptions();
+      expect(subscription).toBeDefined();
+
+      dispatcher.emit(makeEvent());
+      await fetchStarted;
+      dispatcher.upsertSubscription({
+        subscription_id: subscription!.subscription_id,
+        url: subscription!.url,
+        secret: "hook-secret-value",
+        active: false
+      });
+      resolveFetch(new Response(null, { status: 500 }));
+      await dispatcher.flush();
+
+      const [pending] = dispatcher.pendingDeliveries();
+      expect(pending).toMatchObject({
+        attempts: 1,
+        last_error: "receiver responded with HTTP 500"
+      });
+      expect(await outbox.list()).toEqual([
+        expect.objectContaining({
+          delivery_id: pending!.delivery_id,
+          attempts: 1,
+          last_error: "receiver responded with HTTP 500"
+        })
+      ]);
+
+      dispatcher.upsertSubscription({
+        subscription_id: subscription!.subscription_id,
+        url: subscription!.url,
+        secret: "hook-secret-value",
+        active: true
+      });
+      dispatcher.resumePending();
+      await dispatcher.flush();
+
+      expect(attempts).toBe(2);
+      expect(dispatcher.pendingDeliveries()).toEqual([]);
+      expect(await outbox.list()).toEqual([]);
+      await outbox.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("persists completed delivery history and replays archived events", async () => {
     const directory = mkdtempSync(join(tmpdir(), "lip-webhook-history-"));
     const databasePath = join(directory, "reference.db");

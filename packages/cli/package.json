@@ -1,13 +1,24 @@
 {
   "name": "@loyalty-interchange/cli",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Developer CLI for Loyalty Interchange Protocol.",
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "git+https://github.com/alvinjchoi/opensource-loyalty.git", "directory": "packages/cli" },
-  "homepage": "https://github.com/alvinjchoi/opensource-loyalty#readme",
-  "bugs": { "url": "https://github.com/alvinjchoi/opensource-loyalty/issues" },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craveup/opensource-loyalty.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/craveup/opensource-loyalty#readme",
+  "bugs": {
+    "url": "https://github.com/craveup/opensource-loyalty/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,15 +31,17 @@
   "bin": {
     "lip": "./dist/cli.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@loyalty-interchange/protocol": "0.1.2",
-    "@loyalty-interchange/reference": "0.1.2",
-    "@loyalty-interchange/server": "0.1.2",
+    "@loyalty-interchange/protocol": "0.2.0",
+    "@loyalty-interchange/reference": "0.2.0",
+    "@loyalty-interchange/server": "0.2.0",
     "commander": "^15.0.0"
   }
 }

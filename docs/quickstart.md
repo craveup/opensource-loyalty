@@ -7,6 +7,8 @@ If this is your first time in the repo, start with
 [Getting started](getting-started.md). This page adds validation, Docker, reset,
 and conformance details.
 
+Canonical source: [`craveup/opensource-loyalty`](https://github.com/craveup/opensource-loyalty).
+
 ## 1. Install and start
 
 Use npm for source installs. This repo uses npm workspaces and

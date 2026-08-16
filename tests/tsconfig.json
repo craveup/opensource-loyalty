@@ -10,6 +10,7 @@
   "include": ["**/*.ts"],
   "references": [
     { "path": "../apps/cloud" },
+    { "path": "../packages/adapter-kit" },
     { "path": "../packages/protocol" },
     { "path": "../packages/reference" },
     { "path": "../packages/storage" },
@@ -18,6 +19,7 @@
     { "path": "../packages/server" },
     { "path": "../packages/cli" },
     { "path": "../packages/mcp" },
-    { "path": "../packages/sdk" }
+    { "path": "../packages/sdk" },
+    { "path": "../scripts" }
   ]
 }

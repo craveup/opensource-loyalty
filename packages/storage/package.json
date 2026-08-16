@@ -1,13 +1,24 @@
 {
   "name": "@loyalty-interchange/storage",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Persistence contracts for Loyalty Interchange reference platforms.",
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "git+https://github.com/alvinjchoi/opensource-loyalty.git", "directory": "packages/storage" },
-  "homepage": "https://github.com/alvinjchoi/opensource-loyalty#readme",
-  "bugs": { "url": "https://github.com/alvinjchoi/opensource-loyalty/issues" },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craveup/opensource-loyalty.git",
+    "directory": "packages/storage"
+  },
+  "homepage": "https://github.com/craveup/opensource-loyalty#readme",
+  "bugs": {
+    "url": "https://github.com/craveup/opensource-loyalty/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +29,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "prepack": "npm run build"

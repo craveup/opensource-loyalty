@@ -1,13 +1,24 @@
 {
   "name": "@loyalty-interchange/reference",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Deterministic reference engine for Loyalty Interchange Protocol.",
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "git+https://github.com/alvinjchoi/opensource-loyalty.git", "directory": "packages/reference" },
-  "homepage": "https://github.com/alvinjchoi/opensource-loyalty#readme",
-  "bugs": { "url": "https://github.com/alvinjchoi/opensource-loyalty/issues" },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craveup/opensource-loyalty.git",
+    "directory": "packages/reference"
+  },
+  "homepage": "https://github.com/craveup/opensource-loyalty#readme",
+  "bugs": {
+    "url": "https://github.com/craveup/opensource-loyalty/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,12 +29,14 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@loyalty-interchange/protocol": "0.1.2"
+    "@loyalty-interchange/protocol": "0.2.0"
   }
 }

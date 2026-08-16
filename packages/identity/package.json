@@ -1,16 +1,16 @@
 {
   "name": "@loyalty-interchange/identity",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "OIDC token verification and stable customer-to-loyalty-member mapping for Loyalty Interchange.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alvinjchoi/opensource-loyalty.git",
+    "url": "git+https://github.com/craveup/opensource-loyalty.git",
     "directory": "packages/identity"
   },
-  "homepage": "https://github.com/alvinjchoi/opensource-loyalty#readme",
+  "homepage": "https://github.com/craveup/opensource-loyalty#readme",
   "bugs": {
-    "url": "https://github.com/alvinjchoi/opensource-loyalty/issues"
+    "url": "https://github.com/craveup/opensource-loyalty/issues"
   },
   "engines": {
     "node": ">=22"
@@ -37,7 +37,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@loyalty-interchange/sdk": "0.1.2",
+    "@loyalty-interchange/sdk": "0.2.0",
     "jose": "^6.2.3"
   }
 }

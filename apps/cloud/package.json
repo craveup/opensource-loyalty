@@ -1,6 +1,6 @@
 {
   "name": "@loyalty-interchange/cloud",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Managed Cloud control plane for Loyalty Interchange.",
   "type": "module",
@@ -14,10 +14,11 @@
     "start": "node dist/cli.js"
   },
   "dependencies": {
-    "@loyalty-interchange/identity": "0.1.2",
-    "@loyalty-interchange/reference": "0.1.2",
-    "@loyalty-interchange/server": "0.1.2",
-    "@loyalty-interchange/storage-postgres": "0.1.2",
+    "@loyalty-interchange/identity": "0.2.0",
+    "@loyalty-interchange/reference": "0.2.0",
+    "@loyalty-interchange/server": "0.2.0",
+    "@loyalty-interchange/sdk": "0.2.0",
+    "@loyalty-interchange/storage-postgres": "0.2.0",
     "pg": "^8.22.0",
     "stripe": "^22.3.2"
   },

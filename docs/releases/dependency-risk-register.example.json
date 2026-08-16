@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "lockfileSha256": "07a5ce9ab72e9911190d1a7574264a2d02391c695aa52579b348af056edf9201",
+  "auditReportSha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "reviewedAt": "2026-08-10T00:00:00.000Z",
+  "expiresAt": "2026-09-10T00:00:00.000Z",
+  "findings": [
+    {
+      "name": "moderate-package",
+      "severity": "moderate",
+      "range": "<1.0.1",
+      "status": "approved",
+      "reviewedBy": "security@example.com",
+      "justification": "Example only. Release registers must document reachability and mitigation evidence."
+    },
+    {
+      "name": "fast-uri",
+      "severity": "high",
+      "range": "3.0.0 - 3.1.4",
+      "status": "approved",
+      "reviewedBy": "security@example.com",
+      "justification": "Example only. Release registers must document reachability and mitigation evidence."
+    }
+  ]
+}

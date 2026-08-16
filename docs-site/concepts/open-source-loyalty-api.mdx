@@ -1,0 +1,25 @@
+---
+title: "Open-source loyalty APIs"
+description: "The transaction, portability, and operating capabilities an open loyalty API needs beyond source availability."
+---
+
+Source availability alone does not make loyalty portable. A usable open API
+needs a versioned contract, executable validation, deterministic retry
+semantics, a ledger that explains balance changes, and an export path that does
+not depend on one hosted account.
+
+For foodservice, test more than `addPoints`: open-cart evaluation, reservation
+before payment, capture, failed-payment reversal, duplicate and offline
+delivery, void, partial refund, business date, modifiers, comps, fees, tax, tip,
+and split tenders. Exact integer money and stable operation-specific
+idempotency keys are prerequisites.
+
+LIP supplies OpenAPI and JSON Schema, lifecycle semantics, an Apache-2.0
+reference engine, SQLite/Postgres, TypeScript SDK, CLI, Admin, webhooks, adapter
+certification, migration, and black-box conformance. The protocol remains a
+working draft and Cloud is preview software; there are not yet independent
+provider reports or public production-SLO results.
+
+When evaluating any project, run its tests, inspect its license and release
+provenance, simulate duplicate/refund behavior, verify export, and identify who
+owns upgrades, backups, security response, and reconciliation.

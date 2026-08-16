@@ -1,428 +1,166 @@
-# LIP Developer Experience Plan
-
-Status: active; local implementation has reached the managed Cloud foundation
-in Milestone 2.8; the `@loyalty-interchange/*` packages are published to npm
-(v0.1.0, with provenance); listed follow-ups remain pending
-
-## Current implementation focus: minimal developer onboarding
-
-The first-run experience should be small enough that a developer can complete it
-without reading protocol prose. The default path is:
-
-```text
-npm install
-  -> npm start
-  -> open /admin with lip-dev-key
-  -> curl /health
-  -> npm run example:sdk
-  -> choose API guide, SDK guide, or reference-platform guide
-```
-
-- [x] Add `npm start` as the obvious local sandbox command.
-- [x] Add a minimal [Getting started](docs/getting-started.md) guide.
-- [x] Link README and docs index to the minimal guide before deeper docs.
-- [x] Print concrete next steps after `lip quickstart` starts.
-- [x] Add [`llms.txt`](llms.txt), [Using LIP with AI](docs/using-lip-with-ai.md),
-  and [AI prompts](docs/ai-prompts.md) for agent-assisted onboarding.
-- [ ] Add copy/paste SDK snippets for enroll, evaluate, accrue, and redeem.
-- [ ] Add a first-run checklist to the Admin API page.
-
-## Current implementation track: product-grade Admin configuration
-
-This track turns the OpenLoyalty/Open WebUI comparison into implementation
-work. The goal is not to clone OpenLoyalty. The goal is to make the reference
-platform feel like a real loyalty operations dashboard while keeping the
-portable LIP contract focused on interoperability.
-
-### Phase 1: honest program-model configuration
-
-- [x] Add server-owned program model templates for points, visits/stamps,
-  wallet credit, paid membership, and hybrid rewards.
-- [x] Mark the currently runnable model as active and mark planned models with
-  backend blockers instead of presenting them as live features.
-- [x] Expose configuration capability metadata in the non-normative Admin
-  snapshot outside `/lip/v1`.
-- [x] Drive the dashboard Configure view from Admin API state instead of
-  hard-coded frontend cards.
-- [x] Add a persisted Admin draft model with create/update/discard operations.
-- [x] Add program draft validation that returns field-level errors and blocking
-  publish requirements.
-- [x] Add publish and rollback operations that rebuild the reference engine
-  from a versioned program definition.
-
-### Phase 2: platform APIs OpenLoyalty already has
-
-- [x] Persisted static segments and reusable manual campaign runs that issue
-  portable reward-wallet entries idempotently.
-- [x] Reward-level draft CRUD integrated with validation and publish.
-- [x] Dynamic member segments and scheduled campaign activation.
-- [ ] Reward categories and category-level merchandising.
-- [x] Issued reward wallet with code/QR artifacts, claim through redemption,
-  cancellation, expiration, reversal restoration, and restart persistence.
-- [x] Manual point adjustments with bonus, gift, migration, service-recovery,
-  and correction classifications.
-- [ ] Point transfer rules and operator-facing expiration job controls.
-- [x] Wallet credit account units, basis-point earning, promotional/stored-value
-  classification, liability summaries, FIFO redemption, and expiration.
-- [x] Executable visits/stamps accounts with per-order accrual, threshold
-  reward issuance, card reset, ledger units, Admin publish, and persistence.
-- [x] Paid membership plans with durable member entitlements, validity windows,
-  earn multipliers, gated rewards, scheduler-driven lapse, and Admin controls.
-- [x] Hybrid programs with independently accrued points, credit, and visit/stamp
-  accounts, per-unit reward costs, expiration, reservations, and refund entries.
-- [x] Persistent webhook subscription CRUD, event filters, signing-secret
-  rotation, delivery visibility, and immediate retry for pending deliveries.
-- [x] Persist completed webhook delivery history and support completed-event
-  replay.
-- [x] Add per-subscription timeout, backoff, and retry policies.
-- [x] Scoped Admin users, fixed roles and permissions, tenant-scoped API keys,
-  key expiration/revocation, and audit entries for Admin and protocol writes.
-- [x] Location-level scoping: per-tenant location registry, location-scoped
-  Admin users and API keys, and per-location reporting.
-- [ ] Custom role definitions.
-- [x] Consent-filtered member CRM exports in JSON and CSV.
-- [x] Ledger/member/campaign analytics plus signed, idempotent messaging
-  connectors with persisted jobs, retries, and Admin controls.
-- [ ] Bulk imports and transaction, reward, and ledger report exports.
-
-### Phase 3: docs portal parity with Open WebUI
-
-- [x] Add a docs entrypoint and API endpoint guide.
-- [x] Add an API and documentation gap analysis.
-- [ ] Add error catalog with retry and corrective-action guidance.
-- [ ] Add guides for checkout integration, refunds/voids, offline queues,
-  duplicate checks, program configuration, and webhook operations.
-- [ ] Add troubleshooting, security, roadmap, changelog, and machine-readable
-  docs files.
-
-## North star
-
-A developer with no prior LIP knowledge can complete an enroll, evaluate, earn,
-reserve, capture, reverse, and refund lifecycle in a sandbox without reading the
-normative specification.
-
-## Success measures
-
-- First successful request in less than 5 minutes from a clean machine.
-- Complete sandbox lifecycle in less than 30 minutes.
-- One command starts a seeded, stateful local environment.
-- One command validates a payload and explains every failure with a JSON path.
-- One command tests a provider and produces an actionable conformance report.
-- Every documented example runs in CI against the current protocol version.
-- SDK users never manually create request ids, timestamps, version fields, or
-  retry metadata.
-- Every stable error code has a searchable explanation and corrective action.
-
-## Current foundation
-
-- [x] Normative core and `foodservice/1.0` profile
-- [x] JSON Schema Draft 2020-12 contract
-- [x] OpenAPI 3.1 HTTP contract
-- [x] TypeScript runtime validation
-- [x] Deterministic stateful reference engine
-- [x] Authenticated reference HTTP server
-- [x] Unit, integration, and black-box conformance tests
-- [x] CI and package dry-run verification
-- [x] Portable program, tier, reward, account, and ledger read models
-- [x] Versioned engine snapshots and durable SQLite state
-- [x] Seeded reference platform with an authenticated Admin application
-
-## Milestone 1: five-minute local success
-
-Goal: install one CLI and complete the first transaction without reading the
-specification.
-
-- [x] Publish `@loyalty-interchange/cli` to expose the short `lip` command externally
-- [x] `lip quickstart` starts the stateful reference environment
-- [x] `lip mock` starts the server with configurable host, port, and API key
-- [x] `lip validate <file> --schema <name>` validates local JSON
-- [x] `lip doctor <url>` checks discovery, health, authentication, and capabilities
-- [x] `lip test <url>` runs baseline HTTP conformance and returns a nonzero exit on failure
-- [x] `lip init [directory]` creates a minimal `lip.config.json` without overwriting work
-- [x] `/.well-known/lip` advertises protocol discovery
-- [x] `/lip/v1/capabilities` advertises negotiated operations and limits
-- [x] Dockerfile and Compose quickstart
-- [x] Executable five-minute guide using the CLI
-
-Exit criteria: a clean clone passes `npm run verify`; `npm run quickstart` serves
-health and discovery; all CLI commands have unit or black-box coverage.
-
-## Milestone 2: first-party SDK
-
-Goal: application developers call domain methods rather than construct protocol
-envelopes.
-
-- [x] Publish the idiomatic TypeScript SDK package
-- [x] Add public-package metadata, package dry runs, provenance, and trusted
-  GitHub Actions publishing in dependency order
-- [x] Automatically add versions, request ids, timestamps, and idempotency keys
-- [x] Implement bounded retries for safe operations
-- [x] Expose typed problem details and stable error classes
-- [x] Add order and modifier builders with exact-money helpers
-- [x] Add webhook signature verification
-- [x] Add a runnable TypeScript example covering every lifecycle operation
-- [x] Generate a low-level client from OpenAPI and wrap it with the hand-written SDK
-
-Exit criteria: the complete lifecycle is fewer than 50 lines of application code
-and contains no manually constructed protocol context.
-
-## Milestone 2.5: restaurant account experience
-
-Goal: replace the common vendor-specific reads needed for a restaurant loyalty
-home screen without weakening the transaction core.
-
-- [x] Program metadata and account-unit catalog
-- [x] Tier ladder, benefits, thresholds, and progress
-- [x] Discount and food-item reward catalog with funding attribution
-- [x] Member balances, provider-defined metrics, and expiring balance buckets
-- [x] Filtered, cursor-based immutable ledger history
-- [x] Reference engine, HTTP routes, generated client, idiomatic SDK, and conformance tests
-- [x] Punchh compatibility boundary and migration notes
-- [x] Issued reward wallet with issue, cancel, and redemption artifacts
-- [ ] Referral artifacts and missed-purchase claim workflow
-- [ ] Versioned authentication, engagement, and ordering-platform adapter profiles
-
-Exit criteria: one portable response set can render program, tier, balance,
-reward, and history views for a multi-tier foodservice program.
-
-## Milestone 2.6: earning and tier policy
-
-Goal: express and execute the earning and qualification rules required by
-multi-tier restaurant programs without relying on vendor-specific campaigns.
-
-- [x] Base earn rate and after-transaction rounding
-- [x] Minimum eligible spend and eligible order channels
-- [x] Product, category, tag, line-kind, and explicit line exclusions
-- [x] Annual tier qualification period with IANA time-zone reset
-- [x] Qualification reset independent from spendable points
-- [x] Tier earning multipliers applied to evaluation and accrual
-- [x] Refunds use the multiplier recorded on the original accrual
-- [x] Generic annual-tier conformance fixture and HTTP/SDK coverage
-- [x] Point lots with earned-date expiration and scheduled expiration entries
-- [x] FIFO lot consumption and exact-lot restoration on redemption reversal
-- [x] Source-linked expiration ledger entries for only the unspent remainder
-- [ ] Expiration warning event and delivery profile
-- [x] Classified bonus, gift, migration, service-recovery, and correction entries
-- [ ] Tier-achievement reward issuance
-- [ ] Reward non-stacking policy and daily redemption caps
-
-Exit criteria: a restaurant can configure minimum checks, exclusions, annual
-tiers, multiplier-safe refunds, and earned-date point expiration and prove them
-with conformance tests.
-
-## Milestone 2.7: reference platform and Admin
-
-Goal: make the protocol tangible as a durable, inspectable local product without
-turning implementation-specific operations into normative LIP requirements.
-
-- [x] Versioned engine snapshots protected by a program fingerprint
-- [x] Storage contract separated from the reference engine
-- [x] SQLite adapter with atomic replacement and WAL mode
-- [x] Seeded QSR member, tier, accrual, redemption, and adjustment activity
-- [x] Authenticated Admin API outside `/lip/v1`, including CSRF-protected
-  program draft, publish, and rollback writes
-- [x] Responsive Admin views for health, members, ledger, program, and developer status
-- [x] One-command startup with durable state, reset, and seed controls
-- [x] Docker volume persistence and package-level storage verification
-- [x] Tenant-aware normalized Postgres engine adapter, numbered migrations,
-  optimistic revisions, advisory transaction locks, and scheduler leases
-- [x] Move program, campaign, membership, access, and webhook extension stores
-  to the asynchronous Postgres state contract
-- [x] Scoped Admin users, roles, tenant API keys, and audit log
-- [x] Program configuration editor with validation and publish workflow
-- [ ] Extension API for adapters, workflows, and custom Admin modules
-
-Exit criteria: `npm run quickstart` starts a seeded, persistent loyalty engine and
-Admin application; restart preserves activity; reset is explicit; and all
-implementation-specific surfaces remain outside the normative protocol routes.
-
-## Milestone 2.8: managed Cloud control plane
-
-Goal: operate the open protocol and engine as a managed service without making
-Cloud-specific lifecycle or billing concepts part of `/lip/v1`.
-
-- [x] Separate Cloud workspace and authenticated management API
-- [x] Organizations, external-identity memberships, projects, and environments
-- [x] Regional environment scopes with queued provisioning jobs
-- [x] Plans, subscriptions, monthly usage events, counters, and hard quotas
-- [x] Idempotent, transaction-locked usage metering
-- [x] Claim-safe provisioning worker, retries, and provider interface
-- [x] Docker Compose Cloud profile and operating guide
-- [ ] Regional data-plane provisioning adapter
-- [x] Direct OIDC validation, invitations, and membership management
-- [ ] Stripe billing adapter and signed subscription webhooks
-- [x] Tenant-scoped merchant API keys with control-plane retrieval/rotation
-  and bounded overlap windows (PLA-416)
-- [ ] Encrypted environment credentials and suspension
-- [ ] Automated runtime metering, backup, restore, and region migration
-
-Exit criteria: a customer can create an organization, project, and environment;
-the control plane provisions an isolated regional runtime, meters usage, applies
-the subscribed plan, and supports safe upgrades, suspension, backup, and restore.
-
-## Milestone 2.9: managed customer identity and loyalty
-
-Goal: let restaurant applications use Clerk, Auth0, or another OIDC provider
-for customer authentication while keeping stable customer and loyalty history
-independent from that provider.
-
-Active cross-repository ownership (July 16, 2026):
-
-- `craveup-loyalty` owns standards-based OIDC token validation, stable
-  customer/member mapping, the server-side integration package, and contract
-  tests on `feat/customer-identity-contract`.
-- The private consumer-app repository owns Expo integration, removal of its
-  custom password/session implementation, secure native token storage, mobile
-  E2E, demo locations, and Stripe/storefront readiness.
-- Agents must not edit both dirty repositories concurrently. The
-  cross-repository handoff lives in the private companion repository.
-
-Product positioning: **open-source loyalty infrastructure for Clerk, Auth0, or
-any OIDC provider**. The selected provider owns all authentication UX,
-credentials, sessions, verification, recovery, MFA, passkeys, social login,
-and token issuance. CraveUp validates access tokens and owns only the stable
-customer-to-loyalty mapping.
-
-### Product and protocol boundary
-
-- [x] Keep passwords, sessions, social connections, passkeys, and token issuance
-  outside `/lip/v1` and the reference loyalty engine.
-- [x] Use provider-native application SDKs instead of wrapping sign-up,
-  sign-in, refresh, recovery, or account-management APIs.
-- [x] Add a standards-based OIDC verifier outside the normative protocol that
-  supports Clerk, Auth0, and other compatible issuers.
-- [x] Select Clerk as the pilot app's initial consumer CIAM while preserving
-  the OIDC boundary for other applications.
-- [x] Keep restaurant staff/admin identity isolated from consumer identity;
-  never share customer and merchant sessions or authorization policies.
-- [x] Use `{tenant_id, issuer, subject}` as the immutable external identity key.
-  Email and phone are verified profile attributes, not account primary keys.
-- [x] Map each external identity to one stable CraveUp customer id and one or
-  more program-scoped LIP member ids.
-- [x] Send only the stable internal customer id across the LIP boundary, never
-  raw JWTs, provider subjects, email addresses, or phone numbers.
-
-### Application integration
-
-- [x] Add a server-side identity package with OIDC validation,
-  `CustomerDirectoryRepository`, and customer-to-member resolution.
-- [ ] Add a transaction-safe production repository implementation for customer,
-  external-identity, and member-link records.
-- [ ] Integrate Clerk's native Expo SDK in the pilot app and remove its custom
-  password/session endpoints.
-- [ ] Store customer tokens using platform-secure native storage and provider
-  refresh/session handling.
-- [ ] Add BFF middleware that derives tenant scope from trusted routing or
-  deployment configuration and resolves the authenticated customer.
-- [ ] Keep profile, consent, export, and provider-account deletion in the
-  application/customer-data layer rather than the loyalty transaction API.
-- [ ] Emit documented identity-to-loyalty lifecycle events for account created,
-  identity linked, consent changed, member enrolled, and account deleted.
-
-### Tenant isolation and account lifecycle
-
-- [x] Enforce per-restaurant identity isolation so the same provider subject
-  resolves independently for each tenant and email cannot become a lookup key.
-- [ ] Enforce the same isolation in the production repository so identities,
-  account existence, profile data, and loyalty state cannot leak across brands.
-- [ ] Define optional cross-brand identity federation as an explicit product
-  capability, never an accidental consequence of a shared CIAM tenant.
-- [x] Define explicit external-identity linking without changing customer or
-  LIP member ids.
-- [ ] Make linking, unlinking, duplicate resolution, and deletion workflows
-  atomic and auditable in the production repository.
-- [ ] Implement account deletion across CIAM, CraveUp profiles, LIP identity
-  references, consent records, and legally retained financial ledger entries.
-- [ ] Support import and account-linking flows for Punchh, Paytronix, and other
-  existing loyalty identities without forcing password migration.
-
-### Security, operations, and portability
-
-- [x] Validate issuer, audience, signature, expiry, signing algorithm, subject,
-  and optional authorized party on every accepted customer access token.
-- [x] Expose email and phone claims only when provider verification claims allow
-  them by policy.
-- [x] Keep tenant selection outside untrusted customer token input.
-- [ ] Configure provider-side bot protection, session/device revocation, and
-  suspicious-login monitoring; add BFF rate limits and security events.
-- [ ] Encrypt application profile PII and document retention, redaction, export,
-  deletion, and incident-response behavior.
-- [x] Guarantee that switching or linking Clerk/Auth0 identities does not change
-  the stable CraveUp customer id or LIP member history.
-- [x] Add contract tests for OIDC rejection, tenant isolation, identity linking,
-  deletion tombstones, and idempotent loyalty enrollment.
-- [ ] Add deployed Clerk integration tests and synthetic monitoring for token
-  validation, customer mapping, loyalty balance, and provider outage behavior.
-
-Exit criteria: an Expo or web application can use its provider's native SDK,
-send an access token to its BFF, resolve one stable tenant-scoped customer and
-program member, and display wallet/rewards/activity. Linking or replacing the
-OIDC provider preserves loyalty history, deletion is auditable, and no customer
-credential or provider-specific subject is stored in the LIP transaction core.
-
-## Milestone 3: hosted documentation and sandbox
-
-Goal: evaluation requires no local repository setup.
-
-- [ ] Public documentation site with interactive API reference
-- [ ] Persistent sandbox credentials and isolated test tenants
-- [ ] Browser-based request inspector and ledger viewer
-- [ ] Runnable examples in TypeScript, Java, C#, Python, Go, and HTTP
-- [ ] Error catalog with causes, retry guidance, and corrective actions
-- [ ] Guides for refunds, offline queues, duplicate checks, and franchise funding
-- [ ] Public changelog, support policy, and version matrix
-
-Exit criteria: a developer can finish the complete lifecycle from the hosted
-guide in less than 30 minutes.
-
-## Milestone 4: restaurant adapter kit
-
-Goal: POS and ordering mappings are repeatable instead of bespoke.
-
-- [ ] Stable adapter interface and mapping-test harness
-- [ ] Fixtures for modifiers, combos, split tenders, comps, discounts, taxes, tips,
-  offline accrual, duplicate delivery, voids, and partial refunds
-- [ ] Mapping guides for Toast, Square, Olo, PAR Brink, NCR Aloha, and Oracle Simphony
-- [ ] Migration guidance for Punchh and Paytronix-style programs
-- [ ] Adapter certification report generated by `lip test`
-
-Exit criteria: a new adapter proves all required foodservice behavior using the
-shared fixture corpus without changing the protocol core.
-
-## Milestone 5: events, security, and production operations
-
-Goal: providers can operate LIP safely at production scale.
-
-- [ ] AsyncAPI contract for all lifecycle events
-- [ ] OAuth 2.0 client-credentials profile and operation scopes
-- [x] Reference webhook signing, bounded retry, and SQLite outbox restart recovery
-- [ ] Normative replay protection, ordering, dead-letter, and operator replay rules
-- [ ] Capability and version negotiation policy
-- [ ] Rate-limit and retention declarations
-- [ ] Trace correlation and observability guidance
-- [ ] Automated OpenAPI property and stateful testing
-- [ ] Compatibility checks and migration guides on every release
-
-Exit criteria: production implementers have normative security, event delivery,
-operational, and upgrade behavior with automated certification.
-
-## Milestone 6: ecosystem and governance
-
-Goal: LIP evolves through interoperable implementations rather than one vendor.
-
-- [ ] Java/Kotlin and C# first-party SDKs
-- [ ] Python and Go first-party SDKs
-- [ ] Public proposal and compatibility review process
-- [ ] Conformance badge and implementation registry
-- [ ] Independent provider and adapter implementations
-- [ ] Stable `1.0.0` release criteria and long-term support policy
+# LIP 0.2 launch and adoption plan
+
+Status: release candidate
+Owner: CraveUp
+Target: `0.2.0`
+
+## Decision
+
+LIP will win first as the open, foodservice-native loyalty infrastructure for
+ordering platforms and multi-location restaurant technology teams. The moat is
+correct checkout, refund, replay, offline, franchise, and migration behavior —
+not generic campaign breadth.
+
+The product is separated into three explicit layers:
+
+1. **LIP Protocol** — vendor-neutral contracts and conformance.
+2. **LIP Reference Platform** — Apache-2.0 self-hosted implementation.
+3. **Crave Loyalty Cloud** — managed hosting, migration, adapters, operations,
+   and support.
+
+## Evidence behind this plan
+
+- The supported Node 22 baseline passes 309 tests without PostgreSQL and all 317
+  tests with PostgreSQL 17, with 87.23% statement coverage, runnable lifecycle
+  examples, the Admin build, and inspection of all 11 publishable packages.
+- The reference platform already implements the complete foodservice lifecycle,
+  multiple program models, engagement, tenant/location scope, SQLite/Postgres,
+  signed webhooks, an Admin console, a TypeScript SDK, CLI, MCP, and conformance.
+- The latest published npm release (`0.1.2`) predates dozens of substantive
+  commits and still understates the current product.
+- The live product has had little qualified discovery: the August 15 audit found
+  one GitHub star, no forks, no Discussions, no open product issues, and ten
+  unique repository viewers over the preceding 14 days.
+- The live landing and docs had stale repository links, no hosted walkthrough,
+  no commercial path, no customer proof, and a mobile overflow defect.
+- Commercial APIs are mature, and OfferKit is a direct open-source competitor.
+  Open source, TypeScript, CLI, and MCP are therefore table stakes; foodservice
+  correctness and credible operations are the differentiation.
+
+## Release acceptance criteria
+
+Every checked item below must be backed by code, tests, a rendered page, a live
+repository setting, or an explicit artifact. No customer, revenue, uptime,
+search-ranking, or production-usage claim may be checked from repository work
+alone.
+
+### 1. Release truth and developer contract
+
+- [x] Promote the latest linear `dev` and release-manifest work into the launch
+      branch without rewriting either history.
+- [x] Version all public packages and release surfaces as `0.2.0`.
+- [x] Use the canonical `craveup/opensource-loyalty` repository URL everywhere
+      and add an automated absence check for the retired personal namespace.
+- [x] Standardize the supported local and CI runtime on Node 22, provide a
+      version pin, and test the release runtime separately.
+- [x] Publish a truthful changelog, support policy, version matrix, and release
+      checklist that distinguish protocol, reference, and Cloud maturity.
+- [x] Keep immutable release-manifest generation and validation in the release
+      gate.
+
+### 2. Zero-install evaluation and activation
+
+- [x] Add a hosted, browser-only lifecycle walkthrough that visibly runs
+      evaluate, reserve, accrue, capture, reverse, and refund-safe adjustment
+      against sample foodservice data without collecting credentials.
+- [x] Show request, response, idempotency key, and ledger effects for every
+      walkthrough step.
+- [x] Add one primary quickstart, one self-host path, and one design-partner path
+      across the landing page and docs.
+- [x] Define privacy-safe activation events and a funnel contract without
+      coupling the project to a specific analytics vendor.
+- [x] Add automated landing checks for canonical links, critical copy, crawl
+      files, and mobile overflow-prone markup.
+
+### 3. Foodservice integration moat
+
+- [x] Publish `@loyalty-interchange/adapter-kit` with a stable adapter contract,
+      normalized lifecycle result, fixture runner, and certification report.
+- [x] Cover modifiers, combos, split tenders, comps, discounts, taxes, tips,
+      offline accrual, duplicate delivery, void, and partial-refund fixtures.
+- [x] Add a runnable ordering-BFF reference that keeps the merchant key on the
+      server and maps checkout/payment outcomes to the LIP lifecycle.
+- [x] Add vendor-neutral mapping guides for Square, Toast, Olo, PAR Brink, NCR
+      Aloha, and Oracle Simphony; label unverified partner-specific details.
+- [x] Add Punchh/Paytronix-style migration guidance plus a machine-readable
+      member/balance import planner and reconciliation report.
+
+### 4. Managed-provider readiness
+
+- [x] Encrypt local Cloud credential files at rest with authenticated encryption,
+      require an operator-supplied key, and retain an explicit legacy migration
+      path.
+- [x] Add backup, restore, suspend, and resume operations for local provisioned
+      environments with failure-safe atomic writes.
+- [x] Implement the Stripe billing provider boundary and signed webhook
+      verification without adding billing concepts to `/lip/v1`.
+- [x] Expose the existing managed-customer contract through authenticated Cloud
+      HTTP routes suitable for a BFF; never turn LIP into a sign-in provider.
+- [x] Document the threat model, data boundaries, recovery objectives, incident
+      process, service-level objectives, and production-readiness checklist.
+
+### 5. Open-source community and commercial path
+
+- [x] Add Code of Conduct, support, governance, maintainer, PR, bug, integration,
+      adapter, and protocol-proposal templates.
+- [x] Enable GitHub Discussions and provide Q&A, ideas, integrations, and show-and-
+      tell entry points without mixing support questions into defects.
+- [x] Add design-partner, pricing/packaging, architecture, migration, security,
+      and case-study assets for founder-led sales.
+- [x] Publish a comparison page that states observable tradeoffs and avoids
+      unverified pricing, performance, or customer claims.
+- [x] Add a public roadmap issue set and labels for adapters, integrations,
+      protocol proposals, good first issues, and help wanted.
+
+### 6. SEO, GEO, and launch distribution
+
+- [x] Fix titles, metadata, structured data, canonical URLs, mobile layout, and
+      crawl artifacts on the landing surface.
+- [x] Publish original technical pages for open-source loyalty APIs, restaurant
+      checkout/refunds, idempotency, adapters, migration, and provider selection.
+- [x] Keep `llms.txt` and `llms-full.txt` useful for agents while treating them as
+      developer infrastructure, not ranking shortcuts.
+- [x] Add a founder-led launch kit for GitHub releases and evidence-based LinkedIn
+      posts, each with one measurable call to action.
+- [x] Define acquisition, activation, integration, reliability, and commercial
+      metrics with bot/CI traffic excluded from adoption claims.
+
+### 7. Verification and publication
+
+- [x] Pass generation, type checking, the full test suite, coverage, runnable
+      examples, builds, package-content inspection, spec drift, docs mirror,
+      canonical-link, and launch-surface checks.
+- [x] Exercise the CLI, migration planner, adapter certification, Cloud credential
+      migration, billing webhook, customer routes, and local recovery flow.
+- [x] Render and inspect landing and Admin at desktop and 390px mobile widths.
+- [ ] Publish through a protected-main pull request and require the remote verify
+      check before merge.
+- [ ] Tag and publish `0.2.0` only from the verified merge commit, then confirm npm,
+      docs, and landing resolve to that release.
+
+## External validation gates
+
+These are business outcomes, not repository checkboxes. They remain open until
+first-party evidence exists:
+
+- Ten qualified buyer or developer interviews.
+- Three independent sandbox users complete `orders/evaluate`.
+- Two independent users complete evaluate through refund adjustment.
+- Two active design-partner integrations.
+- One referenceable end-to-end restaurant ordering implementation.
+- Measured median time from starting the walkthrough to the first successful
+  evaluation, with a target under 15 minutes.
+- Search Console and ChatGPT-search visibility measured on a verified domain.
+- Production SLO attainment measured from a deployed regional runtime.
 
 ## Product constraints
 
-- Do not add loyalty concepts until an existing implementer demonstrates the need.
-- Do not call generated clients first-party SDKs without an idiomatic wrapper.
-- Do not require developers to read normative prose for the happy path.
-- Do not hide financial mutations behind silent retries.
-- Do not claim conformance without a reproducible report.
-- Keep the formal name `Loyalty Interchange Protocol`; use `lip` for commands,
-  package entry points, configuration, and discovery.
+- LIP remains a loyalty transaction protocol, not customer authentication.
+- Financial mutations require explicit idempotency and are never silently retried.
+- Cloud, billing, campaigns, and vendor adapters remain outside normative
+  `/lip/v1` routes.
+- Generated clients are not called first-party SDKs without an idiomatic wrapper.
+- Conformance, performance, customer, and compatibility claims require a
+  reproducible report.
+- External distribution must lead to a real walkthrough, sandbox, integration,
+  or design-partner action; stars and raw clone/download counts are not adoption.

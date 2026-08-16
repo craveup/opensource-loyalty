@@ -17,6 +17,7 @@ const ALLOWED_READ_PREFIXES = [
   "skills/",
   "examples/typescript/",
   "llms.txt",
+  "llms-full.txt",
   "PLAN.md",
   "README.md"
 ];

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0 - 2026-08-15
+
+- Add executable points, visit/stamp, wallet-credit, paid-membership, and hybrid
+  programs; versioned program draft/publish/rollback; reward wallets,
+  engagement jobs, location scope, funding reports, and the expanded Admin.
+- Add normalized tenant-scoped Postgres storage, multi-instance mutation locks,
+  scheduler leases, Cloud provisioning/attachment, OIDC and operator auth,
+  credential rotation, managed-customer contracts, usage control, and release
+  evidence with SBOM, provenance, audit, conformance, and immutable manifests.
+- Add `@loyalty-interchange/adapter-kit`, a foodservice edge-case fixture corpus,
+  and a runnable server-side ordering BFF.
+- Add checksummed member/balance import planning and reconciliation commands.
+- Encrypt local Cloud credentials with AES-256-GCM and add atomic local
+  suspend, resume, backup, and restore operations.
+- Add signed Stripe subscription webhooks and authenticated managed-customer
+  HTTP routes outside the normative `/lip/v1` boundary.
+- Add a browser-only lifecycle walkthrough, launch/SEO assets, community
+  governance, design-partner materials, and explicit product/security metrics.
+- Standardize source, CI, and release verification on Node 22.
+
 ## 0.1.2 - 2026-07-19
 
 - Add a server-side write-freeze / maintenance switch: freeze all `/lip/v1`

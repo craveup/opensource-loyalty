@@ -1,0 +1,26 @@
+---
+title: "Idempotency and duplicate delivery"
+description: "Choose stable business keys for loyalty mutations, transport retries, offline queues, and webhooks."
+---
+
+A client can lose the response after the server commits. Every financial
+mutation therefore needs a stable operation-scoped key derived from its source
+event:
+
+```text
+evaluate:order-123
+accrual:order-123
+reserve:order-123:redemption-7
+capture:order-123:reservation-7
+adjustment:order-123:refund-2
+```
+
+An identical replay returns the original outcome. The same key with changed
+business data returns `409 idempotency_conflict`. A transport retry may use a
+new request id and timestamp, but retains the business key. Never retry a
+mutation with a new random key.
+
+Offline queues persist source event id, operation, payload fingerprint, and
+delivery status. Webhook consumers verify the signature, deduplicate delivery,
+then reconcile the resource. Test initial request, exact replay, and conflicting
+replay for every mutation.

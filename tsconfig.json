@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./packages/adapter-kit" },
     { "path": "./packages/identity" },
     { "path": "./apps/cloud" },
     { "path": "./packages/protocol" },

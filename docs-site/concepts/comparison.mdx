@@ -1,0 +1,22 @@
+---
+title: "LIP, commercial APIs, or in-house"
+description: "Observable tradeoffs between the LIP reference platform, a commercial loyalty provider, and building internally."
+---
+
+| Question | LIP | Commercial API | In-house |
+| --- | --- | --- | --- |
+| Portable contract | Open spec and conformance | Usually provider-owned | Team-defined |
+| Self-host | Apache-2.0 reference platform | Varies | Yes |
+| Foodservice lifecycle | Explicit evaluate-to-adjust flow | Verify exact semantics | Must build |
+| Retry evidence | Idempotency conflict and ledger | Verify contract | Must design |
+| Operations | Reference tools; Cloud preview | Usually managed | Team owns |
+| Campaign breadth | Core engagement, not the primary wedge | Often mature | Must build |
+| Migration/adapters | Open planner and fixture certification | Often services-led | Must build |
+
+LIP fits teams that prioritize portable, inspectable checkout correctness and
+can self-host or join a managed pilot. A mature suite may fit when existing
+certified integrations, marketer workflow, global operations, or procurement
+matter more. In-house fits a narrow differentiated use case only when the team
+accepts permanent ledger, retry, migration, fraud, and operations ownership.
+
+This table makes no vendor pricing, performance, or customer-count claim.

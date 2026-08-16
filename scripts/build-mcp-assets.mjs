@@ -9,6 +9,7 @@ const entries = [
   "skills",
   "examples/typescript",
   "llms.txt",
+  "llms-full.txt",
   "PLAN.md",
   "README.md"
 ];

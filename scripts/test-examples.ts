@@ -8,6 +8,8 @@ try {
   process.env.LIP_BASE_URL = running.url;
   process.env.LIP_API_KEY = apiKey;
   await import("../examples/typescript/full-lifecycle.js");
+  const { runOrderingBffDemo } = await import("../examples/typescript/ordering-bff.js");
+  await runOrderingBffDemo();
 } finally {
   await running.close();
 }

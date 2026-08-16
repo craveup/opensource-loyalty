@@ -1,0 +1,21 @@
+---
+title: "Restaurant checkout and refunds"
+description: "Map payment outcomes to evaluate, reserve, accrue, capture, reverse, and refund-safe adjustment."
+---
+
+The merchant BFF owns orchestration because it is the only layer that should
+see both the authenticated customer and the merchant loyalty key.
+
+<Steps>
+<Step title="Preview">Map the open cart and call `orders/evaluate`; reserve a selected reward before payment.</Step>
+<Step title="Resolve payment">Reverse on failure. On settled payment, map the paid order and post accrual with the original operation key.</Step>
+<Step title="Finalize reward">Capture the reservation against the paid order. Retry a failed operation with its original key.</Step>
+<Step title="Adjust">Post a void or partial-refund adjustment linked to the original order with exact signed deltas.</Step>
+</Steps>
+
+Decide before launch whether tax, tip, service fees, gift value, comps, and
+delivery charges earn. Keep store-local `business_date` separate from event
+timestamps. Partial refunds reverse only earning/funding attributable to the
+returned amount; they are not synthetic negative purchases.
+
+See the runnable [ordering BFF on GitHub](https://github.com/craveup/opensource-loyalty/blob/main/examples/typescript/ordering-bff.ts).

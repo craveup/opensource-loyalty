@@ -47,6 +47,7 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: npm run spec:check
+      - run: npm run release:manifest:check
       # docs/ is the source of truth; docs-site/ is the published Mintlify
       # site. Seven pages are mirrored by hand and drifted badly enough by
       # 2026-07-28 that the published copies stated things that were no longer

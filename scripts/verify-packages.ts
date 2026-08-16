@@ -9,6 +9,7 @@ interface PackResult {
 const exec = promisify(execFile);
 const workspaces: Array<{ name: string; entry: string; required?: string[] }> = [
   { name: "@loyalty-interchange/protocol", entry: "dist/index" },
+  { name: "@loyalty-interchange/adapter-kit", entry: "dist/index" },
   { name: "@loyalty-interchange/reference", entry: "dist/index" },
   { name: "@loyalty-interchange/storage", entry: "dist/index" },
   { name: "@loyalty-interchange/storage-sqlite", entry: "dist/index" },
@@ -28,7 +29,12 @@ const workspaces: Array<{ name: string; entry: string; required?: string[] }> = 
   {
     name: "@loyalty-interchange/mcp",
     entry: "dist/server",
-    required: ["assets/llms.txt", "assets/spec/openapi.yaml", "assets/skills/lip/SKILL.md"]
+    required: [
+      "assets/llms.txt",
+      "assets/llms-full.txt",
+      "assets/spec/openapi.yaml",
+      "assets/skills/lip/SKILL.md"
+    ]
   }
 ];
 

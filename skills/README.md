@@ -15,7 +15,7 @@ npx skills add .
 Or install from the public repository without cloning:
 
 ```bash
-npx skills add alvinjchoi/opensource-loyalty
+npx skills add craveup/opensource-loyalty
 ```
 
 Install one skill:

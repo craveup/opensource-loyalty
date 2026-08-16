@@ -1,0 +1,24 @@
+---
+title: "Security and operations"
+description: "Current controls, proposed recovery objectives, incident process, and production-readiness gates."
+---
+
+LIP protects merchant/operator keys, identity links, balances, ledger history,
+program policy, webhook secrets, and backups. Repository controls include
+tenant scoping, role/location checks, hashed keys, bounded rotation overlap,
+explicit idempotency conflict, integer money, signed webhooks, checksummed
+archives, AES-256-GCM local credential files, private file modes, atomic writes,
+and release evidence.
+
+Customer passwords, refresh tokens, payment cards, and payment execution stay
+with their owning providers. The BFF keeps the merchant key; LIP receives an
+opaque member id.
+
+Proposed—not yet attained—objectives are a 15-minute control-plane RPO and
+4-hour RTO, and a 5-minute managed-ledger RPO and 2-hour RTO. Production launch
+requires managed secret storage, Postgres PITR and restore drills, OIDC operator
+auth with two admins, TLS/network controls, audit/alerts/on-call, data policy,
+signed webhook replay tests, SBOM/risk review/provenance, conformance, and a
+recorded rollback artifact.
+
+See the complete [security and operations document on GitHub](https://github.com/craveup/opensource-loyalty/blob/main/docs/security-and-operations.md).

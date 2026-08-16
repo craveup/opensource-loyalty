@@ -384,6 +384,30 @@ export class MemoryCloudRepository implements CloudRepository {
     return clone(updated);
   }
 
+  public async updateEnvironmentStatus(
+    environmentId: string,
+    input: {
+      status: ProvisioningStatus;
+      status_message?: string;
+      api_url?: string;
+      admin_url?: string;
+    }
+  ): Promise<CloudEnvironment> {
+    const existing = this.environments.get(environmentId);
+    if (!existing) throw new Error(`Environment ${environmentId} was not found`);
+    const updated: CloudEnvironment = {
+      ...existing,
+      status: input.status,
+      updated_at: new Date().toISOString(),
+      ...(input.api_url ? { api_url: input.api_url } : {}),
+      ...(input.admin_url ? { admin_url: input.admin_url } : {})
+    };
+    if (input.status_message) updated.status_message = input.status_message;
+    else delete updated.status_message;
+    this.environments.set(environmentId, clone(updated));
+    return clone(updated);
+  }
+
   public async plans(): Promise<CloudPlan[]> {
     return [...this.planRecords.values()].map(clone);
   }

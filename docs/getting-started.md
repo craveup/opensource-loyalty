@@ -7,17 +7,17 @@ This is the shortest path from a clean clone to a working loyalty request.
 If you just want to try the project, use Docker:
 
 ```sh
-git clone https://github.com/alvinjchoi/opensource-loyalty.git
+git clone https://github.com/craveup/opensource-loyalty.git
 cd opensource-loyalty
 docker compose up --build
 ```
 
-If you want to develop against the source code, use Node.js 20.19 or newer and
+If you want to develop against the source code, use Node.js 22 or newer and
 npm. The repo uses npm workspaces with `package-lock.json`; pnpm is not the
 supported install path unless the project is intentionally migrated later.
 
 ```sh
-git clone https://github.com/alvinjchoi/opensource-loyalty.git
+git clone https://github.com/craveup/opensource-loyalty.git
 cd opensource-loyalty
 npm install
 npm start

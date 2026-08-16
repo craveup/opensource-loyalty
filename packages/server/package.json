@@ -1,13 +1,24 @@
 {
   "name": "@loyalty-interchange/server",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "HTTP reference binding for Loyalty Interchange Protocol.",
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "git+https://github.com/alvinjchoi/opensource-loyalty.git", "directory": "packages/server" },
-  "homepage": "https://github.com/alvinjchoi/opensource-loyalty#readme",
-  "bugs": { "url": "https://github.com/alvinjchoi/opensource-loyalty/issues" },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craveup/opensource-loyalty.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://github.com/craveup/opensource-loyalty#readme",
+  "bugs": {
+    "url": "https://github.com/craveup/opensource-loyalty/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +29,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "bin": {
     "lip-reference-server": "./dist/cli.js"
   },
@@ -27,10 +40,10 @@
     "prepack": "npm run build --workspace @loyalty-interchange/admin && npm run build"
   },
   "dependencies": {
-    "@loyalty-interchange/protocol": "0.1.2",
-    "@loyalty-interchange/reference": "0.1.2",
-    "@loyalty-interchange/storage-postgres": "0.1.2",
-    "@loyalty-interchange/storage-sqlite": "0.1.2",
+    "@loyalty-interchange/protocol": "0.2.0",
+    "@loyalty-interchange/reference": "0.2.0",
+    "@loyalty-interchange/storage-postgres": "0.2.0",
+    "@loyalty-interchange/storage-sqlite": "0.2.0",
     "@sinclair/typebox": "^0.34.52"
   }
 }

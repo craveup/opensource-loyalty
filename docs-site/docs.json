@@ -14,7 +14,7 @@
   },
   "favicon": "/favicon.svg",
   "banner": {
-    "content": "LIP 0.1.2 is on npm — `npx @loyalty-interchange/cli serve`",
+    "content": "LIP 0.2.0 — foodservice adapters, migration planning, and managed operations",
     "dismissible": true
   },
   "contextual": {
@@ -43,6 +43,8 @@
               "guides/postgres",
               "guides/cloud",
               "guides/migration",
+              "guides/member-migration",
+              "guides/ordering-adapters",
               "guides/punchh-migration"
             ]
           },
@@ -54,9 +56,26 @@
             ]
           },
           {
+            "group": "Concepts",
+            "pages": [
+              "concepts/open-source-loyalty-api",
+              "concepts/checkout-refunds",
+              "concepts/idempotency",
+              "concepts/provider-selection",
+              "concepts/comparison"
+            ]
+          },
+          {
             "group": "Protocol",
             "pages": [
               "protocol/overview"
+            ]
+          },
+          {
+            "group": "About",
+            "pages": [
+              "about/design-partners",
+              "about/security-operations"
             ]
           }
         ]
@@ -97,7 +116,7 @@
       },
       {
         "label": "GitHub",
-        "href": "https://github.com/alvinjchoi/opensource-loyalty"
+        "href": "https://github.com/craveup/opensource-loyalty"
       }
     ],
     "primary": {
@@ -108,7 +127,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/alvinjchoi/opensource-loyalty"
+      "github": "https://github.com/craveup/opensource-loyalty"
     }
   }
 }

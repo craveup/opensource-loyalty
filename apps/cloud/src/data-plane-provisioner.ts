@@ -1,5 +1,10 @@
-import { createHash, randomBytes } from "node:crypto";
-import { mkdirSync, readdirSync } from "node:fs";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes
+} from "node:crypto";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
@@ -31,6 +36,13 @@ export interface LocalDataPlaneProvisionerOptions {
    * port registry. Created on demand.
    */
   dataDirectory: string;
+  /** 32-byte base64url key (or a 32-byte Buffer) used for AES-256-GCM. */
+  credentialEncryptionKey: string | Buffer;
+  /**
+   * One-time migration switch for v1/v2 plaintext files. A restored legacy
+   * file is immediately rewritten as an encrypted v3 envelope.
+   */
+  allowLegacyPlaintextCredentials?: boolean;
   /**
    * Optional Postgres connection string. When set, environments run against
    * tenant-scoped Postgres tables instead of per-environment SQLite files.
@@ -71,7 +83,7 @@ export interface ProvisionedRuntime {
  * key and marks the root key deprecated. v1 files are accepted on restore and
  * upgraded in place.
  */
-interface CredentialFile {
+export interface LocalCredentialFile {
   version?: number;
   environment_id: string;
   tenant_id: string;
@@ -84,6 +96,36 @@ interface CredentialFile {
   port: number;
 }
 
+export interface EncryptedCredentialEnvelope {
+  version: 3;
+  algorithm: "aes-256-gcm";
+  key_id: string;
+  environment_id: string;
+  iv: string;
+  authentication_tag: string;
+  ciphertext: string;
+}
+
+export interface EncryptedBackupDatabase {
+  algorithm: "aes-256-gcm";
+  key_id: string;
+  iv: string;
+  authentication_tag: string;
+  ciphertext: string;
+}
+
+export interface LocalEnvironmentBackup {
+  format: "lip-cloud-local-backup";
+  format_version: 1;
+  created_at: string;
+  environment_id: string;
+  tenant_id: string;
+  program_id: string;
+  credential: EncryptedCredentialEnvelope;
+  sqlite_database: EncryptedBackupDatabase;
+  checksum: { algorithm: "sha256"; value: string };
+}
+
 interface RunningRuntime {
   runtime: ProvisionedRuntime;
   access: AccessControlService;
@@ -91,9 +133,181 @@ interface RunningRuntime {
 }
 
 const MERCHANT_KEY_NAME = "cloud-merchant";
+const CREDENTIAL_AAD_PREFIX = "lip-cloud-credentials/v3";
+const BACKUP_DATABASE_AAD_PREFIX = "lip-cloud-backup-database/v1";
+
+function credentialKey(value: string | Buffer): Buffer {
+  if (typeof value === "string" && !/^[A-Za-z0-9_-]{43}$/.test(value.trim())) {
+    throw new Error(
+      "credentialEncryptionKey text must be an unpadded 32-byte base64url value"
+    );
+  }
+  const key = Buffer.isBuffer(value)
+    ? Buffer.from(value)
+    : Buffer.from(value.trim(), "base64url");
+  if (key.length !== 32) {
+    throw new Error(
+      "credentialEncryptionKey must be exactly 32 bytes (base64url when supplied as text)"
+    );
+  }
+  return key;
+}
+
+function credentialKeyId(key: Buffer): string {
+  return createHash("sha256").update(key).digest("hex").slice(0, 16);
+}
+
+function isEncryptedCredential(value: unknown): value is EncryptedCredentialEnvelope {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record["version"] === 3 &&
+    record["algorithm"] === "aes-256-gcm" &&
+    typeof record["key_id"] === "string" &&
+    typeof record["environment_id"] === "string" &&
+    typeof record["iv"] === "string" &&
+    typeof record["authentication_tag"] === "string" &&
+    typeof record["ciphertext"] === "string";
+}
+
+function encryptCredential(
+  credential: LocalCredentialFile,
+  key: Buffer
+): EncryptedCredentialEnvelope {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(Buffer.from(`${CREDENTIAL_AAD_PREFIX}:${credential.environment_id}`));
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(credential), "utf8"),
+    cipher.final()
+  ]);
+  return {
+    version: 3,
+    algorithm: "aes-256-gcm",
+    key_id: credentialKeyId(key),
+    environment_id: credential.environment_id,
+    iv: iv.toString("base64url"),
+    authentication_tag: cipher.getAuthTag().toString("base64url"),
+    ciphertext: ciphertext.toString("base64url")
+  };
+}
+
+function decryptCredential(
+  envelope: EncryptedCredentialEnvelope,
+  key: Buffer
+): LocalCredentialFile {
+  if (envelope.key_id !== credentialKeyId(key)) {
+    throw new Error(`Credential key ${envelope.key_id} is not the configured key`);
+  }
+  try {
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      key,
+      Buffer.from(envelope.iv, "base64url")
+    );
+    decipher.setAAD(Buffer.from(`${CREDENTIAL_AAD_PREFIX}:${envelope.environment_id}`));
+    decipher.setAuthTag(Buffer.from(envelope.authentication_tag, "base64url"));
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(envelope.ciphertext, "base64url")),
+      decipher.final()
+    ]).toString("utf8");
+    const credential = JSON.parse(plaintext) as LocalCredentialFile;
+    if (credential.environment_id !== envelope.environment_id) {
+      throw new Error("Credential environment binding does not match its envelope");
+    }
+    return credential;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Credential authentication failed: ${detail}`);
+  }
+}
+
+function isEncryptedBackupDatabase(value: unknown): value is EncryptedBackupDatabase {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record["algorithm"] === "aes-256-gcm" &&
+    typeof record["key_id"] === "string" &&
+    typeof record["iv"] === "string" &&
+    typeof record["authentication_tag"] === "string" &&
+    typeof record["ciphertext"] === "string";
+}
+
+function encryptBackupDatabase(
+  database: Buffer,
+  key: Buffer,
+  environmentId: string,
+  tenantId: string
+): EncryptedBackupDatabase {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(Buffer.from(`${BACKUP_DATABASE_AAD_PREFIX}:${environmentId}:${tenantId}`));
+  const ciphertext = Buffer.concat([cipher.update(database), cipher.final()]);
+  return {
+    algorithm: "aes-256-gcm",
+    key_id: credentialKeyId(key),
+    iv: iv.toString("base64url"),
+    authentication_tag: cipher.getAuthTag().toString("base64url"),
+    ciphertext: ciphertext.toString("base64url")
+  };
+}
+
+function decryptBackupDatabase(
+  database: EncryptedBackupDatabase,
+  key: Buffer,
+  environmentId: string,
+  tenantId: string
+): Buffer {
+  if (database.key_id !== credentialKeyId(key)) {
+    throw new Error(`Backup key ${database.key_id} is not the configured key`);
+  }
+  try {
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      key,
+      Buffer.from(database.iv, "base64url")
+    );
+    decipher.setAAD(Buffer.from(`${BACKUP_DATABASE_AAD_PREFIX}:${environmentId}:${tenantId}`));
+    decipher.setAuthTag(Buffer.from(database.authentication_tag, "base64url"));
+    return Buffer.concat([
+      decipher.update(Buffer.from(database.ciphertext, "base64url")),
+      decipher.final()
+    ]);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Backup database authentication failed: ${detail}`);
+  }
+}
+
+/** Operator recovery helper; callers must protect the returned secrets. */
+export async function readLocalCredential(
+  path: string,
+  encryptionKey: string | Buffer,
+  options: { allowLegacyPlaintext?: boolean } = {}
+): Promise<LocalCredentialFile> {
+  const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+  if (isEncryptedCredential(parsed)) {
+    return decryptCredential(parsed, credentialKey(encryptionKey));
+  }
+  if (!options.allowLegacyPlaintext) {
+    throw new Error(
+      "Plaintext Cloud credentials are disabled; opt into one-time legacy migration"
+    );
+  }
+  return parsed as LocalCredentialFile;
+}
 
 function generateApiKey(): string {
   return `lip_sk_${randomBytes(32).toString("base64url")}`;
+}
+
+function backupChecksum(value: Omit<LocalEnvironmentBackup, "checksum">): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function safeLocalId(value: string, label: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) {
+    throw new Error(`${label} is invalid for local recovery`);
+  }
+  return value;
 }
 
 function preferredPort(environmentId: string, basePort: number, portRange: number): number {
@@ -116,12 +330,14 @@ export class LocalDataPlaneProvisioner implements CloudProvisioner {
   private readonly basePort: number;
   private readonly portRange: number;
   private portAssignments = new Map<string, number>();
+  private readonly encryptionKey: Buffer;
 
   public constructor(options: LocalDataPlaneProvisionerOptions) {
     if (!options.programDirectory.trim() || !options.dataDirectory.trim()) {
       throw new Error("Program and data directories are required");
     }
     this.options = options;
+    this.encryptionKey = credentialKey(options.credentialEncryptionKey);
     this.basePort = options.basePort ?? 13_210;
     this.portRange = options.portRange ?? 1_000;
     if (this.portRange < 1) throw new Error("portRange must be at least 1");
@@ -153,8 +369,9 @@ export class LocalDataPlaneProvisioner implements CloudProvisioner {
   }
 
   private async restoreCredentialFile(path: string): Promise<ProvisionedRuntime | undefined> {
-    const raw = await readFile(path, "utf8");
-    const credential = JSON.parse(raw) as CredentialFile;
+    const credential = await readLocalCredential(path, this.encryptionKey, {
+      allowLegacyPlaintext: Boolean(this.options.allowLegacyPlaintextCredentials)
+    });
     if (!credential.environment_id || !credential.tenant_id || !credential.program_id) {
       return undefined;
     }
@@ -207,10 +424,13 @@ export class LocalDataPlaneProvisioner implements CloudProvisioner {
       resolve(this.options.dataDirectory),
       `${environment.environment_id}.credentials.json`
     );
-    let existingCredential: CredentialFile | undefined;
+    let existingCredential: LocalCredentialFile | undefined;
     try {
-      existingCredential = JSON.parse(await readFile(credentialsPath, "utf8")) as CredentialFile;
-    } catch {
+      existingCredential = await readLocalCredential(credentialsPath, this.encryptionKey, {
+        allowLegacyPlaintext: Boolean(this.options.allowLegacyPlaintextCredentials)
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       existingCredential = undefined;
     }
     const port =
@@ -230,6 +450,187 @@ export class LocalDataPlaneProvisioner implements CloudProvisioner {
 
   public runtimes(): ProvisionedRuntime[] {
     return [...this.running.values()].map((entry) => ({ ...entry.runtime }));
+  }
+
+  /** Stops a local runtime without deleting its database or credentials. */
+  public async suspend(environmentId: string): Promise<ProvisionedRuntime> {
+    const entry = this.running.get(environmentId);
+    if (!entry) throw new Error(`No running data-plane runtime exists for ${environmentId}`);
+    this.running.delete(environmentId);
+    try {
+      await entry.close();
+    } catch (error) {
+      this.running.set(environmentId, entry);
+      throw error;
+    }
+    return { ...entry.runtime };
+  }
+
+  /** Restarts a suspended local runtime from its authenticated credential file. */
+  public async resume(environmentId: string): Promise<ProvisionedRuntime> {
+    if (this.running.has(environmentId)) {
+      throw new Error(`Data-plane runtime ${environmentId} is already running`);
+    }
+    await this.loadPortRegistry();
+    const path = join(
+      resolve(this.options.dataDirectory),
+      `${safeLocalId(environmentId, "environment_id")}.credentials.json`
+    );
+    const runtime = await this.restoreCredentialFile(path);
+    if (!runtime) throw new Error(`No credentials exist for ${environmentId}`);
+    return runtime;
+  }
+
+  /**
+   * Writes a checksummed, encrypted, point-in-time local SQLite backup. The
+   * runtime is quiesced while the database is read and is resumed in `finally`.
+   */
+  public async backup(
+    environmentId: string,
+    outputPath: string,
+    options: { force?: boolean; now?: () => Date } = {}
+  ): Promise<LocalEnvironmentBackup> {
+    if (this.options.connectionString) {
+      throw new Error("Local backup is SQLite-only; use managed Postgres backups for this runtime");
+    }
+    const wasRunning = this.running.has(environmentId);
+    if (wasRunning) await this.suspend(environmentId);
+    try {
+      const credentialPath = join(
+        resolve(this.options.dataDirectory),
+        `${safeLocalId(environmentId, "environment_id")}.credentials.json`
+      );
+      const rawEnvelope: unknown = JSON.parse(await readFile(credentialPath, "utf8"));
+      if (!isEncryptedCredential(rawEnvelope)) {
+        throw new Error("Backup requires an encrypted v3 credential file");
+      }
+      const credential = decryptCredential(rawEnvelope, this.encryptionKey);
+      const databasePath = join(
+        resolve(this.options.dataDirectory),
+        `${safeLocalId(credential.tenant_id, "tenant_id")}.db`
+      );
+      const withoutChecksum = {
+        format: "lip-cloud-local-backup" as const,
+        format_version: 1 as const,
+        created_at: (options.now ?? (() => new Date()))().toISOString(),
+        environment_id: credential.environment_id,
+        tenant_id: credential.tenant_id,
+        program_id: credential.program_id,
+        credential: rawEnvelope,
+        sqlite_database: encryptBackupDatabase(
+          await readFile(databasePath),
+          this.encryptionKey,
+          credential.environment_id,
+          credential.tenant_id
+        )
+      };
+      const backup: LocalEnvironmentBackup = {
+        ...withoutChecksum,
+        checksum: { algorithm: "sha256", value: backupChecksum(withoutChecksum) }
+      };
+      const target = resolve(outputPath);
+      if (!options.force && existsSync(target)) {
+        throw new Error(`Backup target already exists: ${target}`);
+      }
+      const temporary = `${target}.tmp-${randomBytes(6).toString("hex")}`;
+      await writeFile(temporary, `${JSON.stringify(backup, null, 2)}\n`, {
+        mode: 0o600,
+        flag: "wx"
+      });
+      try {
+        await rename(temporary, target);
+      } catch (error) {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        throw error;
+      }
+      return backup;
+    } finally {
+      if (wasRunning) await this.resume(environmentId);
+    }
+  }
+
+  /** Restores both SQLite data and encrypted credentials, then starts the runtime. */
+  public async restoreBackup(
+    backupPath: string,
+    options: { force?: boolean } = {}
+  ): Promise<ProvisionedRuntime> {
+    const parsed: unknown = JSON.parse(await readFile(resolve(backupPath), "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Local backup must be a JSON object");
+    }
+    const backup = parsed as LocalEnvironmentBackup;
+    if (
+      backup.format !== "lip-cloud-local-backup" ||
+      backup.format_version !== 1 ||
+      backup.checksum?.algorithm !== "sha256" ||
+      !isEncryptedCredential(backup.credential) ||
+      !isEncryptedBackupDatabase(backup.sqlite_database)
+    ) {
+      throw new Error("Local backup format is invalid or unsupported");
+    }
+    const { checksum, ...withoutChecksum } = backup;
+    if (backupChecksum(withoutChecksum) !== checksum.value) {
+      throw new Error("Local backup checksum does not match its contents");
+    }
+    const environmentId = safeLocalId(backup.environment_id, "environment_id");
+    const tenantId = safeLocalId(backup.tenant_id, "tenant_id");
+    if (this.running.has(environmentId)) {
+      throw new Error(`Suspend ${environmentId} before restoring its backup`);
+    }
+    const decrypted = decryptCredential(backup.credential, this.encryptionKey);
+    if (
+      decrypted.environment_id !== environmentId ||
+      decrypted.tenant_id !== tenantId ||
+      decrypted.program_id !== backup.program_id
+    ) {
+      throw new Error("Backup metadata does not match its encrypted credentials");
+    }
+    const dataDirectory = resolve(this.options.dataDirectory);
+    const databasePath = join(dataDirectory, `${tenantId}.db`);
+    const credentialPath = join(dataDirectory, `${environmentId}.credentials.json`);
+    if (!options.force && (existsSync(databasePath) || existsSync(credentialPath))) {
+      throw new Error("Restore target exists; pass force only after preserving the current files");
+    }
+    const nonce = randomBytes(6).toString("hex");
+    const databaseTemp = `${databasePath}.restore-${nonce}`;
+    const credentialTemp = `${credentialPath}.restore-${nonce}`;
+    const databasePrevious = `${databasePath}.previous-${nonce}`;
+    const credentialPrevious = `${credentialPath}.previous-${nonce}`;
+    await writeFile(databaseTemp, decryptBackupDatabase(
+      backup.sqlite_database,
+      this.encryptionKey,
+      environmentId,
+      tenantId
+    ), {
+      mode: 0o600,
+      flag: "wx"
+    });
+    await writeFile(credentialTemp, `${JSON.stringify(backup.credential, null, 2)}\n`, {
+      mode: 0o600,
+      flag: "wx"
+    });
+    let databaseMoved = false;
+    let credentialMoved = false;
+    try {
+      if (existsSync(databasePath)) await rename(databasePath, databasePrevious);
+      if (existsSync(credentialPath)) await rename(credentialPath, credentialPrevious);
+      await rename(databaseTemp, databasePath);
+      databaseMoved = true;
+      await rename(credentialTemp, credentialPath);
+      credentialMoved = true;
+      await rm(databasePrevious, { force: true });
+      await rm(credentialPrevious, { force: true });
+    } catch (error) {
+      if (databaseMoved) await rm(databasePath, { force: true });
+      if (credentialMoved) await rm(credentialPath, { force: true });
+      if (existsSync(databasePrevious)) await rename(databasePrevious, databasePath);
+      if (existsSync(credentialPrevious)) await rename(credentialPrevious, credentialPath);
+      throw error;
+    } finally {
+      await rm(databaseTemp, { force: true });
+      await rm(credentialTemp, { force: true });
+    }
+    return this.resume(environmentId);
   }
 
   /**
@@ -475,7 +876,7 @@ export class LocalDataPlaneProvisioner implements CloudProvisioner {
   }
 
   private async writeCredentials(runtime: ProvisionedRuntime): Promise<void> {
-    const credential: Required<Omit<CredentialFile, "version">> & { version: number } = {
+    const credential: Required<Omit<LocalCredentialFile, "version">> & { version: number } = {
       version: 2,
       environment_id: runtime.environment_id,
       tenant_id: runtime.tenant_id,
@@ -492,7 +893,7 @@ export class LocalDataPlaneProvisioner implements CloudProvisioner {
     const tempPath = `${runtime.credentials_path}.tmp`;
     await writeFile(
       tempPath,
-      `${JSON.stringify(credential, undefined, 2)}\n`,
+      `${JSON.stringify(encryptCredential(credential, this.encryptionKey), undefined, 2)}\n`,
       { mode: 0o600 }
     );
     try {
