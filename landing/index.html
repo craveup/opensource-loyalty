@@ -6,11 +6,11 @@
   <title>Open-source loyalty API for restaurant checkout | LIP</title>
   <meta name="description" content="Run the foodservice loyalty lifecycle in your browser, then self-host the open LIP protocol, engine, API, SDK, Admin, adapters, and conformance suite." />
   <meta name="robots" content="index,follow,max-image-preview:large" />
-  <link rel="canonical" href="https://opensource-loyalty.dev/" />
+  <link rel="canonical" href="https://opensource-loyalty.vercel.app/" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Open loyalty infrastructure for foodservice" />
   <meta property="og:description" content="Evaluate, reserve, accrue, capture, reverse, and adjust a restaurant order—then run the same open stack yourself." />
-  <meta property="og:url" content="https://opensource-loyalty.dev/" />
+  <meta property="og:url" content="https://opensource-loyalty.vercel.app/" />
   <meta name="twitter:card" content="summary" />
   <meta name="theme-color" content="#08110b" />
   <script type="application/ld+json">
@@ -20,7 +20,7 @@
     "name": "Loyalty Interchange Protocol",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Linux, macOS, Windows",
-    "url": "https://opensource-loyalty.dev/",
+    "url": "https://opensource-loyalty.vercel.app/",
     "downloadUrl": "https://www.npmjs.com/org/loyalty-interchange",
     "codeRepository": "https://github.com/craveup/opensource-loyalty",
     "license": "https://www.apache.org/licenses/LICENSE-2.0",
@@ -206,11 +206,11 @@
       <div class="container">
         <div class="section-head center"><h2 id="moat-title">The hard part is lifecycle correctness.</h2><p>Generic campaign breadth is not the claim. LIP focuses on portable transaction behavior and the evidence needed to trust an ordering integration.</p></div>
         <div class="grid">
-          <article class="card"><span>↻</span><h3>Retry without double posting</h3><p>Stable business keys, exact replay, explicit payload conflict, immutable ledger linkage.</p><a href="https://loyalty-interchange.mintlify.app/concepts/idempotency">Read idempotency →</a></article>
-          <article class="card"><span>⌁</span><h3>Certify the source mapping</h3><p>A typed adapter contract and fixture runner cover modifiers, combos, tenders, comps, offline delivery, void, and refund.</p><a href="https://loyalty-interchange.mintlify.app/guides/ordering-adapters">Read adapter guide →</a></article>
-          <article class="card"><span>⇄</span><h3>Leave with your state</h3><p>Checksummed full-state archives plus member/opening-balance plans and reconciliation reports.</p><a href="https://loyalty-interchange.mintlify.app/guides/member-migration">Read migration guide →</a></article>
+          <article class="card"><span>↻</span><h3>Retry without double posting</h3><p>Stable business keys, exact replay, explicit payload conflict, immutable ledger linkage.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/idempotency.md">Read idempotency →</a></article>
+          <article class="card"><span>⌁</span><h3>Certify the source mapping</h3><p>A typed adapter contract and fixture runner cover modifiers, combos, tenders, comps, offline delivery, void, and refund.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/ordering-adapters.md">Read adapter guide →</a></article>
+          <article class="card"><span>⇄</span><h3>Leave with your state</h3><p>Checksummed full-state archives plus member/opening-balance plans and reconciliation reports.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/member-migration.md">Read migration guide →</a></article>
           <article class="card"><span>▦</span><h3>Operate the open stack</h3><p>SQLite or normalized tenant-scoped Postgres, Admin, webhooks, metrics, key rotation, and conformance.</p><a href="https://loyalty-interchange.mintlify.app/guides/reference-platform">Reference platform →</a></article>
-          <article class="card"><span>◇</span><h3>Choose with evidence</h3><p>Compare lifecycle, portability, recovery, integration effort, marketer workflow, and ownership.</p><a href="https://loyalty-interchange.mintlify.app/concepts/provider-selection">Provider selection →</a></article>
+          <article class="card"><span>◇</span><h3>Choose with evidence</h3><p>Compare lifecycle, portability, recovery, integration effort, marketer workflow, and ownership.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/provider-selection.md">Provider selection →</a></article>
           <article class="card"><span>◎</span><h3>Keep identity separate</h3><p>Your BFF verifies the customer and retains the merchant key. LIP receives only an opaque member id.</p><a href="https://loyalty-interchange.mintlify.app/guides/customer-identity">Identity boundary →</a></article>
         </div>
       </div>
@@ -222,7 +222,7 @@
         <div class="path-grid">
           <article class="path"><small>Evaluate</small><h3>Browser walkthrough</h3><p>Finish the synthetic lifecycle above and inspect every request, result, key, and ledger effect.</p><a href="#walkthrough">Reset and run it →</a></article>
           <article class="path"><small>Build</small><h3>Self-host</h3><p>Clone the Apache-2.0 stack, start Docker, inspect Admin, then run black-box conformance.</p><a href="https://loyalty-interchange.mintlify.app/get-started/quickstart" data-analytics-event="self_host_selected">Open quickstart →</a></article>
-          <article class="path"><small>Partner</small><h3>Map a real source</h3><p>Bring one ordering/refund edge. Produce a certified adapter, migration rehearsal, and cutover record.</p><a href="https://loyalty-interchange.mintlify.app/about/design-partners" data-analytics-event="design_partner_selected">Design partner details →</a></article>
+          <article class="path"><small>Partner</small><h3>Map a real source</h3><p>Bring one ordering/refund edge. Produce a certified adapter, migration rehearsal, and cutover record.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/design-partners.md" data-analytics-event="design_partner_selected">Design partner details →</a></article>
         </div>
       </div>
     </section>

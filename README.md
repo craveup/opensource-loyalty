@@ -255,7 +255,7 @@ npm install @loyalty-interchange/sdk
 ```
 
 Evaluating before install? Run the browser-only lifecycle walkthrough at
-[opensource-loyalty.dev/#walkthrough](https://opensource-loyalty.dev/#walkthrough).
+[opensource-loyalty.vercel.app/#walkthrough](https://opensource-loyalty.vercel.app/#walkthrough).
 It uses synthetic foodservice data and does not collect an API key. Teams with
 a real ordering/refund edge can review the [design-partner path](docs/design-partners.md).
 
@@ -331,9 +331,9 @@ Developer guides (rendered on the docs site; sources live in [`docs/`](docs/READ
 - [PostgreSQL storage](https://loyalty-interchange.mintlify.app/guides/postgres) — multi-instance engine store, location scoping, and the lock-free report path
 - [Cloud control plane](https://loyalty-interchange.mintlify.app/guides/cloud) — organizations, projects, environments, provisioning, operator auth, and metering
 - [Punchh migration](https://loyalty-interchange.mintlify.app/guides/punchh-migration) — mapping restaurant loyalty capabilities to vendor-neutral LIP contracts
-- [Ordering adapters](https://loyalty-interchange.mintlify.app/guides/ordering-adapters) — deterministic source mapping and edge-case certification
-- [Member import](https://loyalty-interchange.mintlify.app/guides/member-migration) — checksummed plans and balance reconciliation
-- [Design partners](https://loyalty-interchange.mintlify.app/about/design-partners) — prove one source integration without protocol lock-in
+- [Ordering adapters](docs/ordering-adapters.md) — deterministic source mapping and edge-case certification
+- [Member import](docs/member-migration.md) — checksummed plans and balance reconciliation
+- [Design partners](docs/design-partners.md) — prove one source integration without protocol lock-in
 
 Repo-only docs (no published page):
 
