@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { sha256Hex } from "./check-release-manifest.js";
 
@@ -54,7 +54,7 @@ export interface ReleaseEvidenceSummary {
 interface PrepareReleaseEvidenceOptions {
   auditPath: string;
   sbomPath: string;
-  riskRegisterPath: string;
+  riskRegisterPath?: string;
   conformanceReportPath: string;
   lockfilePath: string;
   outDir: string;
@@ -64,24 +64,32 @@ interface PrepareReleaseEvidenceOptions {
 export async function prepareReleaseEvidence(options: PrepareReleaseEvidenceOptions): Promise<ReleaseEvidenceSummary> {
   const auditRaw = await readFile(options.auditPath, "utf8");
   const sbomRaw = await readFile(options.sbomPath);
-  const riskRaw = await readFile(options.riskRegisterPath, "utf8");
   const conformanceReportRaw = await readFile(options.conformanceReportPath);
   const lockfileRaw = await readFile(options.lockfilePath);
   const auditReportSha256 = sha256Hex(auditRaw);
   const sbomSha256 = sha256Hex(sbomRaw);
-  const riskRegisterSha256 = sha256Hex(riskRaw);
   const conformanceReportSha256 = sha256Hex(conformanceReportRaw);
   const lockfileSha256 = sha256Hex(lockfileRaw);
   const audit = validateNpmAuditReport(JSON.parse(auditRaw) as unknown);
+  const now = options.now ?? new Date();
+  const riskRaw = options.riskRegisterPath
+    ? await readFile(options.riskRegisterPath, "utf8")
+    : createZeroFindingRiskRegister(audit, { auditReportSha256, lockfileSha256, now });
+  const riskRegisterSha256 = sha256Hex(riskRaw);
   const riskRegister = validateRiskRegister(JSON.parse(riskRaw) as unknown, {
     auditReportSha256,
     lockfileSha256,
-    now: options.now ?? new Date()
+    now
   });
   const findings = deriveFindings(audit, riskRegister);
 
   await mkdir(options.outDir, { recursive: true });
-  await copyFile(options.riskRegisterPath, join(options.outDir, "risk-register.json"));
+  const retainedRiskRegisterPath = join(options.outDir, "risk-register.json");
+  if (options.riskRegisterPath) {
+    await copyFile(options.riskRegisterPath, retainedRiskRegisterPath);
+  } else {
+    await writeFile(retainedRiskRegisterPath, riskRaw, { mode: 0o600 });
+  }
 
   return {
     auditReportSha256,
@@ -90,6 +98,29 @@ export async function prepareReleaseEvidence(options: PrepareReleaseEvidenceOpti
     conformanceReportSha256,
     findings
   };
+}
+
+function createZeroFindingRiskRegister(
+  audit: NpmAuditReport,
+  expected: { auditReportSha256: string; lockfileSha256: string; now: Date }
+): string {
+  const reviewRequired = Object.values(audit.vulnerabilities).filter((finding) =>
+    isFindingSeverity(finding.severity)
+  );
+  if (reviewRequired.length > 0) {
+    throw new Error(
+      "Dependency findings require an explicit reviewed risk register via --risk-register or LIP_RELEASE_RISK_REGISTER_PATH"
+    );
+  }
+
+  return `${JSON.stringify({
+    schemaVersion: 1,
+    lockfileSha256: expected.lockfileSha256,
+    auditReportSha256: expected.auditReportSha256,
+    reviewedAt: expected.now.toISOString(),
+    expiresAt: new Date(expected.now.getTime() + 30 * 24 * 60 * 60 * 1_000).toISOString(),
+    findings: []
+  }, null, 2)}\n`;
 }
 
 export function validateNpmAuditReport(value: unknown): NpmAuditReport {
@@ -277,10 +308,11 @@ function appendGitHubOutputs(summary: ReleaseEvidenceSummary): string {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = parseArgs(process.argv.slice(2));
   const outDir = resolve(requiredOption(args, "--out-dir", ".lip"));
+  const riskRegisterPath = args.get("--risk-register") ?? process.env.LIP_RELEASE_RISK_REGISTER_PATH;
   const summary = await prepareReleaseEvidence({
     auditPath: resolve(requiredOption(args, "--audit")),
     sbomPath: resolve(requiredOption(args, "--sbom")),
-    riskRegisterPath: resolve(requiredOption(args, "--risk-register", process.env.LIP_RELEASE_RISK_REGISTER_PATH)),
+    ...(riskRegisterPath ? { riskRegisterPath: resolve(riskRegisterPath) } : {}),
     conformanceReportPath: resolve(requiredOption(args, "--conformance-report")),
     lockfilePath: resolve(requiredOption(args, "--lockfile", "package-lock.json")),
     outDir

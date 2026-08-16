@@ -20,7 +20,7 @@ The product is separated into three explicit layers:
 
 ## Evidence behind this plan
 
-- The supported Node 22 baseline passes 309 tests without PostgreSQL and all 317
+- The supported Node 22 baseline passes 311 tests without PostgreSQL and all 319
   tests with PostgreSQL 17, with 87.23% statement coverage, runnable lifecycle
   examples, the Admin build, and inspection of all 11 publishable packages.
 - The reference platform already implements the complete foodservice lifecycle,
