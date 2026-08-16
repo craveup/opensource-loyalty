@@ -38,7 +38,8 @@ support is contractual and separate.
 5. Merge only after the remote verify check passes.
 6. Tag `v0.2.0` at the merge commit and publish the GitHub release. The release
    workflow publishes packages in dependency order and attaches evidence.
-7. Confirm npm package versions, docs, landing, image digest, and release assets.
+7. Confirm npm package versions, docs, landing, image digest, release assets,
+   and an anonymous `docker manifest inspect` of the versioned GHCR tag.
 8. If any confirmation fails, stop distribution and document the rollback or
    corrective release; never retag a published version.
 

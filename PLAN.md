@@ -1,6 +1,6 @@
 # LIP 0.2 launch and adoption plan
 
-Status: publication blocked on npm authentication
+Status: publication blocked on npm authentication and GHCR visibility
 Owner: CraveUp
 Target: `0.2.0`
 
@@ -171,7 +171,9 @@ first-party evidence exists:
   merged without rewriting the promoted `dev` or release-manifest histories.
 - `v0.2.0` points to verified merge commit
   `e6050ce17ea73f783fdd45b2db14cec258332ab8`. The GitHub release, five evidence
-  assets, provenance attestation, and GHCR image are public.
+  assets, and provenance attestation are public. The GHCR image was built and
+  pushed, but anonymous pulls remain disabled by the organization package
+  policy, so it is not yet a public distribution surface.
 - The production landing resolves at `https://opensource-loyalty.vercel.app/`
   with the `0.2.0` walkthrough, canonical metadata, robots, and sitemap. All 15
   new long-form documents resolve from the immutable GitHub tag.
@@ -180,3 +182,6 @@ first-party evidence exists:
   404, and the Infisical value is not a valid modern or legacy npm token shape.
   Rotate the npm credential or configure trusted publishing, then rerun the
   release workflow from the existing tag. Never recreate or move the tag.
+- GHCR visibility remains open. Enable public package creation in the Crave Up
+  organization policy, change `opensource-loyalty` to public, and confirm an
+  anonymous manifest inspection before advertising the container quickstart.
