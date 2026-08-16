@@ -28,6 +28,23 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - name: Verify npm publishing authorization
+        if: github.event_name == 'release' || inputs.dry_run == false
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN is missing from the npm environment" >&2
+            exit 1
+          fi
+          npm whoami >/dev/null
+          npm access list packages --json > "$RUNNER_TEMP/npm-access.json"
+          node -e '
+            const access = require(process.env.RUNNER_TEMP + "/npm-access.json");
+            if (access["@loyalty-interchange/protocol"] !== "read-write") {
+              throw new Error("NPM_TOKEN lacks read-write access to @loyalty-interchange/protocol");
+            }
+          '
       - name: Use declared npm version
         run: |
           declared_npm="$(node -p "const m = require('./package.json').packageManager.match(/^npm@(.+)$/); if (!m) throw new Error('packageManager must be npm@<version>'); m[1]")"

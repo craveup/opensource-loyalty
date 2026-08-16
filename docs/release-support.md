@@ -41,3 +41,9 @@ support is contractual and separate.
 7. Confirm npm package versions, docs, landing, image digest, and release assets.
 8. If any confirmation fails, stop distribution and document the rollback or
    corrective release; never retag a published version.
+
+The release job validates `NPM_TOKEN` with `npm whoami` and confirms read-write
+access to the existing protocol package before installing dependencies or
+building artifacts. Store the token only in the GitHub `npm` environment. A
+missing, expired, or incorrectly scoped token must fail this preflight; rotate
+it rather than bypassing the gate or moving an existing tag.

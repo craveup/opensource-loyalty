@@ -1,6 +1,6 @@
 # LIP 0.2 launch and adoption plan
 
-Status: release candidate
+Status: publication blocked on npm authentication
 Owner: CraveUp
 Target: `0.2.0`
 
@@ -133,7 +133,7 @@ alone.
 - [x] Exercise the CLI, migration planner, adapter certification, Cloud credential
       migration, billing webhook, customer routes, and local recovery flow.
 - [x] Render and inspect landing and Admin at desktop and 390px mobile widths.
-- [ ] Publish through a protected-main pull request and require the remote verify
+- [x] Publish through a protected-main pull request and require the remote verify
       check before merge.
 - [ ] Tag and publish `0.2.0` only from the verified merge commit, then confirm npm,
       docs, and landing resolve to that release.
@@ -164,3 +164,19 @@ first-party evidence exists:
   reproducible report.
 - External distribution must lead to a real walkthrough, sandbox, integration,
   or design-partner action; stars and raw clone/download counts are not adoption.
+
+## Publication record
+
+- Protected PRs #50, #51, and #52 passed the required remote `verify` check and
+  merged without rewriting the promoted `dev` or release-manifest histories.
+- `v0.2.0` points to verified merge commit
+  `e6050ce17ea73f783fdd45b2db14cec258332ab8`. The GitHub release, five evidence
+  assets, provenance attestation, and GHCR image are public.
+- The production landing resolves at `https://opensource-loyalty.vercel.app/`
+  with the `0.2.0` walkthrough, canonical metadata, robots, and sitemap. All 15
+  new long-form documents resolve from the immutable GitHub tag.
+- npm publication remains open. The repository environment currently has no
+  valid publishing credential: the prior token returned a package-authorization
+  404, and the Infisical value is not a valid modern or legacy npm token shape.
+  Rotate the npm credential or configure trusted publishing, then rerun the
+  release workflow from the existing tag. Never recreate or move the tag.
