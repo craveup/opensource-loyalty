@@ -67,7 +67,6 @@ jobs:
           npm run release:evidence -- \
             --audit .lip/npm-audit.json \
             --sbom .lip/sbom.cdx.json \
-            --risk-register "$LIP_RELEASE_RISK_REGISTER_PATH" \
             --conformance-report .lip/conformance-report.json \
             --out-dir .lip
       - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5

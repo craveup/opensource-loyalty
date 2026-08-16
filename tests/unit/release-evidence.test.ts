@@ -149,6 +149,72 @@ describe("release evidence preparation", () => {
     await expect(readFile(join(outDir, "risk-register.json"), "utf8")).resolves.toBe(riskRegisterRaw);
   });
 
+  it("generates a checksummed zero-finding register when the live audit is clean", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "lip-zero-risk-evidence-"));
+    const auditPath = join(directory, "npm-audit.json");
+    const sbomPath = join(directory, "sbom.cdx.json");
+    const conformanceReportPath = join(directory, "conformance-report.json");
+    const lockfilePath = join(directory, "package-lock.json");
+    const outDir = join(directory, "out");
+    const auditRaw = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: {},
+      metadata: {
+        vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 }
+      }
+    });
+    const lockfileRaw = JSON.stringify({ lockfileVersion: 3 });
+
+    await writeFile(auditPath, auditRaw);
+    await writeFile(sbomPath, JSON.stringify({ bomFormat: "CycloneDX" }));
+    await writeFile(conformanceReportPath, JSON.stringify({ numTotalTests: 2, success: true }));
+    await writeFile(lockfilePath, lockfileRaw);
+
+    const summary = await prepareReleaseEvidence({
+      auditPath,
+      sbomPath,
+      conformanceReportPath,
+      lockfilePath,
+      outDir,
+      now
+    });
+    const retained = JSON.parse(await readFile(join(outDir, "risk-register.json"), "utf8"));
+
+    expect(retained).toEqual({
+      schemaVersion: 1,
+      lockfileSha256: sha256Hex(lockfileRaw),
+      auditReportSha256: sha256Hex(auditRaw),
+      reviewedAt: "2026-08-10T00:00:00.000Z",
+      expiresAt: "2026-09-09T00:00:00.000Z",
+      findings: []
+    });
+    expect(summary.riskRegisterSha256).toBe(
+      sha256Hex(`${JSON.stringify(retained, null, 2)}\n`)
+    );
+  });
+
+  it("requires an explicit reviewed register when the live audit has actionable findings", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "lip-reviewed-risk-evidence-"));
+    const auditPath = join(directory, "npm-audit.json");
+    const sbomPath = join(directory, "sbom.cdx.json");
+    const conformanceReportPath = join(directory, "conformance-report.json");
+    const lockfilePath = join(directory, "package-lock.json");
+
+    await writeFile(auditPath, JSON.stringify(audit));
+    await writeFile(sbomPath, JSON.stringify({ bomFormat: "CycloneDX" }));
+    await writeFile(conformanceReportPath, JSON.stringify({ numTotalTests: 2, success: true }));
+    await writeFile(lockfilePath, JSON.stringify({ lockfileVersion: 3 }));
+
+    await expect(prepareReleaseEvidence({
+      auditPath,
+      sbomPath,
+      conformanceReportPath,
+      lockfilePath,
+      outDir: join(directory, "out"),
+      now
+    })).rejects.toThrow(/explicit reviewed risk register/);
+  });
+
   it("rejects npm audit error responses", () => {
     expect(() =>
       validateNpmAuditReport({
