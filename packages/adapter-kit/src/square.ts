@@ -89,6 +89,11 @@ export interface SquareAdapterOptions {
   resolveChannel?: (order: SquareOrder) => OrderChannel;
   categoryIds?: (line: SquareOrderLineItem) => string[];
   loyaltyEligible?: (line: SquareOrderLineItem) => boolean;
+  /**
+   * Resolve the loyalty-eligible portion of a refund from source-of-truth
+   * order/refund facts. A gross refund amount is not enough to infer this.
+   */
+  resolveEligibleRefundAmount(refund: SquareRefund, original: FoodserviceOrder): number;
 }
 
 function required(value: string | undefined, name: string): string {
@@ -160,8 +165,7 @@ function mappedLines(order: SquareOrder, options: SquareAdapterOptions): OrderLi
         : {}),
       ...(options.loyaltyEligible
         ? { loyalty_eligible: options.loyaltyEligible(line) }
-        : {}),
-      ...(line.note ? { metadata: { note: line.note } } : {})
+        : {})
     };
     const modifiers = (line.modifiers ?? []).map((modifier, modifierIndex): OrderLine => {
       const modifierId = modifier.uid ?? `${lineId}:modifier:${modifierIndex + 1}`;
@@ -245,8 +249,7 @@ export class SquareFoodserviceAdapter implements FoodserviceOrderingAdapter<Squa
       })),
       metadata: {
         provider: "square",
-        provider_version: this.version,
-        ...(source.customer_id ? { square_customer_id: source.customer_id } : {})
+        provider_version: this.version
       }
     };
   }
@@ -256,6 +259,14 @@ export class SquareFoodserviceAdapter implements FoodserviceOrderingAdapter<Squa
     const refundAmount = amount(source.amount_money);
     if (refundAmount <= 0) throw new Error("Square refund amount must be positive");
     const originalTotal = original.totals.total.amount;
+    const eligibleRefundAmount = this.options.resolveEligibleRefundAmount(source, original);
+    if (
+      !Number.isSafeInteger(eligibleRefundAmount) ||
+      eligibleRefundAmount < 0 ||
+      eligibleRefundAmount > refundAmount
+    ) {
+      throw new Error("Square eligible refund amount must be an integer between zero and the refund amount");
+    }
     const occurredAt = required(source.updated_at ?? source.created_at, "refund timestamp");
     return {
       adjustment_id: refundId,
@@ -264,7 +275,7 @@ export class SquareFoodserviceAdapter implements FoodserviceOrderingAdapter<Squa
       reason: source.reason?.trim() || "Square refund",
       occurred_at: new Date(Date.parse(occurredAt)).toISOString(),
       order_total_delta: { amount: -refundAmount, currency: original.totals.total.currency },
-      eligible_spend_delta: { amount: -Math.min(refundAmount, originalTotal), currency: original.totals.total.currency }
+      eligible_spend_delta: { amount: -eligibleRefundAmount, currency: original.totals.total.currency }
     };
   }
 

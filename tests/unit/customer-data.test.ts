@@ -160,4 +160,15 @@ describe("customer data platform", () => {
       attributes: { favorite_location: "location-001" }
     }]);
   });
+
+  it("rejects ambiguous CSV shapes and prototype-like attribute keys", () => {
+    expect(() => parseCustomerCsv("member_id,member_id\nmember-001,member-002"))
+      .toThrowError(/headers must be unique/);
+    expect(() => parseCustomerCsv("member_id,email\nmember-001"))
+      .toThrowError(/exactly 2 columns/);
+    expect(() => parseCustomerCsv([
+      "member_id,attributes_json",
+      'member-001,"{\"\"__proto__\"\":{}}"'
+    ].join("\n"))).toThrowError(/JSON object/);
+  });
 });

@@ -62,6 +62,7 @@ const adapter = new SquareFoodserviceAdapter({
   merchantId: "demo-merchant",
   currency: "USD",
   resolveMemberId: (source) => source.metadata?.["loyalty_member_id"] ?? "member-001",
+  resolveEligibleRefundAmount: () => 400,
   categoryIds: () => ["entrees"]
 });
 
@@ -85,13 +86,26 @@ describe("Square foodservice adapter", () => {
       adjustment_id: "square-refund-001",
       original_order_id: "square-order-001",
       type: "partial_refund",
-      order_total_delta: { amount: -400, currency: "USD" }
+      order_total_delta: { amount: -400, currency: "USD" },
+      eligible_spend_delta: { amount: -400, currency: "USD" }
     });
     expect(adapter.idempotencyKeys(order, refund)).toEqual({
       evaluate: "square:evaluate:square-order-001",
       accrue: "square:accrue:square-order-001",
       adjustment: "square:adjustment:square-order-001:square-refund-001"
     });
+  });
+
+  it("does not copy source customer identifiers or free-form line notes", () => {
+    const mapped = adapter.mapOrder({
+      ...order,
+      line_items: (order.line_items ?? []).map((line) => ({
+        ...line,
+        note: "allergy and phone details"
+      }))
+    });
+    expect(JSON.stringify(mapped)).not.toContain("square-customer-001");
+    expect(JSON.stringify(mapped)).not.toContain("allergy and phone details");
   });
 
   it("passes deterministic adapter certification for public synthetic fixtures", () => {

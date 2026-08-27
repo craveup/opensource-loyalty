@@ -29,12 +29,24 @@ const platform = databaseUrl
       connectionString: databaseUrl,
       ...(process.env.LIP_TENANT_ID ? { tenantId: process.env.LIP_TENANT_ID } : {}),
       seed: process.env.LIP_SEED_DEMO !== "false",
-      reset: process.env.LIP_RESET === "true"
+      reset: process.env.LIP_RESET === "true",
+      telemetry: {
+        enabled: process.env.LIP_TELEMETRY_ENABLED === "true",
+        ...(process.env.LIP_TELEMETRY_ENDPOINT
+          ? { endpoint: process.env.LIP_TELEMETRY_ENDPOINT }
+          : {})
+      }
     })
   : await createDemoPlatform({
       databasePath,
       seed: process.env.LIP_SEED_DEMO !== "false",
-      reset: process.env.LIP_RESET === "true"
+      reset: process.env.LIP_RESET === "true",
+      telemetry: {
+        enabled: process.env.LIP_TELEMETRY_ENABLED === "true",
+        ...(process.env.LIP_TELEMETRY_ENDPOINT
+          ? { endpoint: process.env.LIP_TELEMETRY_ENDPOINT }
+          : {})
+      }
     });
 
 const ansi = {
@@ -134,6 +146,11 @@ console.log(formatRuntimeReady({
   databasePath: databaseUrl ? "Postgres (tenant-scoped normalized tables)" : databasePath,
   bindUrl: running.url
 }));
+
+void platform.telemetry.sendHeartbeat().then((result) => {
+  if (result === "sent") console.log("[lip] Optional self-host telemetry heartbeat sent.");
+  if (result === "failed") console.warn("[lip] Optional self-host telemetry heartbeat failed.");
+});
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {

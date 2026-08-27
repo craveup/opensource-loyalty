@@ -86,4 +86,24 @@ describe("reference wallet BFF", () => {
       await running.close();
     }
   });
+
+  it("requires a same-origin request for sign out", async () => {
+    const running = await startWalletServer({
+      publicBaseUrl: "http://127.0.0.1:3230",
+      cloudBaseUrl: "http://127.0.0.1:3220",
+      tenantId: "tenant-demo",
+      providerId: "primary",
+      demo: true
+    });
+    try {
+      const response = await fetch(`${running.url}/auth/logout`, {
+        method: "POST",
+        headers: { origin: "https://attacker.example.test" }
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ code: "origin_mismatch" });
+    } finally {
+      await running.close();
+    }
+  });
 });

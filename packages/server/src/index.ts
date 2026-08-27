@@ -11,6 +11,7 @@ export * from "./migration.js";
 export * from "./platform.js";
 export * from "./program-management.js";
 export * from "./server.js";
+export * from "./telemetry.js";
 export * from "./webhook-outbox.js";
 export * from "./webhook-history.js";
 export * from "./webhook-subscriptions.js";

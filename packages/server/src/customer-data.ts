@@ -171,6 +171,9 @@ export function parseCustomerCsv(input: string): CustomerProfileInput[] {
   const [headerRow, ...dataRows] = csvRows(input);
   if (!headerRow) throw new EngineError("validation_failed", "CSV header is required", 422);
   const headers = headerRow.map((header) => header.trim().toLowerCase());
+  if (new Set(headers).size !== headers.length) {
+    throw new EngineError("validation_failed", "CSV headers must be unique", 422);
+  }
   const allowed = new Set([
     "member_id", "external_id", "display_name", "email", "phone", "birth_date",
     "marketing_consent", "consent_source", "attributes_json"
@@ -194,6 +197,13 @@ export function parseCustomerCsv(input: string): CustomerProfileInput[] {
     );
   }
   return dataRows.map((values, rowIndex): CustomerProfileInput => {
+    if (values.length !== headers.length) {
+      throw new EngineError(
+        "validation_failed",
+        `CSV row ${rowIndex + 2} must contain exactly ${headers.length} columns`,
+        422
+      );
+    }
     const record = Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ""]));
     if (!record["member_id"]) {
       throw new EngineError("validation_failed", `CSV row ${rowIndex + 2} is missing member_id`, 422);
@@ -211,6 +221,8 @@ export function parseCustomerCsv(input: string): CustomerProfileInput[] {
       try {
         const parsed = JSON.parse(record["attributes_json"]) as unknown;
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+        const prohibited = ["__proto__", "constructor", "prototype"];
+        if (Object.keys(parsed).some((key) => prohibited.includes(key))) throw new Error();
         attributes = parsed as Record<string, unknown>;
       } catch {
         throw new EngineError(

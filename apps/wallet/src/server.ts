@@ -11,6 +11,9 @@ import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from "jose";
 const MAX_BODY_BYTES = 131_072;
 const SESSION_COOKIE = "lip_wallet_session";
 const STATE_COOKIE = "lip_wallet_oauth_state";
+const MAX_PENDING_LOGINS = 1_000;
+const MAX_SESSIONS = 10_000;
+const UPSTREAM_TIMEOUT_MS = 5_000;
 
 interface OidcDiscovery {
   issuer: string;
@@ -113,6 +116,17 @@ function isSameOrigin(request: IncomingMessage, publicBaseUrl: string): boolean 
   return typeof origin === "string" && origin === new URL(publicBaseUrl).origin;
 }
 
+function safeServiceUrl(value: URL, name: string, allowDemoHttp = false): URL {
+  const loopback = ["127.0.0.1", "::1", "localhost"].includes(value.hostname);
+  if (value.protocol !== "https:" && !(value.protocol === "http:" && (loopback || allowDemoHttp))) {
+    throw new Error(`${name} must use HTTPS (HTTP is allowed only for loopback development)`);
+  }
+  if (value.username || value.password || value.search || value.hash) {
+    throw new Error(`${name} must not contain credentials, query parameters, or fragments`);
+  }
+  return value;
+}
+
 function syntheticWallet(): Record<string, unknown> {
   return {
     data: {
@@ -144,13 +158,30 @@ function syntheticWallet(): Record<string, unknown> {
 }
 
 export async function startWalletServer(options: WalletServerOptions): Promise<RunningWalletServer> {
-  const publicBaseUrl = new URL(options.publicBaseUrl);
-  const cloudBaseUrl = new URL(options.cloudBaseUrl);
+  const publicBaseUrl = safeServiceUrl(new URL(options.publicBaseUrl), "WALLET_PUBLIC_BASE_URL");
+  const cloudBaseUrl = safeServiceUrl(
+    new URL(options.cloudBaseUrl),
+    "WALLET_CLOUD_BASE_URL",
+    options.demo === true
+  );
+  if (options.oidcIssuer) {
+    safeServiceUrl(new URL(options.oidcIssuer), "WALLET_OIDC_ISSUER");
+  }
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const pending = new Map<string, PendingLogin>();
   const sessions = new Map<string, WalletSession>();
   let discoveryCache: OidcDiscovery | undefined;
   let htmlCache: string | undefined;
+
+  const pruneExpired = (): void => {
+    const now = Date.now();
+    for (const [state, login] of pending) {
+      if (login.expires_at <= now) pending.delete(state);
+    }
+    for (const [id, session] of sessions) {
+      if (session.expires_at <= now) sessions.delete(id);
+    }
+  };
 
   const discovery = async (): Promise<OidcDiscovery> => {
     if (discoveryCache) return discoveryCache;
@@ -158,7 +189,10 @@ export async function startWalletServer(options: WalletServerOptions): Promise<R
       throw new Error("Wallet OIDC is not configured");
     }
     const issuer = new URL(options.oidcIssuer);
-    const response = await fetchImpl(new URL(".well-known/openid-configuration", `${issuer.toString().replace(/\/$/, "")}/`));
+    const response = await fetchImpl(new URL(".well-known/openid-configuration", `${issuer.toString().replace(/\/$/, "")}/`), {
+      redirect: "error",
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+    });
     if (!response.ok) throw new Error(`OIDC discovery returned HTTP ${response.status}`);
     const value = await response.json() as Partial<OidcDiscovery>;
     if (
@@ -166,6 +200,13 @@ export async function startWalletServer(options: WalletServerOptions): Promise<R
       !value.authorization_endpoint || !value.token_endpoint || !value.jwks_uri
     ) {
       throw new Error("OIDC discovery document is incomplete or has a different issuer");
+    }
+    for (const [name, endpoint] of [
+      ["OIDC authorization endpoint", value.authorization_endpoint],
+      ["OIDC token endpoint", value.token_endpoint],
+      ["OIDC JWKS endpoint", value.jwks_uri]
+    ] as const) {
+      safeServiceUrl(new URL(endpoint!), name);
     }
     discoveryCache = value as OidcDiscovery;
     return discoveryCache;
@@ -183,10 +224,13 @@ export async function startWalletServer(options: WalletServerOptions): Promise<R
       "x-lip-customer-provider": options.providerId,
       ...(init.body ? { "content-type": "application/json" } : {}),
       ...init.headers
-    }
+    },
+    redirect: "error",
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
   });
 
   const activeSession = (request: IncomingMessage): WalletSession | undefined => {
+    pruneExpired();
     const id = cookie(request, SESSION_COOKIE);
     const session = id ? sessions.get(id) : undefined;
     if (!session || session.expires_at <= Date.now()) {
@@ -221,6 +265,11 @@ export async function startWalletServer(options: WalletServerOptions): Promise<R
           return;
         }
         const document = await discovery();
+        pruneExpired();
+        if (pending.size >= MAX_PENDING_LOGINS) {
+          sendProblem(response, 503, "login_capacity", "Too many login attempts are pending");
+          return;
+        }
         const state = base64Url(randomBytes(24));
         const nonce = base64Url(randomBytes(24));
         const verifier = base64Url(randomBytes(48));
@@ -266,7 +315,9 @@ export async function startWalletServer(options: WalletServerOptions): Promise<R
         const tokenResponse = await fetchImpl(document.token_endpoint, {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: tokenBody
+          body: tokenBody,
+          redirect: "error",
+          signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
         });
         if (!tokenResponse.ok) {
           sendProblem(response, 401, "token_exchange_failed", "The identity provider rejected the login response");
@@ -281,7 +332,10 @@ export async function startWalletServer(options: WalletServerOptions): Promise<R
           sendProblem(response, 401, "invalid_token_response", "The identity provider omitted required tokens");
           return;
         }
-        const jwksResponse = await fetchImpl(document.jwks_uri);
+        const jwksResponse = await fetchImpl(document.jwks_uri, {
+          redirect: "error",
+          signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+        });
         if (!jwksResponse.ok) throw new Error(`OIDC JWKS returned HTTP ${jwksResponse.status}`);
         const jwks = await jwksResponse.json() as JSONWebKeySet;
         const verified = await jwtVerify(tokens.id_token, createLocalJWKSet(jwks), {
@@ -294,6 +348,11 @@ export async function startWalletServer(options: WalletServerOptions): Promise<R
         }
         const sessionId = randomUUID();
         const maxAgeSeconds = Math.max(60, Math.min(tokens.expires_in ?? 3600, 8 * 3600));
+        pruneExpired();
+        if (sessions.size >= MAX_SESSIONS) {
+          sendProblem(response, 503, "session_capacity", "The wallet cannot create another session");
+          return;
+        }
         sessions.set(sessionId, {
           access_token: tokens.access_token,
           csrf: base64Url(randomBytes(24)),
@@ -312,6 +371,10 @@ export async function startWalletServer(options: WalletServerOptions): Promise<R
       }
 
       if (method === "POST" && url.pathname === "/auth/logout") {
+        if (!isSameOrigin(request, publicBaseUrl.toString())) {
+          sendProblem(response, 403, "origin_mismatch", "Sign out requires a same-origin request");
+          return;
+        }
         const sessionId = cookie(request, SESSION_COOKIE);
         if (sessionId) sessions.delete(sessionId);
         response.writeHead(204, {

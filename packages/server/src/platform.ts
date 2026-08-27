@@ -24,6 +24,7 @@ import { EventedLoyaltyEngine } from "./evented-engine.js";
 import { EngagementService, type EngagementState } from "./engagement.js";
 import { LocationDirectoryService, type LocationDirectoryState } from "./locations.js";
 import { ProgramManagementService, type ProgramManagementState } from "./program-management.js";
+import { TelemetryService, type TelemetryState } from "./telemetry.js";
 import { WebhookOutboxJournal, type WebhookOutboxState } from "./webhook-outbox.js";
 import { WebhookHistoryJournal, type WebhookHistoryState } from "./webhook-history.js";
 import { WebhookSubscriptionJournal, type WebhookSubscriptionState } from "./webhook-subscriptions.js";
@@ -46,6 +47,11 @@ export interface DemoPlatformOptions {
    * optionally LIP_WEBHOOK_EVENTS, a comma-separated event-type allowlist).
    */
   webhooks?: WebhookSubscription[];
+  telemetry?: {
+    enabled?: boolean;
+    endpoint?: string;
+    fetchImpl?: typeof fetch;
+  };
 }
 
 export interface DemoPlatform {
@@ -60,6 +66,7 @@ export interface DemoPlatform {
   access: AccessControlService;
   engagement: EngagementService;
   locations: LocationDirectoryService;
+  telemetry: TelemetryService;
   close(): Promise<void>;
 }
 
@@ -75,6 +82,7 @@ export interface PostgresProtocolPlatform {
   access: AccessControlService;
   engagement: EngagementService;
   locations: LocationDirectoryService;
+  telemetry: TelemetryService;
   executeEngineOperation<T>(operation: () => T | Promise<T>): Promise<T>;
   /**
    * Runs a read-only computation against a scratch engine hydrated from the
@@ -95,6 +103,11 @@ export interface PostgresProtocolPlatformOptions {
   adminAssetRoot?: string;
   program?: ProgramDefinition;
   webhooks?: WebhookSubscription[];
+  telemetry?: {
+    enabled?: boolean;
+    endpoint?: string;
+    fetchImpl?: typeof fetch;
+  };
 }
 
 export function webhookSubscriptionsFromEnv(
@@ -149,6 +162,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
   let access: AccessControlService | undefined;
   let engagement: EngagementService | undefined;
   let locations: LocationDirectoryService | undefined;
+  let telemetry: TelemetryService | undefined;
   try {
     if (options.reset) store.clear();
     let state = store.load();
@@ -260,6 +274,16 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
       }),
       ...(options.reset ? { reset: true } : {})
     });
+    telemetry = await TelemetryService.create({
+      store: new AsyncSqliteStateStore<TelemetryState>({
+        path: options.databasePath,
+        key: `${program.program_id}:telemetry`
+      }),
+      storageDriver: "sqlite",
+      features: ["admin", "campaigns", "customer-data", "platform-api", "wallet-bff"],
+      ...options.telemetry,
+      ...(options.reset ? { reset: true } : {})
+    });
     if (options.seed !== false && !options.program) await seedDemoLocations(locations);
     programs.bindPublisher((nextProgram) => {
       const previousProgram = engine.getProgramDefinition();
@@ -290,6 +314,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
       access,
       engagement,
       locations,
+      telemetry,
       close: async () => {
         await campaigns?.close();
         await customerData?.close();
@@ -297,6 +322,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
         await access?.close();
         await engagement?.close();
         await locations?.close();
+        await telemetry?.close();
         await programs.close();
         store.close();
         await webhookSubscriptionStore?.close();
@@ -322,6 +348,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
     await access?.close();
     await engagement?.close();
     await locations?.close();
+    await telemetry?.close();
     await programs.close();
     store.close();
     throw error;
@@ -348,6 +375,7 @@ export async function createPostgresProtocolPlatform(
   let access: AccessControlService | undefined;
   let engagement: EngagementService | undefined;
   let locations: LocationDirectoryService | undefined;
+  let telemetry: TelemetryService | undefined;
   let bootDispatcher: WebhookDispatcher | undefined;
   try {
     const migrator = new PostgresJsonStateStore({ pool, tenantId, key: "migration-probe" });
@@ -520,6 +548,13 @@ export async function createPostgresProtocolPlatform(
       store: stateStore<LocationDirectoryState>("locations"),
       ...(options.reset ? { reset: true } : {})
     });
+    telemetry = await TelemetryService.create({
+      store: stateStore<TelemetryState>("telemetry"),
+      storageDriver: "postgres",
+      features: ["admin", "campaigns", "customer-data", "platform-api", "wallet-bff"],
+      ...options.telemetry,
+      ...(options.reset ? { reset: true } : {})
+    });
     if (options.seed !== false && !options.program) await seedDemoLocations(locations);
     const boundCampaigns = campaigns;
     const boundMemberships = memberships;
@@ -553,6 +588,7 @@ export async function createPostgresProtocolPlatform(
       access,
       engagement,
       locations,
+      telemetry,
       executeEngineOperation,
       readEngineSnapshot,
       close: async () => {
@@ -562,6 +598,7 @@ export async function createPostgresProtocolPlatform(
         await access?.close();
         await engagement?.close();
         await locations?.close();
+        await telemetry?.close();
         await programs?.close();
         await dispatcher.flush();
         await subscriptionJournal?.close();
@@ -578,6 +615,7 @@ export async function createPostgresProtocolPlatform(
     await access?.close();
     await engagement?.close();
     await locations?.close();
+    await telemetry?.close();
     await programs?.close();
     await bootDispatcher?.flush();
     await subscriptionJournal?.close();
