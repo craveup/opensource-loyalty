@@ -44,7 +44,10 @@ const rules: PublicSafetyRule[] = [
   },
   {
     name: "private maintainer setup",
-    expression: new RegExp("\\b(?:" + "Infisical|Crave team members" + ")\\b", "i")
+    expression: new RegExp(
+      "\\b(?:" + ["Infi", "sical"].join("") + "|" + ["Crave", "team", "members"].join(" ") + ")\\b",
+      "i"
+    )
   }
 ];
 
