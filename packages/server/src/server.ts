@@ -1419,21 +1419,39 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
         if (method === "POST" && path === "/platform/v1/imports/members") {
           if (
             typeof values["idempotency_key"] !== "string" ||
-            !Array.isArray(values["rows"])
+            (!Array.isArray(values["rows"]) && typeof values["csv"] !== "string")
           ) {
             throw new TransportError(
               422,
               "validation_failed",
               "Validation Failed",
-              "idempotency_key and rows are required"
+              "idempotency_key and rows or csv are required"
             );
           }
-          const rows = values["rows"].filter(
+          if (typeof values["csv"] === "string") {
+            sendJson(response, 201, {
+              import: await customerData.importMemberCsv({
+                idempotency_key: values["idempotency_key"],
+                csv: values["csv"]
+              })
+            });
+            return;
+          }
+          const rawRows = values["rows"];
+          if (!Array.isArray(rawRows)) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "rows must be an array when csv is not provided"
+            );
+          }
+          const rows = rawRows.filter(
             (row): row is CustomerProfileInput =>
               Boolean(row) && typeof row === "object" && !Array.isArray(row) &&
               typeof (row as Record<string, unknown>)["member_id"] === "string"
           );
-          if (rows.length !== values["rows"].length) {
+          if (rows.length !== rawRows.length) {
             throw new TransportError(
               422,
               "validation_failed",

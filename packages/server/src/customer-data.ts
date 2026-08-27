@@ -123,6 +123,124 @@ export type CustomerProfileInput = {
   };
 };
 
+function csvRows(input: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index]!;
+    if (quoted) {
+      if (character === '"' && input[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        field += character;
+      }
+      continue;
+    }
+    if (character === '"') {
+      quoted = true;
+    } else if (character === ",") {
+      row.push(field);
+      field = "";
+    } else if (character === "\n") {
+      row.push(field.replace(/\r$/, ""));
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += character;
+    }
+  }
+  if (quoted) throw new EngineError("validation_failed", "CSV has an unclosed quoted field", 422);
+  if (field || row.length > 0) {
+    row.push(field.replace(/\r$/, ""));
+    rows.push(row);
+  }
+  return rows.filter((candidate) => candidate.some((value) => value.trim()));
+}
+
+/** Parses the documented public member-import CSV columns into typed rows. */
+export function parseCustomerCsv(input: string): CustomerProfileInput[] {
+  if (Buffer.byteLength(input) > 1_048_576) {
+    throw new EngineError("validation_failed", "CSV import exceeds 1 MiB", 422);
+  }
+  const [headerRow, ...dataRows] = csvRows(input);
+  if (!headerRow) throw new EngineError("validation_failed", "CSV header is required", 422);
+  const headers = headerRow.map((header) => header.trim().toLowerCase());
+  const allowed = new Set([
+    "member_id", "external_id", "display_name", "email", "phone", "birth_date",
+    "marketing_consent", "consent_source", "attributes_json"
+  ]);
+  const unknown = headers.filter((header) => !allowed.has(header));
+  if (unknown.length > 0) {
+    throw new EngineError(
+      "validation_failed",
+      `Unsupported CSV columns: ${[...new Set(unknown)].join(", ")}`,
+      422
+    );
+  }
+  if (!headers.includes("member_id")) {
+    throw new EngineError("validation_failed", "CSV member_id column is required", 422);
+  }
+  if (dataRows.length === 0 || dataRows.length > MAX_IMPORT_ROWS) {
+    throw new EngineError(
+      "validation_failed",
+      `CSV imports require between 1 and ${MAX_IMPORT_ROWS} data rows`,
+      422
+    );
+  }
+  return dataRows.map((values, rowIndex): CustomerProfileInput => {
+    const record = Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ""]));
+    if (!record["member_id"]) {
+      throw new EngineError("validation_failed", `CSV row ${rowIndex + 2} is missing member_id`, 422);
+    }
+    const consentValue = record["marketing_consent"]?.toLowerCase();
+    if (consentValue && !["true", "false", "yes", "no", "1", "0"].includes(consentValue)) {
+      throw new EngineError(
+        "validation_failed",
+        `CSV row ${rowIndex + 2} has an invalid marketing_consent value`,
+        422
+      );
+    }
+    let attributes: Record<string, unknown> | undefined;
+    if (record["attributes_json"]) {
+      try {
+        const parsed = JSON.parse(record["attributes_json"]) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+        attributes = parsed as Record<string, unknown>;
+      } catch {
+        throw new EngineError(
+          "validation_failed",
+          `CSV row ${rowIndex + 2} attributes_json must be a JSON object`,
+          422
+        );
+      }
+    }
+    const marketing = ["true", "yes", "1"].includes(consentValue ?? "");
+    return {
+      member_id: record["member_id"],
+      ...(record["external_id"] ? { external_id: record["external_id"] } : {}),
+      ...(record["display_name"] ? { display_name: record["display_name"] } : {}),
+      ...(record["email"] ? { email: record["email"] } : {}),
+      ...(record["phone"] ? { phone: record["phone"] } : {}),
+      ...(record["birth_date"] ? { birth_date: record["birth_date"] } : {}),
+      ...(attributes ? { attributes } : {}),
+      ...(consentValue
+        ? {
+            consent: {
+              marketing,
+              ...(record["consent_source"] ? { source: record["consent_source"] } : { source: "csv-import" })
+            }
+          }
+        : {})
+    };
+  });
+}
+
 function timestamp(): string {
   return new Date().toISOString();
 }
@@ -406,6 +524,16 @@ export class CustomerDataService {
     this.state = { ...this.state, imports: [job, ...this.state.imports].slice(0, 1_000) };
     await this.save();
     return structuredClone(job);
+  }
+
+  public async importMemberCsv(input: {
+    idempotency_key: string;
+    csv: string;
+  }): Promise<MemberImportJob> {
+    return this.importMembers({
+      idempotency_key: input.idempotency_key,
+      rows: parseCustomerCsv(input.csv)
+    });
   }
 
   public analytics(): CustomerDataAnalytics {

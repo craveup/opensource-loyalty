@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createDemoPlatform } from "@loyalty-interchange/server";
+import { createDemoPlatform, parseCustomerCsv } from "@loyalty-interchange/server";
 
 describe("customer data platform", () => {
   it("persists profiles, consent, idempotent events, and imports", async () => {
@@ -145,5 +145,19 @@ describe("customer data platform", () => {
       await platform.close();
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it("parses quoted CSV member imports with explicit consent", () => {
+    expect(parseCustomerCsv([
+      "member_id,external_id,display_name,email,marketing_consent,consent_source,attributes_json",
+      'member-001,guest-001,"Demo, Guest",guest@example.test,true,signup,"{""favorite_location"":""location-001""}"'
+    ].join("\n"))).toEqual([{
+      member_id: "member-001",
+      external_id: "guest-001",
+      display_name: "Demo, Guest",
+      email: "guest@example.test",
+      consent: { marketing: true, source: "signup" },
+      attributes: { favorite_location: "location-001" }
+    }]);
   });
 });
