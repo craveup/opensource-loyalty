@@ -28,7 +28,7 @@ RUN mkdir -p /data && chown -R node:node /app /data
 
 USER node
 
-EXPOSE 3210
+EXPOSE 3210 3220 3230
 
 HEALTHCHECK --interval=5s --timeout=2s --start-period=5s --retries=5 \
   CMD wget -qO- "http://127.0.0.1:${HEALTH_PORT:-3210}/health" >/dev/null || exit 1

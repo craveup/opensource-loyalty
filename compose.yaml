@@ -16,6 +16,28 @@ services:
       - lip-data:/data
     restart: unless-stopped
 
+  wallet:
+    build: .
+    command: ["node", "apps/wallet/dist/cli.js"]
+    depends_on:
+      lip:
+        condition: service_healthy
+    environment:
+      WALLET_HOST: 0.0.0.0
+      WALLET_PORT: 3230
+      WALLET_PUBLIC_BASE_URL: ${WALLET_PUBLIC_BASE_URL:-http://localhost:3230}
+      WALLET_CLOUD_BASE_URL: ${WALLET_CLOUD_BASE_URL:-http://cloud:3220}
+      WALLET_TENANT_ID: ${WALLET_TENANT_ID:-demo-foodservice}
+      WALLET_OIDC_PROVIDER_ID: ${WALLET_OIDC_PROVIDER_ID:-primary}
+      WALLET_OIDC_ISSUER: ${WALLET_OIDC_ISSUER:-}
+      WALLET_OIDC_CLIENT_ID: ${WALLET_OIDC_CLIENT_ID:-}
+      WALLET_OIDC_CLIENT_SECRET: ${WALLET_OIDC_CLIENT_SECRET:-}
+      WALLET_DEMO: ${WALLET_DEMO:-true}
+      HEALTH_PORT: 3230
+    ports:
+      - "${WALLET_PORT:-3230}:3230"
+    restart: unless-stopped
+
   postgres:
     image: postgres:17-alpine
     profiles: ["postgres", "cloud"]

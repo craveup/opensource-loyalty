@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Reference guest loyalty wallet powered by Loyalty Interchange." />
+  <title>Common Table Rewards</title>
+  <style nonce="{{NONCE}}">
+    :root { color-scheme: light; --ink:#18251d; --muted:#637068; --paper:#f6f3ea; --card:#fffdf7; --accent:#d74e2f; --line:#dedbd0; --forest:#264d35; }
+    * { box-sizing: border-box; }
+    body { background:var(--paper); color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; min-height:100vh; }
+    button,a { font:inherit; }
+    button:focus-visible,a:focus-visible { outline:3px solid #e8a78e; outline-offset:3px; }
+    .shell { margin:0 auto; max-width:520px; min-height:100vh; padding:24px 20px 52px; }
+    header { align-items:center; display:flex; justify-content:space-between; margin-bottom:54px; }
+    .brand { align-items:center; display:flex; font-family:Georgia,serif; font-size:18px; font-weight:700; gap:10px; letter-spacing:-.02em; }
+    .mark { align-items:center; background:var(--forest); border-radius:50%; color:#fff; display:flex; height:38px; justify-content:center; width:38px; }
+    .ghost { background:transparent; border:0; color:var(--muted); cursor:pointer; padding:8px 0; }
+    .eyebrow { color:var(--accent); font-size:11px; font-weight:800; letter-spacing:.14em; margin:0 0 12px; text-transform:uppercase; }
+    h1 { font-family:Georgia,serif; font-size:46px; font-weight:500; letter-spacing:-.045em; line-height:.98; margin:0; max-width:440px; }
+    .intro { color:var(--muted); font-size:15px; line-height:1.6; margin:20px 0 28px; max-width:420px; }
+    .primary { background:var(--accent); border:0; border-radius:999px; color:white; cursor:pointer; display:inline-flex; font-weight:750; justify-content:center; padding:14px 22px; text-decoration:none; width:100%; }
+    .demo-note { background:#fff5dd; border:1px solid #ecdba7; border-radius:12px; color:#66572c; font-size:12px; line-height:1.5; margin:18px 0 0; padding:12px 14px; }
+    .hidden { display:none !important; }
+    .wallet { display:grid; gap:16px; }
+    .welcome { align-items:end; display:flex; justify-content:space-between; margin-bottom:6px; }
+    .welcome h1 { font-size:34px; }
+    .welcome p { color:var(--muted); margin:8px 0 0; }
+    .balance { background:var(--forest); border-radius:24px; color:#fff; overflow:hidden; padding:26px; position:relative; }
+    .balance:after { border:38px solid rgba(255,255,255,.06); border-radius:50%; content:""; height:110px; position:absolute; right:-48px; top:-50px; width:110px; }
+    .balance span { color:#c9d7cd; display:block; font-size:12px; margin-bottom:8px; }
+    .balance strong { font-family:Georgia,serif; font-size:54px; font-weight:500; letter-spacing:-.04em; }
+    .balance small { color:#c9d7cd; font-size:13px; margin-left:7px; }
+    .progress { background:rgba(255,255,255,.18); border-radius:10px; height:7px; margin:22px 0 9px; overflow:hidden; }
+    .progress i { background:#f3c66f; display:block; height:100%; width:68%; }
+    .tier-row { color:#e7eee9; display:flex; font-size:11px; justify-content:space-between; }
+    h2 { font-family:Georgia,serif; font-size:23px; font-weight:500; letter-spacing:-.025em; margin:12px 0 0; }
+    .reward-list { display:grid; gap:10px; }
+    .reward { align-items:center; background:var(--card); border:1px solid var(--line); border-radius:16px; display:grid; gap:14px; grid-template-columns:46px 1fr auto; padding:15px; }
+    .reward-icon { align-items:center; background:#f8e2d7; border-radius:12px; color:var(--accent); display:flex; font-size:20px; height:46px; justify-content:center; width:46px; }
+    .reward strong { display:block; font-size:14px; }
+    .reward span { color:var(--muted); display:block; font-size:11px; margin-top:4px; }
+    .pill { background:#eef1ea; border-radius:999px; color:var(--forest); font-size:11px; font-weight:750; padding:7px 10px; }
+    .consent { align-items:center; background:var(--card); border:1px solid var(--line); border-radius:16px; display:flex; gap:14px; justify-content:space-between; padding:16px; }
+    .consent strong { display:block; font-size:13px; }
+    .consent small { color:var(--muted); display:block; font-size:11px; margin-top:4px; }
+    .status { border-radius:999px; font-size:10px; font-weight:800; padding:6px 9px; text-transform:uppercase; }
+    .status.on { background:#e2efe4; color:#286039; }
+    footer { color:var(--muted); font-size:10px; line-height:1.5; margin-top:26px; text-align:center; }
+    footer a { color:inherit; }
+    @media (max-width:380px) { .shell{padding-inline:16px} h1{font-size:40px} .balance strong{font-size:46px} }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand"><span class="mark" aria-hidden="true">CT</span>Common Table</div>
+      <button class="ghost hidden" id="logout" type="button">Sign out</button>
+    </header>
+
+    <section id="signed-out">
+      <p class="eyebrow">Common Table Rewards</p>
+      <h1>Your rewards, ready when you are.</h1>
+      <p class="intro">Keep points, perks, and member benefits in one simple wallet. No app-store download required.</p>
+      <a class="primary" href="/auth/login" id="login">View my rewards</a>
+      <p class="demo-note hidden" id="demo-note"><strong>Synthetic preview.</strong> These names, balances, and rewards are example data. Connect OIDC to use real customer accounts.</p>
+    </section>
+
+    <section class="wallet hidden" id="wallet" aria-live="polite">
+      <div class="welcome"><div><p class="eyebrow">Member wallet</p><h1 id="welcome">Good to see you.</h1><p>Here is what you have ready.</p></div></div>
+      <p class="demo-note hidden" id="wallet-demo-note"><strong>Synthetic preview.</strong> No customer account or production service is connected.</p>
+      <article class="balance">
+        <span>Available balance</span><strong id="points">0</strong><small>points</small>
+        <div class="progress"><i></i></div>
+        <div class="tier-row"><b id="tier">Member</b><span>300 points to next perk</span></div>
+      </article>
+      <h2>Rewards you can use</h2>
+      <div class="reward-list" id="rewards"></div>
+      <article class="consent"><div><strong>Member updates</strong><small>Occasional offers and reward reminders</small></div><span class="status on" id="consent">On</span></article>
+      <footer>Reference wallet powered by <a href="https://github.com/craveup/opensource-loyalty">Loyalty Interchange</a>. Your brand owns the customer relationship.</footer>
+    </section>
+  </main>
+  <script nonce="{{NONCE}}">
+    const signedOut = document.querySelector("#signed-out");
+    const wallet = document.querySelector("#wallet");
+    const logout = document.querySelector("#logout");
+    const demoNote = document.querySelector("#demo-note");
+    const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character]);
+    async function load() {
+      const config = await fetch("/api/config").then((response) => response.json());
+      if (config.demo) {
+        demoNote.classList.remove("hidden");
+        document.querySelector("#wallet-demo-note").classList.remove("hidden");
+      }
+      const response = await fetch("/api/session");
+      if (!response.ok) return;
+      const payload = await response.json();
+      const data = payload.data;
+      signedOut.classList.add("hidden"); wallet.classList.remove("hidden"); logout.classList.remove("hidden");
+      const givenName = data.session?.profile?.given_name;
+      document.querySelector("#welcome").textContent = givenName ? `Hi, ${givenName}.` : "Good to see you.";
+      document.querySelector("#points").textContent = Number(data.wallet?.points ?? 0).toLocaleString();
+      document.querySelector("#tier").textContent = data.wallet?.tier ?? "Member";
+      const rewards = Array.isArray(data.wallet?.rewards) ? data.wallet.rewards : [];
+      document.querySelector("#rewards").innerHTML = rewards.map((reward) => `<article class="reward"><span class="reward-icon" aria-hidden="true">✦</span><div><strong>${escapeHtml(reward.name)}</strong><span>${Number(reward.points_cost).toLocaleString()} points</span></div><span class="pill">Ready</span></article>`).join("") || "<p>No rewards are ready yet.</p>";
+      const marketing = data.account?.consents?.find((entry) => entry.purpose === "marketing");
+      const consent = document.querySelector("#consent");
+      consent.textContent = marketing?.status === "granted" ? "On" : "Off";
+      consent.className = `status ${marketing?.status === "granted" ? "on" : ""}`;
+    }
+    logout.addEventListener("click", async () => { await fetch("/auth/logout", {method:"POST"}); location.reload(); });
+    load().catch(() => {});
+  </script>
+</body>
+</html>

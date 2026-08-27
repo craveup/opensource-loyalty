@@ -44,7 +44,9 @@
     "test:visual": "node scripts/verify-rendered-surfaces.mjs",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -b --pretty false && npm run typecheck --workspace @loyalty-interchange/admin",
-    "verify": "npm run generate && npm run typecheck && npm run test:coverage && npm run test:examples && npm run build && npm run test:packages && npm run docs:check && npm run launch:check"
+    "verify": "npm run generate && npm run typecheck && npm run test:coverage && npm run test:examples && npm run build && npm run test:packages && npm run docs:check && npm run launch:check",
+    "wallet": "npm run build --workspace @loyalty-interchange/wallet && node apps/wallet/dist/cli.js",
+    "wallet:dev": "tsx apps/wallet/src/cli.ts"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",
