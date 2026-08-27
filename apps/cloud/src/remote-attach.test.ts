@@ -42,8 +42,26 @@ describe("RemoteEnvironmentAttacher", () => {
   });
 
   it("allows http on localhost", async () => {
-    const r = await attacher(happyHost).validate({ endpoint_url: "http://127.0.0.1:13210", api_key: GOOD, program_id: "demo-rewards" });
+    const r = await new RemoteEnvironmentAttacher({
+      fetch: stubFetch(happyHost),
+      allowPrivateNetworks: true
+    }).validate({ endpoint_url: "http://127.0.0.1:13210", api_key: GOOD, program_id: "demo-rewards" });
     expect(r).toMatchObject({ ok: true });
+  });
+
+  it("rejects loopback and private destinations by default", async () => {
+    const loopback = await attacher(happyHost).validate({
+      endpoint_url: "http://127.0.0.1:13210",
+      api_key: GOOD,
+      program_id: "demo-rewards"
+    });
+    const privateNetwork = await attacher(happyHost).validate({
+      endpoint_url: "https://10.0.0.5",
+      api_key: GOOD,
+      program_id: "demo-rewards"
+    });
+    expect(loopback).toMatchObject({ ok: false, code: "unsafe_destination" });
+    expect(privateNetwork).toMatchObject({ ok: false, code: "unsafe_destination" });
   });
 
   it("reports health_unreachable when /health is not ok", async () => {

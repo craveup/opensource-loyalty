@@ -44,11 +44,19 @@ Programmatic embedders can pass subscriptions directly:
 ```ts
 import { createDemoPlatform } from "@loyalty-interchange/server";
 
-const platform = createDemoPlatform({
+const platform = await createDemoPlatform({
   databasePath: "./data/reference.db",
   webhooks: [{ url: "https://receiver.example/hooks", secret: "your-shared-secret" }]
 });
 ```
+
+Webhook destinations must use public HTTPS by default. The dispatcher rejects
+credentials, fragments, loopback/private/reserved addresses, and DNS answers
+that include a non-public address; delivery also refuses redirects. For a
+loopback or private receiver in local development only, set
+`LIP_ALLOW_PRIVATE_WEBHOOK_NETWORKS=true` or pass
+`allowPrivateWebhookNetworks: true`. Never enable that escape hatch on a
+networked deployment.
 
 Subscriptions can also be added, deleted, and rotated at runtime from the
 Admin **API** view. Runtime subscriptions persist in SQLite and take precedence
@@ -65,6 +73,8 @@ current retry cycle, `pendingDeliveries()` for the durable queue, and
 
 - Each event is POSTed as JSON with `LIP-Webhook-Timestamp` and
   `LIP-Webhook-Signature: v1=<base64url>` headers.
+- The destination is checked again before every attempt, and redirects are not
+  followed.
 - Failed deliveries (network errors or non-2xx responses) are retried with
   exponential backoff, three attempts per process run by default.
 - Pending deliveries are stored in SQLite under a separate webhook-outbox

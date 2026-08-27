@@ -21,8 +21,9 @@ const databasePath = resolve(process.env.LIP_DATABASE_PATH ?? ".lip/reference.db
 const databaseUrl = process.env.LIP_DATABASE_URL;
 const rateLimit = positiveIntegerEnvironment("LIP_RATE_LIMIT_REQUESTS", 120);
 const rateWindowMs = positiveIntegerEnvironment("LIP_RATE_LIMIT_WINDOW_MS", 60_000);
+const allowPrivateWebhookNetworks = process.env.LIP_ALLOW_PRIVATE_WEBHOOK_NETWORKS === "true";
 // Postgres mode means a shared/cloud deployment: refuse to boot with the
-// local development default or a short key (PLA-416 static-key hygiene).
+// local development default or a short key.
 if (databaseUrl) assertStrongApiKey(apiKey);
 const platform = databaseUrl
   ? await createPostgresProtocolPlatform({
@@ -30,6 +31,7 @@ const platform = databaseUrl
       ...(process.env.LIP_TENANT_ID ? { tenantId: process.env.LIP_TENANT_ID } : {}),
       seed: process.env.LIP_SEED_DEMO !== "false",
       reset: process.env.LIP_RESET === "true",
+      ...(allowPrivateWebhookNetworks ? { allowPrivateWebhookNetworks: true } : {}),
       telemetry: {
         enabled: process.env.LIP_TELEMETRY_ENABLED === "true",
         ...(process.env.LIP_TELEMETRY_ENDPOINT
@@ -41,6 +43,7 @@ const platform = databaseUrl
       databasePath,
       seed: process.env.LIP_SEED_DEMO !== "false",
       reset: process.env.LIP_RESET === "true",
+      ...(allowPrivateWebhookNetworks ? { allowPrivateWebhookNetworks: true } : {}),
       telemetry: {
         enabled: process.env.LIP_TELEMETRY_ENABLED === "true",
         ...(process.env.LIP_TELEMETRY_ENDPOINT

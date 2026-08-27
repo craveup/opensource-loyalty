@@ -1,6 +1,6 @@
 # Public Sandbox cutover target for Acme Asian Grill.
 # Render builds this from the opensource-loyalty checkout (public repo).
-FROM node:22-alpine AS build
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS build
 
 WORKDIR /app
 COPY . .
@@ -8,7 +8,7 @@ RUN npm ci \
   && npm run build \
   && npm prune --omit=dev --workspaces --include-workspace-root
 
-FROM node:22-alpine AS runtime
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS runtime
 
 WORKDIR /app
 ENV HOST=0.0.0.0

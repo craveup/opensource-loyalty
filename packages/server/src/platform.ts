@@ -47,6 +47,8 @@ export interface DemoPlatformOptions {
    * optionally LIP_WEBHOOK_EVENTS, a comma-separated event-type allowlist).
    */
   webhooks?: WebhookSubscription[];
+  /** Development-only opt-in for loopback/private webhook receivers. */
+  allowPrivateWebhookNetworks?: boolean;
   telemetry?: {
     enabled?: boolean;
     endpoint?: string;
@@ -103,6 +105,8 @@ export interface PostgresProtocolPlatformOptions {
   adminAssetRoot?: string;
   program?: ProgramDefinition;
   webhooks?: WebhookSubscription[];
+  /** Development-only opt-in for loopback/private webhook receivers. */
+  allowPrivateWebhookNetworks?: boolean;
   telemetry?: {
     enabled?: boolean;
     endpoint?: string;
@@ -200,6 +204,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
     if (options.reset) await webhookHistory.clear();
     const dispatcher = await WebhookDispatcher.create({
       subscriptions,
+      ...(options.allowPrivateWebhookNetworks ? { allowPrivateNetworks: true } : {}),
       outbox: webhookOutbox,
       historyStore: webhookHistory,
       onSubscriptionsChanged: (next) => webhookSubscriptionStore!.save(next),
@@ -428,6 +433,7 @@ export async function createPostgresProtocolPlatform(
     const journal = subscriptionJournal;
     const dispatcher = await WebhookDispatcher.create({
       subscriptions,
+      ...(options.allowPrivateWebhookNetworks ? { allowPrivateNetworks: true } : {}),
       outbox: outboxJournal,
       historyStore: historyJournal,
       onSubscriptionsChanged: (next) => journal.save(next),
@@ -467,7 +473,7 @@ export async function createPostgresProtocolPlatform(
     // executeEngineOperation, so the services' direct persist hook is a no-op.
     const persistEngine = (): void => undefined;
 
-    // True read path (PLA-434): load the latest committed state without the
+    // True read path (lock-free reporting): load the latest committed state without the
     // per-tenant advisory lock or the mutation queue, hydrate a throwaway
     // engine, and run the read against it. Nothing is saved, so side effects
     // computed during the read (e.g. reservation expiry inside

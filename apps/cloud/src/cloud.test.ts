@@ -14,6 +14,7 @@ import { OidcAuthenticator } from "./auth.js";
 import { MemoryCloudRepository } from "./memory-repository.js";
 import { CloudOperatorService } from "./operator-service.js";
 import { PostgresCloudRepository } from "./postgres-repository.js";
+import { RemoteEnvironmentAttacher } from "./remote-attach.js";
 import { CloudProvisioningWorker } from "./provisioning.js";
 import { CloudControlPlane, CloudError } from "./service.js";
 import { startCloudServer } from "./server.js";
@@ -29,7 +30,7 @@ const owner = {
 const OIDC_AUDIENCE = "lip-cloud";
 
 /**
- * A verified-identity harness. Since PLA-442 the shared key cannot mint a
+ * A verified-identity harness. With the operator credential model, the shared key cannot mint a
  * principal for a caller-chosen subject, so tests that need several distinct
  * identities issue a real signed token per identity.
  */
@@ -60,7 +61,8 @@ async function fixture() {
   const cloud = new CloudControlPlane({
     repository,
     regions: ["us-east-1", "eu-west-1"],
-    now: () => new Date(fixedNow)
+    now: () => new Date(fixedNow),
+    attacher: new RemoteEnvironmentAttacher({ allowPrivateNetworks: true })
   });
   const dashboard = await cloud.createOrganization(owner, {
     name: "Acme Restaurants",
@@ -443,7 +445,8 @@ describe("Cloud control plane", () => {
     const repository = new MemoryCloudRepository();
     const cloud = new CloudControlPlane({
       repository,
-      now: () => new Date(fixedNow)
+      now: () => new Date(fixedNow),
+      attacher: new RemoteEnvironmentAttacher({ allowPrivateNetworks: true })
     });
     const operators = new CloudOperatorService({ repository });
     const running = await startCloudServer(cloud, {
@@ -451,7 +454,7 @@ describe("Cloud control plane", () => {
       operators,
       port: 0
     });
-    // PLA-442: the attach route is driven by a platform-admin operator key,
+    // The attach route is driven by a platform-admin operator key,
     // which carries its own verified identity and gets virtual owner scope on
     // every organization — no membership wiring or subject header needed.
     const admin = await operators.createOperator(

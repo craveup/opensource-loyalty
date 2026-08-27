@@ -1,5 +1,11 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import type { LoyaltyEvent, LoyaltyEventType } from "@loyalty-interchange/protocol";
+import {
+  assertSafeOutboundDestination,
+  assertSafeOutboundUrl,
+  resolveHostAddresses,
+  type OutboundAddressResolver
+} from "./outbound-url.js";
 
 export interface WebhookSubscription {
   subscription_id?: string;
@@ -103,6 +109,10 @@ export interface WebhookDispatcherOptions {
   /** How many completed delivery records to retain. Defaults to 200. */
   historyLimit?: number;
   fetch?: typeof globalThis.fetch;
+  /** Trusted DNS resolver override for tests or a network-pinned transport. */
+  resolve?: OutboundAddressResolver;
+  /** Development-only escape hatch for loopback/private webhook receivers. */
+  allowPrivateNetworks?: boolean;
   now?: () => Date;
   onError?: (message: string) => void;
   onSubscriptionsChanged?: (subscriptions: readonly ManagedWebhookSubscription[]) => void | Promise<void>;
@@ -162,6 +172,8 @@ export class WebhookDispatcher {
   private readonly timeoutMs: number;
   private readonly historyLimit: number;
   private readonly fetchImpl: typeof globalThis.fetch;
+  private readonly resolve: OutboundAddressResolver | false;
+  private readonly allowPrivateNetworks: boolean;
   private readonly now: () => Date;
   private readonly onError: ((message: string) => void) | undefined;
   private readonly onSubscriptionsChanged:
@@ -174,8 +186,12 @@ export class WebhookDispatcher {
   private persistTail: Promise<void> = Promise.resolve();
 
   private constructor(options: WebhookDispatcherOptions) {
+    this.allowPrivateNetworks = options.allowPrivateNetworks === true;
     this.subscriptions = options.subscriptions.map((subscription) => ({
       ...subscription,
+      url: assertSafeOutboundUrl(subscription.url, {
+        allowPrivateNetworks: this.allowPrivateNetworks
+      }).toString(),
       subscription_id: subscription.subscription_id ?? `webhook_${deliveryId({
         source: "subscription",
         id: subscription.url
@@ -187,6 +203,7 @@ export class WebhookDispatcher {
     this.timeoutMs = options.timeoutMs ?? 5000;
     this.historyLimit = options.historyLimit ?? 200;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
+    this.resolve = options.resolve ?? (options.fetch ? false : resolveHostAddresses);
     this.now = options.now ?? (() => new Date());
     this.onError = options.onError;
     this.onSubscriptionsChanged = options.onSubscriptionsChanged;
@@ -342,10 +359,9 @@ export class WebhookDispatcher {
   }
 
   public upsertSubscription(input: WebhookSubscription): WebhookSubscriptionSummary {
-    const parsed = new URL(input.url);
-    if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
-      throw new Error("Webhook URL must be an HTTP(S) URL without embedded credentials");
-    }
+    const parsed = assertSafeOutboundUrl(input.url, {
+      allowPrivateNetworks: this.allowPrivateNetworks
+    });
     if (input.secret.length < 16) throw new Error("Webhook secret must contain at least 16 characters");
     const subscription: ManagedWebhookSubscription = {
       subscription_id: input.subscription_id ?? `webhook_${randomUUID()}`,
@@ -512,6 +528,10 @@ export class WebhookDispatcher {
       }) !== "active") return;
       const timestamp = Math.floor(this.now().getTime() / 1000);
       try {
+        await assertSafeOutboundDestination(subscription.url, {
+          allowPrivateNetworks: this.allowPrivateNetworks,
+          resolver: this.resolve
+        });
         const response = await this.fetchImpl(subscription.url, {
           method: "POST",
           headers: {
@@ -520,6 +540,7 @@ export class WebhookDispatcher {
             "lip-webhook-signature": signWebhookPayload(subscription.secret, timestamp, body)
           },
           body,
+          redirect: "error",
           signal: AbortSignal.timeout(timeoutMs)
         });
         if (response.ok) {
