@@ -107,7 +107,7 @@ opaque loyalty member.
 - [x] Final landing desktop/mobile render and interaction check pass.
 - [x] Public-safety audit passes for tracked files, Git history, dependencies,
       CI, Docker, auth, webhooks, SSRF, logs, telemetry, docs, and generated files.
-- [ ] All logical commits are pushed and remote CI passes on the exact branch.
+- [x] All logical commits are pushed and remote CI passes on the exact branch.
 
 Verification evidence captured on 2026-08-27:
 
@@ -126,9 +126,12 @@ Verification evidence captured on 2026-08-27:
 - Generated protocol/product OpenAPI and SDK artifacts showed no drift;
   Mintlify validation and link/anchor/redirect checks passed; the release
   manifest digest check passed.
+- GitHub Actions run `33111192245` passed the required `verify` job on pushed
+  commit `f34c89b`, including its independent zero-skipped-tests assertion.
 
-The unchecked remote gate is the remaining repository work in this branch. It
-must be updated only with direct evidence from the pushed branch.
+All repository verification gates for this implementation branch have direct
+evidence. The unchecked items below require independent users, production
+operations, provider authority, or permissioned partner work.
 
 ## External validation gates
 
