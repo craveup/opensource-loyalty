@@ -102,15 +102,33 @@ opaque loyalty member.
 - [x] Desktop, tablet, and mobile Admin and wallet renders have been inspected
       with synthetic data; interaction testing covered segment preview and a
       campaign run with deterministic holdout.
-- [ ] Full `npm test` and `npm run verify` pass on the combined implementation.
-- [ ] Docker image build and Compose smoke test pass on the combined implementation.
-- [ ] Final landing desktop/mobile render and interaction check pass.
-- [ ] Public-safety audit passes for tracked files, Git history, dependencies,
+- [x] Full `npm test` and `npm run verify` pass on the combined implementation.
+- [x] Docker image build and Compose smoke test pass on the combined implementation.
+- [x] Final landing desktop/mobile render and interaction check pass.
+- [x] Public-safety audit passes for tracked files, Git history, dependencies,
       CI, Docker, auth, webhooks, SSRF, logs, telemetry, docs, and generated files.
 - [ ] All logical commits are pushed and remote CI passes on the exact branch.
 
-The unchecked repository gates are the remaining work in this implementation
-branch. They must be updated only with direct evidence.
+Verification evidence captured on 2026-08-27:
+
+- Node 22.22.0 `npm run verify`, backed by disposable PostgreSQL, passed 51
+  files / 353 tests with zero skips; statement coverage was 86.27% and line
+  coverage was 87.73%.
+- The digest-pinned Docker build completed with zero npm vulnerabilities. Fresh
+  API and wallet containers became healthy; Admin and wallet returned HTTP 200.
+- Rendered QA passed at 1,440 px and 390 px with no horizontal overflow. The
+  seven-step walkthrough completed through refund adjustment, and Admin
+  authenticated into all six navigation areas.
+- The tracked-file public-safety gate passed 456 files. A redacted gitleaks scan
+  covered 128 commits; all 20 matches were reviewed placeholder/example
+  findings and no implementation commit was flagged. A live production npm
+  audit reported zero vulnerabilities across 182 production dependencies.
+- Generated protocol/product OpenAPI and SDK artifacts showed no drift;
+  Mintlify validation and link/anchor/redirect checks passed; the release
+  manifest digest check passed.
+
+The unchecked remote gate is the remaining repository work in this branch. It
+must be updated only with direct evidence from the pushed branch.
 
 ## External validation gates
 
