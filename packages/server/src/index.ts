@@ -1,6 +1,7 @@
 export * from "./demo.js";
 export * from "./access-control.js";
 export * from "./campaigns.js";
+export * from "./customer-data.js";
 export * from "./evented-engine.js";
 export * from "./engagement.js";
 export * from "./location-reports.js";

@@ -58,6 +58,7 @@ export async function startMockServer(options: MockOptions): Promise<RunningServ
       storage: platform.store.status,
       programs: platform.programs,
       campaigns: platform.campaigns,
+      customerData: platform.customerData,
       memberships: platform.memberships,
       access: platform.access,
       engagement: platform.engagement,

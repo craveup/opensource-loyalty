@@ -17,6 +17,7 @@ import {
 } from "@loyalty-interchange/storage-postgres";
 import { createDemoProgram, seedDemoData, seedDemoLocations } from "./demo.js";
 import { CampaignService, type CampaignState } from "./campaigns.js";
+import { CustomerDataService, type CustomerDataState } from "./customer-data.js";
 import { MembershipService, type MembershipAuditState } from "./memberships.js";
 import { AccessControlService, type AccessControlState } from "./access-control.js";
 import { EventedLoyaltyEngine } from "./evented-engine.js";
@@ -54,6 +55,7 @@ export interface DemoPlatform {
   webhooks: WebhookDispatcher;
   programs: ProgramManagementService;
   campaigns: CampaignService;
+  customerData: CustomerDataService;
   memberships: MembershipService;
   access: AccessControlService;
   engagement: EngagementService;
@@ -68,6 +70,7 @@ export interface PostgresProtocolPlatform {
   webhooks: WebhookDispatcher;
   programs: ProgramManagementService;
   campaigns: CampaignService;
+  customerData: CustomerDataService;
   memberships: MembershipService;
   access: AccessControlService;
   engagement: EngagementService;
@@ -141,6 +144,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
   let webhookHistory: WebhookHistoryJournal | undefined;
   let webhookSubscriptionStore: WebhookSubscriptionJournal | undefined;
   let campaigns: CampaignService | undefined;
+  let customerData: CustomerDataService | undefined;
   let memberships: MembershipService | undefined;
   let access: AccessControlService | undefined;
   let engagement: EngagementService | undefined;
@@ -197,6 +201,15 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
     });
     if (!state && options.seed !== false && !options.program) seedDemoData(engine);
     armed = true;
+    customerData = await CustomerDataService.create({
+      store: new AsyncSqliteStateStore<CustomerDataState>({
+        path: options.databasePath,
+        key: `${program.program_id}:customer-data`
+      }),
+      engine,
+      persistEngine: (nextState) => store.save(nextState),
+      ...(options.reset ? { reset: true } : {})
+    });
     campaigns = await CampaignService.create({
       store: new AsyncSqliteStateStore<CampaignState>({
         path: options.databasePath,
@@ -204,6 +217,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
       }),
       engine,
       persistEngine: (nextState) => store.save(nextState),
+      customerFacts: (memberId) => customerData!.factsForMember(memberId),
       schedulerIntervalMs: 30_000,
       ...(options.reset ? { reset: true } : {})
     });
@@ -268,12 +282,14 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
       webhooks: dispatcher,
       programs,
       campaigns,
+      customerData,
       memberships,
       access,
       engagement,
       locations,
       close: async () => {
         await campaigns?.close();
+        await customerData?.close();
         await memberships?.close();
         await access?.close();
         await engagement?.close();
@@ -298,6 +314,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
     await webhookHistory?.close();
     await webhookSubscriptionStore?.close();
     await campaigns?.close();
+    await customerData?.close();
     await memberships?.close();
     await access?.close();
     await engagement?.close();
@@ -323,6 +340,7 @@ export async function createPostgresProtocolPlatform(
   let outboxJournal: WebhookOutboxJournal | undefined;
   let historyJournal: WebhookHistoryJournal | undefined;
   let campaigns: CampaignService | undefined;
+  let customerData: CustomerDataService | undefined;
   let memberships: MembershipService | undefined;
   let access: AccessControlService | undefined;
   let engagement: EngagementService | undefined;
@@ -455,11 +473,19 @@ export async function createPostgresProtocolPlatform(
       return read(scratch);
     };
 
+    customerData = await CustomerDataService.create({
+      store: stateStore<CustomerDataState>("customer-data"),
+      engine,
+      persistEngine,
+      executeEngineOperation,
+      ...(options.reset ? { reset: true } : {})
+    });
     campaigns = await CampaignService.create({
       store: stateStore<CampaignState>("campaigns"),
       engine,
       persistEngine,
       executeEngineOperation,
+      customerFacts: (memberId) => customerData!.factsForMember(memberId),
       schedulerIntervalMs: 30_000,
       ...(options.reset ? { reset: true } : {})
     });
@@ -516,6 +542,7 @@ export async function createPostgresProtocolPlatform(
       webhooks: dispatcher,
       programs,
       campaigns,
+      customerData,
       memberships,
       access,
       engagement,
@@ -524,6 +551,7 @@ export async function createPostgresProtocolPlatform(
       readEngineSnapshot,
       close: async () => {
         await campaigns?.close();
+        await customerData?.close();
         await memberships?.close();
         await access?.close();
         await engagement?.close();
@@ -539,6 +567,7 @@ export async function createPostgresProtocolPlatform(
     };
   } catch (error) {
     await campaigns?.close();
+    await customerData?.close();
     await memberships?.close();
     await access?.close();
     await engagement?.close();

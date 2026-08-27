@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   EngineError,
   type LoyaltyEngine,
@@ -6,18 +6,35 @@ import {
   type ProgramDefinition
 } from "@loyalty-interchange/reference";
 import type { AsyncStateStore } from "@loyalty-interchange/storage";
+import type { CustomerSegmentFacts } from "./customer-data.js";
+
+export interface SegmentEventRule {
+  type: string;
+  minimum_count?: number;
+  within_days?: number;
+  minimum_value_minor_units?: number;
+}
+
+export interface SegmentRules {
+  statuses?: Array<"active" | "suspended" | "closed">;
+  tier_ids?: string[];
+  minimum_available_balance?: number;
+  attributes?: Record<string, unknown>;
+  profile?: {
+    has_email?: boolean;
+    has_phone?: boolean;
+    marketing_consent?: boolean;
+    attributes?: Record<string, unknown>;
+  };
+  event?: SegmentEventRule;
+}
 
 export interface StaticSegment {
   segment_id: string;
   name: string;
   mode: "static" | "dynamic";
   member_ids: string[];
-  rules?: {
-    statuses?: Array<"active" | "suspended" | "closed">;
-    tier_ids?: string[];
-    minimum_available_balance?: number;
-    attributes?: Record<string, unknown>;
-  };
+  rules?: SegmentRules;
   created_at: string;
   updated_at: string;
 }
@@ -27,7 +44,9 @@ export interface RewardCampaign {
   name: string;
   reward_id: string;
   segment_id: string;
-  status: "draft" | "scheduled" | "completed" | "expired";
+  status: "draft" | "active" | "paused" | "scheduled" | "completed" | "expired";
+  holdout_percent?: number;
+  attribution_window_days?: number;
   issued_reward_ttl_seconds?: number;
   starts_at?: string;
   ends_at?: string;
@@ -45,10 +64,12 @@ export interface CampaignRun {
   issued: number;
   skipped: number;
   failed: number;
+  holdout: number;
   outcomes: Array<{
     member_id: string;
     issued_reward_id: string;
     status: "issued" | "skipped" | "failed";
+    cohort?: "targeted" | "holdout";
     error?: string;
   }>;
 }
@@ -74,6 +95,7 @@ export interface CampaignServiceOptions {
   executeEngineOperation?: <T>(operation: () => T | Promise<T>) => Promise<T>;
   reset?: boolean;
   schedulerIntervalMs?: number | false;
+  customerFacts?: (memberId: string) => CustomerSegmentFacts;
 }
 
 function timestamp(): string {
@@ -92,6 +114,7 @@ export class CampaignService {
   private readonly persistEngine: (state: LoyaltyEngineState) => void;
   private readonly executeEngineOperation: <T>(operation: () => T | Promise<T>) => Promise<T>;
   private readonly scheduler: NodeJS.Timeout | undefined;
+  private readonly customerFacts: ((memberId: string) => CustomerSegmentFacts) | undefined;
   private state: CampaignState;
   private revision: number;
 
@@ -105,6 +128,7 @@ export class CampaignService {
     this.persistEngine = options.persistEngine;
     this.executeEngineOperation =
       options.executeEngineOperation ?? (async (operation) => operation());
+    this.customerFacts = options.customerFacts;
     this.state = state;
     this.revision = revision;
     this.scheduler = options.schedulerIntervalMs
@@ -158,6 +182,19 @@ export class CampaignService {
       throw new EngineError("not_found", `Segment ${segmentId} was not found`, 404);
     }
     return this.resolveSegmentMembers(segment);
+  }
+
+  public previewSegment(segmentId: string, sampleSize = 25): {
+    segment_id: string;
+    estimated_size: number;
+    sample_member_ids: string[];
+  } {
+    const members = this.membersForSegment(segmentId);
+    return {
+      segment_id: segmentId,
+      estimated_size: members.length,
+      sample_member_ids: members.slice(0, Math.max(1, Math.min(sampleSize, 100)))
+    };
   }
 
   public async upsertSegment(input: {
@@ -226,6 +263,8 @@ export class CampaignService {
     reward_id: string;
     segment_id: string;
     issued_reward_ttl_seconds?: number;
+    holdout_percent?: number;
+    attribution_window_days?: number;
     starts_at?: string;
     ends_at?: string;
   }): Promise<RewardCampaign> {
@@ -245,6 +284,28 @@ export class CampaignService {
       throw new EngineError(
         "validation_failed",
         "Issued reward TTL must be an integer of at least 60 seconds",
+        422
+      );
+    }
+    if (
+      input.holdout_percent !== undefined &&
+      (!Number.isInteger(input.holdout_percent) ||
+        input.holdout_percent < 0 || input.holdout_percent > 90)
+    ) {
+      throw new EngineError(
+        "validation_failed",
+        "Campaign holdout percent must be an integer between 0 and 90",
+        422
+      );
+    }
+    if (
+      input.attribution_window_days !== undefined &&
+      (!Number.isInteger(input.attribution_window_days) ||
+        input.attribution_window_days < 1 || input.attribution_window_days > 90)
+    ) {
+      throw new EngineError(
+        "validation_failed",
+        "Attribution window must be an integer between 1 and 90 days",
         422
       );
     }
@@ -275,6 +336,16 @@ export class CampaignService {
       ...(input.issued_reward_ttl_seconds
         ? { issued_reward_ttl_seconds: input.issued_reward_ttl_seconds }
         : {}),
+      ...(input.holdout_percent !== undefined
+        ? { holdout_percent: input.holdout_percent }
+        : existing?.holdout_percent !== undefined
+          ? { holdout_percent: existing.holdout_percent }
+          : {}),
+      ...(input.attribution_window_days !== undefined
+        ? { attribution_window_days: input.attribution_window_days }
+        : existing?.attribution_window_days !== undefined
+          ? { attribution_window_days: existing.attribution_window_days }
+          : { attribution_window_days: 7 }),
       ...(input.starts_at ? { starts_at: new Date(startsAt!).toISOString() } : {}),
       ...(input.ends_at ? { ends_at: new Date(endsAt!).toISOString() } : {})
     };
@@ -301,11 +372,31 @@ export class CampaignService {
     await this.save();
   }
 
+  public async setCampaignStatus(
+    campaignId: string,
+    status: "active" | "paused"
+  ): Promise<RewardCampaign> {
+    const campaign = this.state.campaigns.find((candidate) =>
+      candidate.campaign_id === campaignId
+    );
+    if (!campaign) throw new EngineError("not_found", "Campaign was not found", 404);
+    if (["completed", "expired"].includes(campaign.status)) {
+      throw new EngineError("conflict", "Completed or expired campaigns cannot be changed", 409);
+    }
+    const next = { ...campaign, status, updated_at: timestamp() };
+    this.replaceCampaign(next);
+    await this.save();
+    return structuredClone(next);
+  }
+
   public async runCampaign(campaignId: string, actor: string): Promise<CampaignRun> {
     const campaign = this.state.campaigns.find((candidate) =>
       candidate.campaign_id === campaignId
     );
     if (!campaign) throw new EngineError("not_found", "Campaign was not found", 404);
+    if (campaign.status === "paused") {
+      throw new EngineError("conflict", "Campaign is paused", 409);
+    }
     if (campaign.ends_at && Date.parse(campaign.ends_at) <= Date.now()) {
       this.replaceCampaign({ ...campaign, status: "expired", updated_at: timestamp() });
       await this.save();
@@ -321,12 +412,26 @@ export class CampaignService {
     await this.executeEngineOperation(() => {
       for (const memberId of this.resolveSegmentMembers(segment)) {
         const issuedRewardId = `${campaign.campaign_id}:${memberId}`;
+        if (this.inHoldout(campaign, memberId)) {
+          outcomes.push({
+            member_id: memberId,
+            issued_reward_id: issuedRewardId,
+            status: "skipped",
+            cohort: "holdout"
+          });
+          continue;
+        }
         try {
           const existing = this.engine.inspectAdmin().issued_rewards.find((reward) =>
             reward.issued_reward_id === issuedRewardId
           );
           if (existing) {
-            outcomes.push({ member_id: memberId, issued_reward_id: issuedRewardId, status: "skipped" });
+            outcomes.push({
+              member_id: memberId,
+              issued_reward_id: issuedRewardId,
+              status: "skipped",
+              cohort: "targeted"
+            });
             continue;
           }
           const occurredAt = timestamp();
@@ -351,12 +456,18 @@ export class CampaignService {
                 }
               : {})
           });
-          outcomes.push({ member_id: memberId, issued_reward_id: issuedRewardId, status: "issued" });
+          outcomes.push({
+            member_id: memberId,
+            issued_reward_id: issuedRewardId,
+            status: "issued",
+            cohort: "targeted"
+          });
         } catch (error) {
           outcomes.push({
             member_id: memberId,
             issued_reward_id: issuedRewardId,
             status: "failed",
+            cohort: "targeted",
             error: error instanceof Error ? error.message : String(error)
           });
         }
@@ -373,6 +484,7 @@ export class CampaignService {
       issued: outcomes.filter(({ status }) => status === "issued").length,
       skipped: outcomes.filter(({ status }) => status === "skipped").length,
       failed: outcomes.filter(({ status }) => status === "failed").length,
+      holdout: outcomes.filter(({ cohort }) => cohort === "holdout").length,
       outcomes
     };
     this.state = {
@@ -468,8 +580,43 @@ export class CampaignService {
         )) {
           return false;
         }
+        if (rules.profile || rules.event) {
+          const facts = this.customerFacts?.(member.member_id);
+          if (!facts) return false;
+          if (rules.profile?.has_email !== undefined &&
+            Boolean(facts.profile?.email) !== rules.profile.has_email) return false;
+          if (rules.profile?.has_phone !== undefined &&
+            Boolean(facts.profile?.phone) !== rules.profile.has_phone) return false;
+          if (rules.profile?.marketing_consent !== undefined &&
+            Boolean(facts.profile?.consent.marketing) !== rules.profile.marketing_consent) return false;
+          if (rules.profile?.attributes && Object.entries(rules.profile.attributes).some(
+            ([key, value]) => JSON.stringify(facts.profile?.attributes[key]) !== JSON.stringify(value)
+          )) return false;
+          if (rules.event) {
+            const since = rules.event.within_days === undefined
+              ? undefined
+              : Date.now() - rules.event.within_days * 86_400_000;
+            const matching = facts.events.filter((event) =>
+              event.type === rules.event!.type &&
+              (since === undefined || Date.parse(event.occurred_at) >= since) &&
+              (rules.event!.minimum_value_minor_units === undefined ||
+                (event.value_minor_units ?? 0) >= rules.event!.minimum_value_minor_units)
+            );
+            if (matching.length < (rules.event.minimum_count ?? 1)) return false;
+          }
+        }
         return true;
       })
       .map(({ member }) => member.member_id);
+  }
+
+  private inHoldout(campaign: RewardCampaign, memberId: string): boolean {
+    const percent = campaign.holdout_percent ?? 0;
+    if (percent === 0) return false;
+    const bucket = createHash("sha256")
+      .update(`${campaign.campaign_id}:${memberId}`)
+      .digest()
+      .readUInt32BE(0) % 100;
+    return bucket < percent;
   }
 }

@@ -109,6 +109,7 @@ const running = await startReferenceServer(platform.engine, {
       ? {
           programs: platform.programs,
           campaigns: platform.campaigns,
+          customerData: platform.customerData,
           memberships: platform.memberships,
           access: platform.access,
           engagement: platform.engagement,
