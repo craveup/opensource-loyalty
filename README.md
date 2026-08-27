@@ -124,7 +124,7 @@ docker compose up --build
 The startup log prints the Admin URL and the Admin/API key. With the default Compose environment, the key is:
 
 ```text
-lip-dev-key
+lip-local-compose-key-change-me
 ```
 
 Open the Admin dashboard at [http://127.0.0.1:3210/admin/](http://127.0.0.1:3210/admin/) and sign in with that key.
@@ -139,7 +139,7 @@ Then verify the API in a second terminal:
 ```bash
 curl http://127.0.0.1:3210/health
 curl http://127.0.0.1:3210/lip/v1/capabilities \
-  -H 'Authorization: Bearer lip-dev-key'
+  -H 'Authorization: Bearer lip-local-compose-key-change-me'
 ```
 
 ### Installation from Source 🛠️

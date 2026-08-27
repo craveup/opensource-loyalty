@@ -12,6 +12,8 @@ This starts API/Admin on `3210`, the synthetic wallet on `3230`, and SQLite in
 the `lip-data` volume. Before customer traffic, replace the development key,
 disable demo seeding and wallet demo mode, configure OIDC, terminate TLS, move
 multi-instance workloads to Postgres, and rehearse backup/restore and rollback.
+Published ports bind to host loopback by default; the known Compose evaluation
+key must never be exposed on a network.
 
 <Warning>
 Keep API, webhook, OIDC, database, and encryption credentials in a secret

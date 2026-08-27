@@ -42,7 +42,8 @@ docker compose up --build
 
 The Compose service stores its SQLite database in the named `lip-data` volume.
 Use `docker compose logs lip` to see the Admin/API key after the container is
-running.
+running. Its ports bind to host loopback and its local-only key defaults to
+`lip-local-compose-key-change-me`; replace that key before any network exposure.
 
 ## 2. Check the environment
 

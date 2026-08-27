@@ -59,7 +59,7 @@ Docker-only users can run:
 ```sh
 curl http://127.0.0.1:3210/health
 curl http://127.0.0.1:3210/lip/v1/capabilities \
-  -H 'Authorization: Bearer lip-dev-key'
+  -H 'Authorization: Bearer lip-local-compose-key-change-me'
 ```
 
 ## Using LIP with AI

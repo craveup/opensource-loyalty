@@ -23,6 +23,7 @@ ENV LIP_DATABASE_PATH=/data/reference.db
 COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/cloud ./apps/cloud
+COPY --from=build /app/apps/wallet ./apps/wallet
 COPY --from=build /app/packages ./packages
 RUN mkdir -p /data && chown -R node:node /app /data
 

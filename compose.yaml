@@ -4,7 +4,7 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 3210
-      LIP_API_KEY: ${LIP_API_KEY:-lip-dev-key}
+      LIP_API_KEY: ${LIP_API_KEY:-lip-local-compose-key-change-me}
       LIP_DATABASE_PATH: /data/reference.db
       LIP_SEED_DEMO: ${LIP_SEED_DEMO:-true}
       LIP_RATE_LIMIT_REQUESTS: ${LIP_RATE_LIMIT_REQUESTS:-120}
@@ -13,7 +13,7 @@ services:
       LIP_TELEMETRY_ENABLED: ${LIP_TELEMETRY_ENABLED:-false}
       LIP_TELEMETRY_ENDPOINT: ${LIP_TELEMETRY_ENDPOINT:-}
     ports:
-      - "${LIP_PORT:-3210}:3210"
+      - "127.0.0.1:${LIP_PORT:-3210}:3210"
     volumes:
       - lip-data:/data
     restart: unless-stopped
@@ -37,7 +37,7 @@ services:
       WALLET_DEMO: ${WALLET_DEMO:-true}
       HEALTH_PORT: 3230
     ports:
-      - "${WALLET_PORT:-3230}:3230"
+      - "127.0.0.1:${WALLET_PORT:-3230}:3230"
     restart: unless-stopped
 
   postgres:
@@ -64,7 +64,7 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 3210
-      LIP_API_KEY: ${LIP_API_KEY:-lip-dev-key}
+      LIP_API_KEY: ${LIP_API_KEY:-lip-local-compose-key-change-me}
       LIP_DATABASE_URL: postgres://loyalty:${LIP_POSTGRES_PASSWORD:-lip-local-password}@postgres:5432/loyalty
       LIP_TENANT_ID: ${LIP_TENANT_ID:-demo-foodservice}
       LIP_SEED_DEMO: ${LIP_SEED_DEMO:-true}
@@ -74,7 +74,7 @@ services:
       LIP_TELEMETRY_ENABLED: ${LIP_TELEMETRY_ENABLED:-false}
       LIP_TELEMETRY_ENDPOINT: ${LIP_TELEMETRY_ENDPOINT:-}
     ports:
-      - "${LIP_POSTGRES_PORT:-3211}:3210"
+      - "127.0.0.1:${LIP_POSTGRES_PORT:-3211}:3210"
     restart: unless-stopped
 
   cloud:
@@ -96,7 +96,7 @@ services:
       LIP_CLOUD_ALLOWED_ORIGINS: ${LIP_CLOUD_ALLOWED_ORIGINS:-http://localhost:3000}
       HEALTH_PORT: 3220
     ports:
-      - "${LIP_CLOUD_PORT:-3220}:3220"
+      - "127.0.0.1:${LIP_CLOUD_PORT:-3220}:3220"
     restart: unless-stopped
 
 volumes:

@@ -12,6 +12,10 @@ not a production security posture: replace the development API key, disable
 demo seeding, disable wallet demo mode, and configure real identity before any
 customer traffic.
 
+Published ports bind to host loopback by default. The known local-only Compose
+key is `lip-local-compose-key-change-me`; replace it even for development if the
+host is shared, and never expose that key or the evaluation profile on a network.
+
 ## Production checklist
 
 1. Use Node 22 and a pinned image digest built from a reviewed commit.
