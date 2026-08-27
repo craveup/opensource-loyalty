@@ -683,7 +683,7 @@ describe("LocalDataPlaneProvisioner", () => {
     });
     const repository = new MemoryCloudRepository();
     const cloud = new CloudControlPlane({ repository });
-    // PLA-442: a platform-admin operator key replaces the shared key + subject
+    // A platform-admin operator key replaces the shared key + subject
     // header. It carries a verified identity and virtual owner scope on every
     // organization, so no membership wiring is needed.
     const operators = new CloudOperatorService({ repository });
@@ -806,7 +806,7 @@ describe("LocalDataPlaneProvisioner", () => {
 
     // Authorization failures.
     expect((await fetch(`${running.url}${path}`, { method: "POST" })).status).toBe(401);
-    // PLA-442: a caller-chosen subject can no longer downgrade or widen a
+    // A caller-chosen subject can no longer downgrade or widen a
     // principal, so out-of-scope access is exercised with a real org-scoped
     // operator whose scope excludes this environment's organization.
     const outsiderOperator = await operators.createOperator(operator, {
@@ -872,7 +872,7 @@ describe("LocalDataPlaneProvisioner", () => {
       await running.close();
       await provisioner.close();
     };
-    // PLA-442: onboarding authenticates with a platform-admin operator key.
+    // Onboarding authenticates with a platform-admin operator key.
     const admin = await operators.createOperator(
       { issuer: TRUSTED_GATEWAY_ISSUER, subject: "bootstrap" },
       { subject: "webhook-operator-001", role: "platform-admin" }

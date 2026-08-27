@@ -453,7 +453,7 @@ export class MemoryCloudRepository implements CloudRepository {
     audit: CloudOperatorAuditEntry;
     bootstrap?: boolean;
   }): Promise<void> {
-    // Bootstrap atomicity (PLA-442 fix 5): the size check and the insert below
+    // Bootstrap atomicity: the size check and the insert below
     // run synchronously with no interleaving await, so two concurrent bootstrap
     // calls cannot both observe an empty directory and both insert.
     if (input.bootstrap && this.operators.size > 0) {
@@ -501,7 +501,7 @@ export class MemoryCloudRepository implements CloudRepository {
   }): Promise<CloudOperator | undefined> {
     const existing = this.operators.get(input.operatorId);
     if (!existing) return undefined;
-    // Atomic last-admin guard (PLA-442 fix 6): the count and the mutate run
+    // Atomic last-admin guard: the count and the mutate run
     // synchronously here, so two concurrent deactivations cannot both pass.
     if (input.guardLastPlatformAdmin && input.active === false) {
       const activeAdmins = [...this.operators.values()].filter(
@@ -578,7 +578,7 @@ export class MemoryCloudRepository implements CloudRepository {
     const key = [...this.operatorKeys.values()].find(
       (candidate) => candidate.secret_hash === secretHash
     );
-    // Defense in depth (PLA-442 fix 7): never surface a revoked/inactive key
+    // Defense in depth: never surface a revoked/inactive key
     // or a key on an inactive operator from the store, independent of the
     // service-layer checks. Expiry stays a service-clock decision so mock
     // clocks keep working.

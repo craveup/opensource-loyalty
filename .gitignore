@@ -3,12 +3,15 @@ dist/
 coverage/
 .playwright-cli/
 .DS_Store
+Icon?
 *.log
 .env
 .env.*
 !.env.example
 .lip/
 .agents/
+.cursor/
+skills-lock.json
 packages/mcp/assets/
 
 # Local security reports (gstack /cso)

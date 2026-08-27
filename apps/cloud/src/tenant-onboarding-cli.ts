@@ -17,14 +17,14 @@
  * the tenant runtime).
  *
  * Rotate (or first-retrieve) the merchant credential of a provisioned
- * environment — PLA-416 replaces reading credentials files off the disk:
+ * environment without reading credential files from the data-plane host:
  *
  *   LIP_CLOUD_OPERATOR_KEY=lip_ok_... npm run cloud:provision -- rotate-credentials \
  *     --cloud-url https://lip-cloud.example.com \
  *     --environment env_... \
  *     [--overlap-seconds 0]   # emergency cutover: replaced key dies at once
  *
- * Authentication (PLA-442): `LIP_CLOUD_OPERATOR_KEY` (a per-operator
+ * Authentication: `LIP_CLOUD_OPERATOR_KEY` (a per-operator
  * `lip_ok_` key) is required — identity comes from the key, so `--subject` is
  * optional and purely an on-behalf-of audit annotation. The legacy shared
  * `LIP_CLOUD_API_KEY` is rejected: it only bootstraps the first operator and
@@ -78,7 +78,7 @@ if (!apiKey || apiKey.length < 16) {
   );
   process.exit(1);
 }
-// PLA-442: the shared LIP_CLOUD_API_KEY only bootstraps the first operator,
+// The shared LIP_CLOUD_API_KEY only bootstraps the first operator,
 // so it cannot drive provisioning or rotation. Reject it up front instead of
 // asking for a --subject that would not make the request succeed.
 if (!apiKey.startsWith("lip_ok_")) {

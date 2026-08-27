@@ -13,7 +13,7 @@ export const TRUSTED_GATEWAY_ISSUER = "urn:lip:trusted-gateway";
 export type CloudOperatorRole = "platform-admin" | "org-scoped";
 
 /**
- * Control-plane operator (PLA-442): the verified identity behind /cloud/v1
+ * Control-plane operator: the verified identity behind /cloud/v1
  * management calls. Platform-admins are unrestricted; org-scoped operators
  * may only touch the organizations listed in `organization_ids`.
  */
@@ -73,7 +73,7 @@ export interface CloudPrincipal {
   on_behalf_of?: string;
   /**
    * Set by the server only for an OIDC-verified subject in the configured
-   * bootstrap allowlist while zero operators exist (PLA-442 fix 3). Authorizes
+   * bootstrap allowlist while zero operators exist. Authorizes
    * the one-time creation of the first platform-admin (for this same subject);
    * inert once any operator record exists.
    */
@@ -91,7 +91,7 @@ export class CloudRepositoryConflictError extends Error {
  * Raised by the repository when deactivating an operator would strand the
  * control plane by removing its last active platform-admin. The service maps
  * this to a 409 `operator_lockout`. The guard lives in the repository so the
- * count-then-deactivate decision is atomic (PLA-442 fix 6).
+ * count-then-deactivate decision is atomic.
  */
 export class LastPlatformAdminError extends Error {
   public constructor(message = "The last active platform-admin cannot be deactivated") {
@@ -237,7 +237,7 @@ export interface CloudProvisioningResult {
 
 /**
  * Merchant credential handed back by the control-plane rotation surface
- * (PLA-416). Deliberately excludes the deprecated root runtime key.
+ * Deliberately excludes the deprecated root runtime key.
  */
 export interface RotatedEnvironmentCredentials {
   environment_id: string;
@@ -372,7 +372,7 @@ export interface CloudRepository {
     audit: CloudOperatorAuditEntry;
     /**
      * First-operator bootstrap: serialize the count-then-insert so two
-     * concurrent bootstraps cannot both mint platform-admins (PLA-442 fix 5).
+     * concurrent bootstraps cannot both mint platform-admins.
      * The repository re-checks `countOperators() === 0` atomically and throws
      * CloudRepositoryConflictError otherwise.
      */
@@ -390,7 +390,7 @@ export interface CloudRepository {
     /**
      * When true, the deactivation is refused atomically (throwing
      * LastPlatformAdminError) unless another active platform-admin remains —
-     * closing the TOCTOU on the last-admin lockout guard (PLA-442 fix 6).
+     * closing the TOCTOU on the last-admin lockout guard.
      */
     guardLastPlatformAdmin?: boolean;
   }): Promise<CloudOperator | undefined>;

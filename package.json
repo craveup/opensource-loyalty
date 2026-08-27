@@ -31,6 +31,7 @@
     "generate": "tsx scripts/generate-spec.ts && tsx scripts/generate-platform-openapi.ts && tsx scripts/generate-sdk.ts",
     "lip": "tsx packages/cli/src/cli.ts",
     "mcp": "tsx packages/mcp/src/server.ts",
+    "public-safety:check": "tsx scripts/check-public-safety.ts",
     "quickstart": "npm run build:admin && tsx packages/cli/src/cli.ts quickstart",
     "release:evidence": "tsx scripts/prepare-release-evidence.ts",
     "release:manifest": "tsx scripts/generate-release-manifest.ts",
@@ -44,7 +45,7 @@
     "test:visual": "node scripts/verify-rendered-surfaces.mjs",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -b --pretty false && npm run typecheck --workspace @loyalty-interchange/admin",
-    "verify": "npm run generate && npm run typecheck && npm run test:coverage && npm run test:examples && npm run build && npm run test:packages && npm run docs:check && npm run launch:check",
+    "verify": "npm run public-safety:check && npm run generate && npm run typecheck && npm run test:coverage && npm run test:examples && npm run build && npm run test:packages && npm run docs:check && npm run launch:check",
     "wallet": "npm run build --workspace @loyalty-interchange/wallet && node apps/wallet/dist/cli.js",
     "wallet:dev": "tsx apps/wallet/src/cli.ts"
   },

@@ -128,9 +128,6 @@ Enable MCP: [`mcp.json`](../mcp.json) · Skills: [`skills/README.md`](../skills/
   [adoption metrics](metrics.md): evidence-driven evaluation and measurement.
 - [Developer distribution](distribution.md): ideal users, twelve-week channel
   motion, and the distinction between attention and adoption.
-- [Crave integration delivery plan](plans/2026-08-09-crave-integration-delivery.md): keep Crave and
-  LIP independently deployed while proving provisioning, lifecycle, reconciliation and joint release.
-
 ## API reference
 
 - [API endpoints](api-endpoints.md): current HTTP operations, auth, errors,

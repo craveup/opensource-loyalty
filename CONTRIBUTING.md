@@ -23,24 +23,6 @@ npm run dev
 `.env` is gitignored. The PostgreSQL storage suite and the cloud control plane
 need a database; `docker compose up -d postgres` provides one.
 
-<details>
-<summary>Crave team members: pull shared values from Infisical instead</summary>
-
-The repo is linked to the `CraveUp Loyalty` Infisical project, so no `.env` file
-is needed:
-
-```sh
-brew install infisical/get-cli/infisical   # once
-infisical login                            # once
-infisical run --env=dev -- npm run dev
-```
-
-`infisical secrets --env=dev` lists what you get. The `dev` environment holds
-local-development values only; production credentials live in the deployment
-platform, not here.
-
-</details>
-
 ## Compatibility policy
 
 - Patch releases clarify documentation and fix implementation defects.

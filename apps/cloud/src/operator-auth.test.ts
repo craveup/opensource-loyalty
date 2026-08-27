@@ -562,7 +562,7 @@ describe("Cloud server operator auth", () => {
         "x-lip-cloud-subject": "legacy-operator"
       };
       // With zero operators the shared key still cannot reach a data route —
-      // it is not a general trusted-gateway credential (PLA-442 fix 1).
+      // it is not a general trusted-gateway credential.
       const beforeBootstrap = await fetch(`${running.url}/cloud/v1/plans`, {
         headers: legacyHeaders
       });

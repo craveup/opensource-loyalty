@@ -1,4 +1,4 @@
-# Render Blueprint: shared LIP data plane (PLA-417)
+# Render Blueprint: shared LIP data plane
 #
 # Deployable unit: the apps/cloud host (`node apps/cloud/dist/cli.js`).
 # Why this entry point and not packages/server/src/cli.ts: the reference
@@ -10,7 +10,7 @@
 # inside the same process, all sharing the one managed Postgres below.
 #
 # Single instance is a hard constraint, not a cost choice: docs/postgres.md
-# requires at most ONE platform instance per tenant until PLA-428/429 land
+# requires at most ONE platform instance per tenant until multi-instance coordination is implemented
 # (Admin extension stores cache per-process revisions; webhook journals assume
 # a single dispatcher). numInstances: 1 plus the attached disk (disk-backed
 # services cannot scale out) both enforce it.
@@ -83,7 +83,7 @@ services:
         value: "10000" # Render's default detected port
       - key: HEALTH_PORT
         value: "10000"
-      # Bootstrap-only shared key (>= 16 chars). PLA-442 retired it as a
+      # Bootstrap-only shared key (>= 16 chars), retired as a
       # general credential: it can create the FIRST operator and nothing else.
       # Onboarding and rotation calls made with it are rejected. The
       # X-LIP-Cloud-Subject header it used to pair with is gone — a caller can

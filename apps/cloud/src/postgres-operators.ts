@@ -127,7 +127,7 @@ async function insertOperatorKey(
   ]);
 }
 
-/** Postgres persistence for control-plane operators (PLA-442). */
+/** Postgres persistence for control-plane operators. */
 export class PostgresOperatorStore {
   public constructor(private readonly pool: Pool) {}
 
@@ -141,7 +141,7 @@ export class PostgresOperatorStore {
       await transaction(this.pool, async (client) => {
         const { operator } = input;
         if (input.bootstrap) {
-          // Bootstrap atomicity (PLA-442 fix 5): serialize the count + insert
+          // Bootstrap atomicity: serialize the count + insert
           // under an advisory lock so two concurrent bootstraps cannot both see
           // an empty directory and both mint platform-admins.
           await client.query(
@@ -224,7 +224,7 @@ export class PostgresOperatorStore {
   }): Promise<CloudOperator | undefined> {
     return transaction(this.pool, async (client) => {
       if (input.guardLastPlatformAdmin && input.active === false) {
-        // Atomic last-admin guard (PLA-442 fix 6): lock, then refuse to
+        // Atomic last-admin guard: lock, then refuse to
         // deactivate an active platform-admin unless another remains.
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -333,7 +333,7 @@ export class PostgresOperatorStore {
       JOIN lip_cloud_operators operator
         ON operator.operator_id = key.operator_id
       WHERE key.secret_hash = $1
-        -- Defense in depth (PLA-442 fix 7): the store never surfaces a
+        -- Defense in depth: the store never surfaces a
         -- revoked, expired, or inactive key, or a key on an inactive operator,
         -- independent of the service-layer checks.
         AND key.active

@@ -17,7 +17,7 @@ import {
 } from "./types.js";
 
 /**
- * Fail-fast guard for boot (PLA-442 fix 4): a control plane with zero
+ * Fail-fast guard for boot: a control plane with zero
  * operators and no way to create the first one can never be administered.
  * Throws with an actionable message so the service refuses to start rather
  * than silently stranding operator management.
@@ -32,8 +32,7 @@ export function assertOperatorManagementReachable(input: {
   throw new Error(
     "Operator management is unreachable: zero operators exist and no bootstrap " +
     "path is configured. Provide an enabled shared LIP_CLOUD_API_KEY, or set " +
-    "LIP_CLOUD_BOOTSTRAP_SUBJECT(S) with OIDC, to create the first operator " +
-    "(PLA-442)."
+    "LIP_CLOUD_BOOTSTRAP_SUBJECT(S) with OIDC, to create the first operator."
   );
 }
 
@@ -98,7 +97,7 @@ function assertFutureExpiry(expiresAt: string | undefined, now: Date): void {
 }
 
 /**
- * Directory + credential service for control-plane operators (PLA-442).
+ * Directory and credential service for control-plane operators.
  * Mirrors the tenant access-control patterns from
  * `packages/server/src/access-control.ts`: sha256-hashed secrets, expiring
  * keys, revocation, and rotation with a bounded overlap window whose
@@ -251,7 +250,7 @@ export class CloudOperatorService {
     await this.authorizeOperatorManagement(actor);
     const existing = await this.requiredOperator(operatorId);
     // The last-admin lockout guard is enforced atomically in the repository
-    // (PLA-442 fix 6) — a naive count-then-deactivate here would be TOCTOU.
+    // — a naive count-then-deactivate here would be TOCTOU.
     const guardLastPlatformAdmin =
       !input.active && existing.active && existing.role === "platform-admin";
     let updated: CloudOperator | undefined;
@@ -451,10 +450,10 @@ export class CloudOperatorService {
   /**
    * Operator management requires a platform-admin operator. Two bootstrap
    * credentials may create only the FIRST operator (a platform-admin): the
-   * legacy shared gateway (PLA-442 fix 1) and an OIDC-verified subject in the
-   * configured bootstrap allowlist (fix 3). An OIDC bootstrap may only mint an
+   * legacy shared gateway and an OIDC-verified subject in the
+   * configured bootstrap allowlist. An OIDC bootstrap may only mint an
    * operator for its own verified subject. Returns whether this call is a
-   * bootstrap so the repository can serialize it atomically (fix 5).
+   * bootstrap so the repository can serialize it atomically.
    */
   private async authorizeOperatorManagement(
     actor: CloudPrincipal,
