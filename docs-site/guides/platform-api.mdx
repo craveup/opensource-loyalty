@@ -1,0 +1,35 @@
+---
+title: "Customer engagement platform API"
+description: "Profiles, consent, events, segments, campaigns, imports, connectors, and attribution outside the LIP protocol"
+icon: "users"
+---
+
+The reference runtime exposes a non-normative product API at `/platform/v1`.
+It powers marketer workflows without changing the portable transaction
+contract at `/lip/v1`.
+
+<Warning>
+Customer sign-in remains external. A BFF validates OIDC and maps the subject to
+an opaque `member_id`. Location-scoped credentials fail closed because the
+platform API currently returns tenant-wide customer data.
+</Warning>
+
+## Surface
+
+| Resource | Operations |
+| --- | --- |
+| Members and consent | `GET`, `PUT /platform/v1/members` |
+| Behavioral events | `GET`, `POST /platform/v1/events` |
+| Segments and preview | `GET`, `PUT /segments`; `POST /segments/preview` |
+| Campaigns | list/upsert, status, run, and attribution report |
+| Connectors | list redacted, upsert, and explicit delete |
+| Analytics | `GET /platform/v1/analytics` |
+| Member import | `POST /platform/v1/imports/members` with JSON rows or CSV |
+
+Every route requires Bearer authentication. `viewer` can read; writes require
+`platform:write`. CSV imports are limited to 1 MiB and 1,000 rows, require
+unique allowlisted headers, and reject ambiguous row widths and prototype-like
+attribute keys.
+
+See the separate [Platform API reference](/api-reference/platform-overview) and
+the repository [source guide](https://github.com/craveup/opensource-loyalty/blob/main/docs/platform-api.md).

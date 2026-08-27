@@ -1,0 +1,29 @@
+---
+title: "Reference guest wallet"
+description: "A responsive OIDC Authorization Code + PKCE wallet BFF"
+icon: "wallet"
+---
+
+`apps/wallet` demonstrates balances, rewards, activity, and profile data while
+keeping the merchant API key and OIDC access token out of browser JavaScript.
+
+The default `docker compose up --build` starts a visibly synthetic preview at
+`http://127.0.0.1:3230/`. `WALLET_DEMO=true` never calls the customer API and
+must not be presented as a live account.
+
+## Production flow
+
+1. The BFF creates bounded state, nonce, and PKCE verifier records.
+2. OIDC Authorization Code + PKCE runs against the configured issuer.
+3. The callback verifies the ID-token signature, issuer, audience, nonce, and time.
+4. The access token stays server-side behind an `HttpOnly`, `Secure`, `SameSite=Lax` cookie.
+5. Same-origin and CSRF checks protect customer-data writes.
+
+<Warning>
+The reference session store is process memory. Multi-instance deployments must
+replace it with an encrypted, expiring shared store while preserving the same
+cookie and CSRF contract.
+</Warning>
+
+See the [source guide](https://github.com/craveup/opensource-loyalty/blob/main/docs/wallet.md)
+and [Customer identity](/guides/customer-identity).

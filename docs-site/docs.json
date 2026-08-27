@@ -39,13 +39,18 @@
               "guides/typescript-sdk",
               "guides/webhooks",
               "guides/customer-identity",
+              "guides/platform-api",
+              "guides/wallet",
+              "guides/square",
               "guides/reference-platform",
+              "guides/deployment",
               "guides/postgres",
               "guides/cloud",
               "guides/migration",
               "guides/member-migration",
               "guides/ordering-adapters",
-              "guides/punchh-migration"
+              "guides/punchh-migration",
+              "guides/telemetry"
             ]
           },
           {
@@ -92,6 +97,21 @@
           {
             "group": "Endpoints",
             "openapi": "api-reference/openapi.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "Platform API",
+        "groups": [
+          {
+            "group": "Using the Platform API",
+            "pages": [
+              "api-reference/platform-overview"
+            ]
+          },
+          {
+            "group": "Platform endpoints",
+            "openapi": "api-reference/platform-openapi.yaml"
           }
         ]
       },

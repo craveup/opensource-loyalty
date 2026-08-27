@@ -1,9 +1,10 @@
 # Loyalty Interchange Protocol docs
 
-LIP is an open, vendor-neutral transaction protocol for loyalty. The current
-working draft is foodservice-first: it focuses on member resolution, restaurant
-order evaluation, accrual, redemption reservation and capture, reversals,
-refund adjustments, program catalogs, balances, tiers, and ledger history.
+LIP is an open-source restaurant loyalty platform with a separate,
+vendor-neutral transaction protocol. The product layer adds customer profiles,
+consent, events, segments, campaigns, attribution, a marketer workspace, a
+reference guest wallet, and restaurant adapters. The foodservice-first protocol
+focuses on portable checkout and ledger behavior.
 
 Use this directory for implementation guides and product-facing documentation.
 Use `spec/` for the normative protocol contract.
@@ -40,9 +41,11 @@ Open the Admin URL and sign in with that key.
 The local server exposes:
 
 - Protocol API: `http://127.0.0.1:3210/lip/v1`
+- Customer engagement API: `http://127.0.0.1:3210/platform/v1`
 - Health: `http://127.0.0.1:3210/health`
 - Discovery: `http://127.0.0.1:3210/.well-known/lip`
 - Admin dashboard: `http://127.0.0.1:3210/admin/`
+- Synthetic guest wallet: `http://127.0.0.1:3230/`
 
 Then verify the environment. Source users can run:
 
@@ -96,6 +99,16 @@ Enable MCP: [`mcp.json`](../mcp.json) · Skills: [`skills/README.md`](../skills/
   deploy one Postgres-backed multi-tenant cluster from `render.yaml`, onboard
   brands as tenants, and operate backups, write-freeze, and monitoring.
 - [Customer identity integration](customer-identity.md)
+- [Customer engagement platform API](platform-api.md): profiles, consent,
+  events, imports, segments, campaigns, connectors, analytics, and attribution.
+- [Reference guest wallet](wallet.md): OIDC/PKCE BFF, synthetic preview, and
+  production session boundary.
+- [Square Orders adapter](square.md): pinned source mapping, webhook validation,
+  privacy decisions, and fail-closed refund rules.
+- [Self-hosted deployment](deployment.md): evaluation Compose profile and
+  production hardening checklist.
+- [Privacy and optional telemetry](telemetry.md): exact disabled-by-default
+  heartbeat contract and cookieless landing analytics.
 - [Cloud customer identity contract](cloud-customer-identity.md): managed Cloud CIAM boundary, consent, and LIP member linking: use Clerk, Auth0, or
   another OIDC provider while mapping stable customers to LIP members.
 - [Self-hosted migration](../MIGRATION.md): freeze, checksummed full-state
@@ -113,6 +126,8 @@ Enable MCP: [`mcp.json`](../mcp.json) · Skills: [`skills/README.md`](../skills/
   [design partners](design-partners.md): product and commercial boundaries.
 - [Provider selection](provider-selection.md), [comparison](comparison.md), and
   [adoption metrics](metrics.md): evidence-driven evaluation and measurement.
+- [Developer distribution](distribution.md): ideal users, twelve-week channel
+  motion, and the distinction between attention and adoption.
 - [Crave integration delivery plan](plans/2026-08-09-crave-integration-delivery.md): keep Crave and
   LIP independently deployed while proving provisioning, lifecycle, reconciliation and joint release.
 
@@ -121,6 +136,8 @@ Enable MCP: [`mcp.json`](../mcp.json) · Skills: [`skills/README.md`](../skills/
 - [API endpoints](api-endpoints.md): current HTTP operations, auth, errors,
   retry behavior, and local curl examples.
 - [OpenAPI contract](../spec/openapi.yaml): generated OpenAPI 3.1 binding.
+- [Platform OpenAPI](../spec/platform-openapi.yaml): generated, non-normative
+  `/platform/v1` reference product surface.
 - [Generated JSON Schemas](../spec/schemas): generated payload schemas.
 - [SDK lifecycle example](../examples/typescript/full-lifecycle.ts): complete
   enroll, evaluate, earn, reserve, capture, reverse, and refund flow.

@@ -1,0 +1,40 @@
+name: Design partner interest
+description: Public-safe intake for a restaurant loyalty integration pilot
+labels: ["design-partner", "integration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is public. Do not include customer data, credentials, private contracts, unreleased vendor documents, or confidential company details. Use the private contact in docs/design-partners.md for confidential follow-up.
+  - type: input
+    id: public_system
+    attributes:
+      label: Public system description
+      description: Name the public product/category or describe it generically.
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Your role
+      options:
+        - POS or ordering platform
+        - Multi-unit restaurant technical team
+        - Restaurant integrator or agency
+        - Other technical evaluator
+    validations:
+      required: true
+  - type: textarea
+    id: edge
+    attributes:
+      label: Integration edge to prove
+      description: Describe the non-confidential checkout, retry, refund, migration, or wallet behavior.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-safety confirmation
+      options:
+        - label: I removed customer data, secrets, private URLs, and confidential vendor material.
+          required: true

@@ -5,7 +5,7 @@ description: "Open, vendor-neutral loyalty infrastructure for restaurant, QSR, c
 icon: "house"
 ---
 
-**LIP is an open loyalty protocol and reference platform.** It ships everything needed to go from zero to a working loyalty integration: a normative protocol spec, a deterministic reference engine, an HTTP API, a TypeScript SDK, a local Admin dashboard, a SQLite sandbox, a Docker runtime, runnable examples, and black-box conformance tests.
+**LIP is an open-source loyalty platform and vendor-neutral transaction protocol for restaurant technology teams.** It combines customer data, a marketer workspace, campaigns and attribution, a reference guest wallet, restaurant adapters, and a deterministic checkout engine. Self-host the Apache-2.0 stack or adopt only the portable `/lip/v1` contract.
 
 <CardGroup cols={3}>
   <Card title="Try in the browser" icon="play" href="https://opensource-loyalty.vercel.app/#walkthrough">
@@ -29,7 +29,7 @@ icon: "house"
     docker compose up --build
     ```
 
-    Then open [http://127.0.0.1:3210/admin/](http://127.0.0.1:3210/admin/) and sign in with the key printed in the startup log (`lip-dev-key` by default).
+    Then open [Admin](http://127.0.0.1:3210/admin/) with the printed key (`lip-dev-key` by default) and the visibly synthetic [guest wallet](http://127.0.0.1:3230/).
   </Tab>
   <Tab title="Source">
     Requires Node.js 22 or newer and npm.
@@ -66,6 +66,12 @@ Installed and running? Read [Essentials](/get-started/essentials) next — it co
   </Card>
   <Card title="Reference Platform" icon="server" href="/guides/reference-platform">
     Server, Admin dashboard, storage, and implementation boundaries.
+  </Card>
+  <Card title="Platform API" icon="users" href="/guides/platform-api">
+    Profiles, consent, events, segments, campaigns, imports, and attribution.
+  </Card>
+  <Card title="Guest Wallet" icon="wallet" href="/guides/wallet">
+    A responsive OIDC Authorization Code + PKCE reference BFF.
   </Card>
   <Card title="Protocol Spec" icon="book" href="/protocol/overview">
     The normative contract: lifecycle rules, profiles, and conformance.

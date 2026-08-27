@@ -3,13 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Open-source loyalty API for restaurant checkout | LIP</title>
-  <meta name="description" content="Run the foodservice loyalty lifecycle in your browser, then self-host the open LIP protocol, engine, API, SDK, Admin, adapters, and conformance suite." />
+  <title>Open-source restaurant loyalty platform | LIP</title>
+  <meta name="description" content="Self-host restaurant loyalty with a marketer workspace, guest wallet, customer data API, campaigns, Square adapter, and an open checkout protocol." />
+  <meta name="posthog-key" content="" />
+  <meta name="posthog-host" content="https://us.i.posthog.com" />
   <meta name="robots" content="index,follow,max-image-preview:large" />
   <link rel="canonical" href="https://opensource-loyalty.vercel.app/" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Open loyalty infrastructure for foodservice" />
-  <meta property="og:description" content="Evaluate, reserve, accrue, capture, reverse, and adjust a restaurant order—then run the same open stack yourself." />
+  <meta property="og:title" content="The open-source loyalty platform for restaurant technology teams" />
+  <meta property="og:description" content="Own the marketer workflow, guest wallet, customer data, campaigns, and checkout lifecycle in one Apache-2.0 stack." />
   <meta property="og:url" content="https://opensource-loyalty.vercel.app/" />
   <meta name="twitter:card" content="summary" />
   <meta name="theme-color" content="#08110b" />
@@ -25,7 +27,7 @@
     "codeRepository": "https://github.com/craveup/opensource-loyalty",
     "license": "https://www.apache.org/licenses/LICENSE-2.0",
     "softwareVersion": "0.2.0",
-    "description": "Open foodservice loyalty protocol and reference platform with a TypeScript SDK, CLI, Admin, adapters, storage, and conformance tests."
+    "description": "Open-source restaurant loyalty platform with a marketer workspace, guest wallet BFF, customer data API, campaigns, adapters, and a vendor-neutral transaction protocol."
   }
   </script>
   <style>
@@ -159,16 +161,16 @@
     <header class="hero">
       <div class="container">
         <span class="eyebrow">Apache-2.0 · LIP 0.2.0 · Node 22</span>
-        <h1>The open loyalty API built for <span>restaurant checkout.</span></h1>
-        <p class="lead">Evaluate the cart, reserve before payment, accrue and capture after settlement, then reverse or refund safely. Use the open protocol and reference stack—or work with us to operate it.</p>
+        <h1>The open-source loyalty platform for <span>restaurant technology teams.</span></h1>
+        <p class="lead">Own the marketer workspace, customer data, campaigns, guest wallet, and checkout lifecycle. Self-host the Apache-2.0 stack or use the open protocol inside an existing ordering platform.</p>
         <div class="actions">
           <a class="button primary" href="#walkthrough" data-analytics-event="walkthrough_started">Run the lifecycle</a>
           <a class="button" href="https://loyalty-interchange.mintlify.app/get-started/quickstart" data-analytics-event="docs_quickstart">Self-host the quickstart</a>
         </div>
         <div class="proof" aria-label="Product evidence">
-          <div><strong>Full transaction lifecycle</strong><span>Evaluate, reserve, accrue, capture, reverse, adjust</span></div>
-          <div><strong>Foodservice edge cases</strong><span>Modifiers, split tender, offline replay, void, refund</span></div>
-          <div><strong>Executable evidence</strong><span>OpenAPI, schemas, SDK, fixture certification, conformance</span></div>
+          <div><strong>Marketer + guest experience</strong><span>Segments, campaigns, holdouts, attribution, branded wallet</span></div>
+          <div><strong>Restaurant transaction core</strong><span>Modifiers, split tender, offline replay, void, refund</span></div>
+          <div><strong>Deployable evidence</strong><span>Docker, Postgres, OpenAPI, SDK, fixture certification, conformance</span></div>
         </div>
       </div>
     </header>
@@ -202,9 +204,32 @@
       </div>
     </section>
 
+    <section aria-labelledby="product-title">
+      <div class="container">
+        <div class="section-head center"><h2 id="product-title">A loyalty operating system you can inspect.</h2><p>The platform layer handles day-to-day growth workflows. The separate LIP protocol keeps checkout behavior portable for POS, ordering, payment, and loyalty integrations.</p></div>
+        <div class="grid">
+          <article class="card"><span>◫</span><h3>Marketer workspace</h3><p>Build consent-aware audiences, schedule campaigns, reserve deterministic holdouts, and measure conversion within an attribution window.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/platform-api.md">Explore the platform API →</a></article>
+          <article class="card"><span>◎</span><h3>Reference guest wallet</h3><p>Use a branded, responsive wallet with OIDC Authorization Code + PKCE and a BFF that keeps merchant credentials off the device.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/wallet.md">Review the wallet boundary →</a></article>
+          <article class="card"><span>⇢</span><h3>Restaurant onboarding</h3><p>Import consented members from bounded CSV files and map current Square Orders and refunds through typed, synthetic certification fixtures.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/square.md">Review Square scope →</a></article>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="audience-title">
+      <div class="container">
+        <div class="section-head"><h2 id="audience-title">Built for teams that own the integration.</h2><p>LIP is strongest when restaurant loyalty has to connect cleanly to ordering, payments, refunds, locations, and existing customer identity.</p></div>
+        <div class="path-grid">
+          <article class="path"><small>Platforms</small><h3>POS and ordering products</h3><p>Add a loyalty product without outsourcing the core ledger, campaign data, or checkout contract to a closed vendor.</p></article>
+          <article class="path"><small>Operators</small><h3>Multi-unit technical teams</h3><p>Run a portable stack across brands and locations when data ownership, migrations, and refund correctness matter.</p></article>
+          <article class="path"><small>Integrators</small><h3>Restaurant agencies and builders</h3><p>Start from tested APIs and adapters instead of rebuilding balances, idempotency, wallets, and campaign plumbing for every client.</p></article>
+        </div>
+        <div class="boundary" style="margin-top: 18px"><strong>Not the best fit yet:</strong> a restaurant that wants a no-code, turnkey consumer marketing service with no technical owner. This repository is pre-1.0 infrastructure and a reference product, not a claim of feature parity with every mature commercial suite.</div>
+      </div>
+    </section>
+
     <section aria-labelledby="moat-title">
       <div class="container">
-        <div class="section-head center"><h2 id="moat-title">The hard part is lifecycle correctness.</h2><p>Generic campaign breadth is not the claim. LIP focuses on portable transaction behavior and the evidence needed to trust an ordering integration.</p></div>
+        <div class="section-head center"><h2 id="moat-title">The durable moat is lifecycle correctness.</h2><p>Campaign tooling is useful; trustworthy ordering behavior is foundational. LIP makes both inspectable while keeping the portable transaction contract explicit.</p></div>
         <div class="grid">
           <article class="card"><span>↻</span><h3>Retry without double posting</h3><p>Stable business keys, exact replay, explicit payload conflict, immutable ledger linkage.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/idempotency.md">Read idempotency →</a></article>
           <article class="card"><span>⌁</span><h3>Certify the source mapping</h3><p>A typed adapter contract and fixture runner cover modifiers, combos, tenders, comps, offline delivery, void, and refund.</p><a href="https://github.com/craveup/opensource-loyalty/blob/main/docs/ordering-adapters.md">Read adapter guide →</a></article>
@@ -266,6 +291,55 @@
     $("reset").addEventListener("click", () => { current = 0; completed = -1; emit("walkthrough_started", { source: "reset" }); render(); });
     document.querySelectorAll("[data-analytics-event]").forEach((node) => node.addEventListener("click", () => emit(node.dataset.analyticsEvent)));
     render();
+  </script>
+  <script>
+    (() => {
+      const key = document.querySelector('meta[name="posthog-key"]')?.content.trim();
+      const host = document.querySelector('meta[name="posthog-host"]')?.content.trim();
+      const allowedHosts = new Set(["https://us.i.posthog.com", "https://eu.i.posthog.com"]);
+      if (!key || !host || !allowedHosts.has(host)) return;
+
+      !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/1/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+
+      const events = new Set([
+        "landing_viewed", "walkthrough_started", "walkthrough_step",
+        "walkthrough_completed", "docs_quickstart", "self_host_selected",
+        "design_partner_selected"
+      ]);
+      const steps = new Set(["Evaluate", "Reserve", "Reverse", "Reserve retry", "Accrue", "Capture", "Refund adjust"]);
+      posthog.init(key, {
+        api_host: host,
+        defaults: "2026-05-30",
+        cookieless_mode: "always",
+        person_profiles: "never",
+        autocapture: false,
+        capture_pageview: false,
+        capture_pageleave: false,
+        capture_dead_clicks: false,
+        capture_exceptions: false,
+        capture_heatmaps: false,
+        capture_performance: false,
+        disable_session_recording: true,
+        disable_surveys: true,
+        advanced_disable_flags: true,
+        remote_config_refresh_interval_ms: 0,
+        mask_all_text: true,
+        mask_all_element_attributes: true,
+        respect_dnt: true,
+        before_send: (event) => {
+          if (!events.has(event.event)) return null;
+          const step = event.properties?.step;
+          event.properties = step && steps.has(step) ? { step } : {};
+          return event;
+        },
+        loaded: (client) => client.capture("landing_viewed")
+      });
+      window.addEventListener("lip:activation", (event) => {
+        const detail = event.detail ?? {};
+        if (!events.has(detail.event)) return;
+        posthog.capture(detail.event, detail.step && steps.has(detail.step) ? { step: detail.step } : {});
+      });
+    })();
   </script>
 </body>
 </html>

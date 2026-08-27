@@ -8,7 +8,12 @@
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Working_Draft_0.1-orange)
 
-**LIP is an open, vendor-neutral loyalty protocol and reference platform for developers building restaurant, QSR, coffee, convenience, and franchise ordering systems.** It ships everything needed to go from zero to a working loyalty integration: a normative protocol spec, a **deterministic reference engine**, an **HTTP API**, a **TypeScript SDK**, a local **Admin dashboard**, a SQLite sandbox, Docker runtime, runnable examples, and black-box conformance tests.
+**LIP is an open-source loyalty platform and vendor-neutral transaction protocol for restaurant technology teams.** It combines a marketer workspace, customer profiles and events, campaigns and attribution, a reference guest wallet, restaurant adapters, and a deterministic checkout engine. POS and ordering platforms, multi-unit technical teams, and restaurant integrators can self-host the Apache-2.0 stack or adopt only the portable `/lip/v1` contract.
+
+LIP is strongest when a technical owner must connect loyalty to ordering,
+payments, refunds, locations, and existing identity. It is not yet a turnkey
+no-code marketing service for restaurants without an integration team, and no
+repository fixture is presented as independent production adoption.
 
 > [!IMPORTANT]
 > Customer authentication is intentionally outside the LIP transaction
@@ -38,6 +43,19 @@
   reward campaigns, idempotent wallet issuance, reward draft CRUD, and
   membership lifecycle controls in Admin. Ledger analytics, consent-filtered
   CRM exports, and signed messaging connector jobs include retries and audit.
+
+- 👥 **Customer Engagement API**: a non-normative `/platform/v1` API for
+  profiles, explicit marketing consent, idempotent behavioral events, bounded
+  CSV import, segments, campaigns, connectors, and attribution analytics.
+
+- 📱 **Reference Guest Wallet**: a responsive wallet BFF using OIDC
+  Authorization Code + PKCE. Access tokens and merchant credentials remain
+  server-side; the default Docker preview is visibly synthetic.
+
+- ◻️ **Square Adapter**: a typed Square Orders mapping and webhook signature
+  verifier with public synthetic certification fixtures. Partial-refund
+  eligible spend must be resolved from source-of-truth item facts rather than
+  guessed from the gross refund.
 
 - 🛡️ **Retry-Safe by Design**: Idempotency keys, request context, RFC 9457 problem details, and partial refund, void, reversal, duplicate-check, and settlement semantics.
 
@@ -110,6 +128,8 @@ lip-dev-key
 ```
 
 Open the Admin dashboard at [http://127.0.0.1:3210/admin/](http://127.0.0.1:3210/admin/) and sign in with that key.
+Open the visibly synthetic reference guest wallet at
+[http://127.0.0.1:3230/](http://127.0.0.1:3230/).
 
 > [!TIP]
 > If the terminal is no longer visible, read the same key from Docker logs with `docker compose logs lip`.
@@ -162,6 +182,8 @@ The local server exposes:
 
 - Admin dashboard: `http://127.0.0.1:3210/admin/`
 - Protocol API: `http://127.0.0.1:3210/lip/v1`
+- Customer engagement API: `http://127.0.0.1:3210/platform/v1`
+- Synthetic guest wallet: `http://127.0.0.1:3230/`
 - Health: `http://127.0.0.1:3210/health`
 - Prometheus metrics: `http://127.0.0.1:3210/metrics` (Bearer auth required)
 - Discovery: `http://127.0.0.1:3210/.well-known/lip`
@@ -194,8 +216,9 @@ custom program is loaded.
 
 ### Self-Hosting Configuration ⚙️
 
-The default Compose service runs the reference server and Admin dashboard on
-port `3210` and stores SQLite state in the named `lip-data` volume. Configure
+The default Compose services run the reference server and Admin dashboard on
+port `3210`, start the synthetic guest wallet on `3230`, and store SQLite state
+in the named `lip-data` volume. Configure
 runtime values with environment variables:
 
 ```bash
@@ -205,6 +228,7 @@ LIP_SEED_DEMO=true
 LIP_RATE_LIMIT_REQUESTS=120
 LIP_RATE_LIMIT_WINDOW_MS=60000
 LIP_STRUCTURED_LOGS=true
+LIP_TELEMETRY_ENABLED=false
 docker compose up --build
 ```
 
@@ -240,9 +264,12 @@ text format.
 
 ### Install from npm 📦
 
-All packages are published to npm with provenance under the
+Published packages use the
 [`@loyalty-interchange`](https://www.npmjs.com/org/loyalty-interchange) scope.
-Run the sandbox without cloning:
+The repository and release record are the source of truth for which package
+versions are currently public; do not infer that every workspace is published.
+When the CLI package is available for the target release, run the sandbox
+without cloning:
 
 ```bash
 npx @loyalty-interchange/cli serve
@@ -266,7 +293,8 @@ See [the release guide](docs/releasing.md) for how releases are cut and verified
 ```text
 |-- apps/
 |   |-- admin/              # Browser Admin dashboard
-|   `-- cloud/              # Managed Cloud control plane and management API
+|   |-- cloud/              # Managed Cloud control plane and management API
+|   `-- wallet/             # Reference guest wallet OIDC/PKCE BFF
 |-- docs/                   # Developer guides and API documentation
 |-- examples/
 |   `-- typescript/         # Runnable SDK lifecycle examples
@@ -296,7 +324,8 @@ See [the release guide](docs/releasing.md) for how releases are cut and verified
 - **SDK:** Handwritten domain client plus generated low-level OpenAPI client
 - **Storage:** SQLite sandbox or normalized, tenant-scoped PostgreSQL
 - **Testing:** Vitest and black-box HTTP conformance tests
-- **Packaging:** npm (`@loyalty-interchange/*`, published with provenance) and Docker
+- **Packaging:** npm workspaces under `@loyalty-interchange/*` plus Docker;
+  verify the registry and release record before assuming a workspace is public
 
 ## Common Commands 🧑‍💻
 
@@ -309,6 +338,7 @@ npm run lip -- schemas                 # List supported JSON schemas
 npm run lip -- validate spec/examples/paid-order.json --schema FoodserviceOrder
 npm run example:sdk   # Run the full TypeScript SDK lifecycle
 npm run example:bff   # Run the server-side ordering BFF example
+npm run wallet:dev    # Run the reference guest wallet
 npm run typecheck     # Type-check all packages and Admin app
 npm test              # Run the full test suite
 npm run build         # Build TypeScript packages and Admin assets
@@ -327,6 +357,10 @@ Developer guides (rendered on the docs site; sources live in [`docs/`](docs/READ
 - [TypeScript SDK](https://loyalty-interchange.mintlify.app/guides/typescript-sdk) — SDK operations, errors, money helpers, and order builder
 - [Webhooks](https://loyalty-interchange.mintlify.app/guides/webhooks) — signed CloudEvents after every successful mutation, with a durable retry outbox
 - [Customer identity](https://loyalty-interchange.mintlify.app/guides/customer-identity) — connect an already-authenticated customer to a program-scoped LIP member
+- [Platform API](docs/platform-api.md) — profiles, events, segments, campaigns, imports, analytics, and the `/lip/v1` boundary
+- [Reference guest wallet](docs/wallet.md) — OIDC/PKCE setup, BFF threat model, and demo disclosure
+- [Square adapter](docs/square.md) — pinned mapping scope, webhook verification, fixtures, and refund rules
+- [Optional telemetry](docs/telemetry.md) — disabled-by-default self-host heartbeat and exact data contract
 - [Reference platform](https://loyalty-interchange.mintlify.app/guides/reference-platform) — server, Admin, storage, and implementation boundaries
 - [PostgreSQL storage](https://loyalty-interchange.mintlify.app/guides/postgres) — multi-instance engine store, location scoping, and the lock-free report path
 - [Cloud control plane](https://loyalty-interchange.mintlify.app/guides/cloud) — organizations, projects, environments, provisioning, operator auth, and metering
@@ -355,11 +389,11 @@ Normative specification (canonical when docs and generated artifacts disagree):
 
 ## What's Next? 🌟
 
-The [0.2 launch plan](PLAN.md) records completed repository acceptance criteria
+The [platform plan](PLAN.md) records completed repository acceptance criteria
 and the external evidence that remains intentionally open: independent sandbox
 users, design partners, a referenceable integration, measured search visibility,
 and production SLO attainment. Those outcomes will not be inferred from tests,
-stars, or downloads.
+stars, downloads, or synthetic fixtures.
 
 ## Contributing 🤝
 

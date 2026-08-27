@@ -1,8 +1,8 @@
 # Loyalty Interchange Protocol: full agent context
 
-LIP is an open, vendor-neutral loyalty transaction protocol and Apache-2.0
-reference platform for foodservice ordering. The protocol is not customer
-authentication, payment processing, or Cloud billing. A server-side BFF
+LIP is an open-source restaurant loyalty platform with a vendor-neutral
+transaction protocol. The protocol is not customer authentication, payment
+processing, campaigns, or Cloud billing. A server-side BFF
 verifies customer identity, retains the merchant key, and maps payment outcomes
 to LIP operations.
 
@@ -10,6 +10,10 @@ to LIP operations.
 
 - Protocol: `spec/`, generated OpenAPI/JSON Schemas, conformance.
 - Reference Platform: protocol/reference/server/storage/SDK/CLI/Admin packages.
+- Customer engagement product: non-normative `/platform/v1` profiles, consent,
+  events, imports, segments, campaigns, connectors, analytics, and attribution.
+- Guest experience: `apps/wallet`, an OIDC Authorization Code + PKCE BFF that
+  keeps provider access tokens and merchant credentials server-side.
 - Adapter layer: `packages/adapter-kit`, source fixtures, ordering BFF.
 - Managed layer: `apps/cloud`; non-normative organizations, environments,
   billing, encrypted credentials/recovery, customer gateway, and operations.
@@ -44,6 +48,24 @@ combos, split tenders, comps, discounts, tax, tip, offline/duplicate delivery,
 void, and partial refund. A report covers its exact adapter and fixtures only;
 it is not vendor partner certification.
 
+The Square implementation is pinned to Orders API `2026-08-19`, omits source
+customer ids and free-form line notes, verifies webhooks over notification URL
+plus raw body, and requires an integrator-supplied eligible refund amount. Its
+synthetic fixtures are not Square certification or production evidence.
+
+## Platform product boundary
+
+`/platform/v1` is authenticated and versioned separately from `/lip/v1`.
+Customer event writes are idempotent; segment previews expose a bounded sample;
+campaign runs use deterministic holdout assignment; connector reads redact
+secrets. CSV import is bounded to 1 MiB/1,000 rows with strict headers.
+
+Self-host telemetry is disabled unless both an explicit enable flag and HTTPS
+endpoint are configured. Its exact fixed heartbeat is documented in
+`docs/telemetry.md`. The landing PostHog token is empty by default and, when
+configured, runs cookieless with no person profiles, autocapture, replay, or
+free-form properties.
+
 ## Migration
 
 `lip migration plan` accepts JSON/CSV member rows, rejects duplicate identities,
@@ -69,6 +91,10 @@ expiration lots, banked offers, or households need an explicit source adapter.
 
 - Browser walkthrough: `landing/index.html#walkthrough` (synthetic, no key).
 - Self-host: `docs/getting-started.md` and `docs/quickstart.md`.
+- Platform API: `docs/platform-api.md` and `spec/platform-openapi.yaml`.
+- Guest wallet: `docs/wallet.md`.
+- Square: `docs/square.md`.
+- Deployment/privacy: `docs/deployment.md` and `docs/telemetry.md`.
 - Design partner: `docs/design-partners.md`.
 - SDK: `docs/typescript-sdk.md` and `examples/typescript/full-lifecycle.ts`.
 - BFF: `examples/typescript/ordering-bff.ts`.

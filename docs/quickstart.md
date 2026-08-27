@@ -30,6 +30,10 @@ Open `http://127.0.0.1:3210/admin/` and sign in with the printed Admin/API key
 to inspect account balances, tiers, expiring points, ledger history, program
 configuration, and storage status.
 
+The same runtime serves the non-normative customer engagement API at
+`http://127.0.0.1:3210/platform/v1`. Docker also starts a visibly synthetic
+reference guest wallet at `http://127.0.0.1:3230/`.
+
 Docker is an equivalent start path:
 
 ```sh
