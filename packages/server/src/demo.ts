@@ -114,17 +114,18 @@ interface DemoMemberProfile {
   email: string;
   points: number;
   channel: FoodserviceOrder["channel"];
+  marketingConsent: boolean;
   redeem?: boolean;
   refund?: number;
 }
 
 const demoMembers: DemoMemberProfile[] = [
-  { memberId: "demo-member-001", name: "Maya Chen", email: "maya@example.test", points: 180, channel: "mobile" },
-  { memberId: "demo-member-002", name: "Jordan Brooks", email: "jordan@example.test", points: 620, channel: "drive_thru" },
-  { memberId: "demo-member-003", name: "Priya Shah", email: "priya@example.test", points: 1_700, channel: "web", redeem: true },
-  { memberId: "demo-member-004", name: "Luis Martinez", email: "luis@example.test", points: 940, channel: "counter", refund: 30 },
-  { memberId: "demo-member-005", name: "Avery Morgan", email: "avery@example.test", points: 120, channel: "mobile" },
-  { memberId: "demo-member-006", name: "Samira Okafor", email: "samira@example.test", points: 2_380, channel: "drive_thru", redeem: true }
+  { memberId: "demo-member-001", name: "Maya Chen", email: "maya@example.test", points: 180, channel: "mobile", marketingConsent: true },
+  { memberId: "demo-member-002", name: "Jordan Brooks", email: "jordan@example.test", points: 620, channel: "drive_thru", marketingConsent: true },
+  { memberId: "demo-member-003", name: "Priya Shah", email: "priya@example.test", points: 1_700, channel: "web", marketingConsent: true, redeem: true },
+  { memberId: "demo-member-004", name: "Luis Martinez", email: "luis@example.test", points: 940, channel: "counter", marketingConsent: false, refund: 30 },
+  { memberId: "demo-member-005", name: "Avery Morgan", email: "avery@example.test", points: 120, channel: "mobile", marketingConsent: false },
+  { memberId: "demo-member-006", name: "Samira Okafor", email: "samira@example.test", points: 2_380, channel: "drive_thru", marketingConsent: true, redeem: true }
 ];
 
 function demoContext(key: string): RequestContext {
@@ -215,7 +216,8 @@ export function seedDemoData(engine: LoyaltyEngine): void {
       attributes: {
         name: profile.name,
         email: profile.email,
-        favorite_location: "West Market"
+        favorite_location: "West Market",
+        marketing_consent: profile.marketingConsent
       }
     });
     engine.postAccrual({

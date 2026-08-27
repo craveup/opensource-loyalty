@@ -210,6 +210,9 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
       persistEngine: (nextState) => store.save(nextState),
       ...(options.reset ? { reset: true } : {})
     });
+    if (options.seed !== false && !options.program) {
+      await customerData.seedProfilesFromEngine();
+    }
     campaigns = await CampaignService.create({
       store: new AsyncSqliteStateStore<CampaignState>({
         path: options.databasePath,
@@ -480,6 +483,9 @@ export async function createPostgresProtocolPlatform(
       executeEngineOperation,
       ...(options.reset ? { reset: true } : {})
     });
+    if (options.seed !== false && !options.program) {
+      await customerData.seedProfilesFromEngine();
+    }
     campaigns = await CampaignService.create({
       store: stateStore<CampaignState>("campaigns"),
       engine,

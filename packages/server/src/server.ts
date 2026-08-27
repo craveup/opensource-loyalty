@@ -853,8 +853,10 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
     }
     if (options.admin?.campaigns) {
       allowedMethods.set("/admin/api/v1/segments", ["PUT"]);
+      allowedMethods.set("/admin/api/v1/segments/preview", ["POST"]);
       allowedMethods.set("/admin/api/v1/segments/delete", ["POST"]);
       allowedMethods.set("/admin/api/v1/campaigns", ["PUT"]);
+      allowedMethods.set("/admin/api/v1/campaigns/status", ["POST"]);
       allowedMethods.set("/admin/api/v1/campaigns/delete", ["POST"]);
       allowedMethods.set("/admin/api/v1/campaigns/run", ["POST"]);
     }
@@ -1565,6 +1567,11 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
             campaigns: [],
             runs: []
           },
+          customer_data: options.admin?.customerData?.snapshot() ?? {
+            profiles: [],
+            events: [],
+            imports: []
+          },
           memberships: options.admin?.memberships?.snapshot() ?? {
             memberships: [],
             audit: []
@@ -2000,7 +2007,9 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
         adminEnabled &&
         campaigns &&
         ["/admin/api/v1/segments", "/admin/api/v1/segments/delete",
+          "/admin/api/v1/segments/preview",
           "/admin/api/v1/campaigns", "/admin/api/v1/campaigns/delete",
+          "/admin/api/v1/campaigns/status",
           "/admin/api/v1/campaigns/run"].includes(path) &&
         ["PUT", "POST"].includes(method)
       ) {
@@ -2051,6 +2060,20 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
           sendJson(response, 200, { deleted: true });
           return;
         }
+        if (method === "POST" && path === "/admin/api/v1/segments/preview") {
+          if (typeof values["segment_id"] !== "string") {
+            throw new TransportError(422, "validation_failed", "Request validation failed", "segment_id is required");
+          }
+          sendJson(
+            response,
+            200,
+            campaigns.previewSegment(
+              values["segment_id"],
+              typeof values["sample_size"] === "number" ? values["sample_size"] : 25
+            )
+          );
+          return;
+        }
         if (method === "PUT" && path === "/admin/api/v1/campaigns") {
           if (
             typeof values["name"] !== "string" ||
@@ -2069,9 +2092,33 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
             ...(typeof values["issued_reward_ttl_seconds"] === "number"
               ? { issued_reward_ttl_seconds: values["issued_reward_ttl_seconds"] }
               : {}),
+            ...(typeof values["holdout_percent"] === "number"
+              ? { holdout_percent: values["holdout_percent"] }
+              : {}),
+            ...(typeof values["attribution_window_days"] === "number"
+              ? { attribution_window_days: values["attribution_window_days"] }
+              : {}),
             ...(typeof values["starts_at"] === "string" ? { starts_at: values["starts_at"] } : {}),
             ...(typeof values["ends_at"] === "string" ? { ends_at: values["ends_at"] } : {})
           }));
+          return;
+        }
+        if (method === "POST" && path === "/admin/api/v1/campaigns/status") {
+          if (
+            typeof values["campaign_id"] !== "string" ||
+            !["active", "paused"].includes(String(values["status"]))
+          ) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Request validation failed",
+              "campaign_id and an active/paused status are required"
+            );
+          }
+          sendJson(response, 200, await campaigns.setCampaignStatus(
+            values["campaign_id"],
+            values["status"] as "active" | "paused"
+          ));
           return;
         }
         if (method === "POST" && path === "/admin/api/v1/campaigns/delete") {

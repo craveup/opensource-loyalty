@@ -84,6 +84,31 @@ describe("platform HTTP API", () => {
       });
       expect(await preview.json()).toMatchObject({ estimated_size: 1 });
 
+      const login = await fetch(`${running.url}/admin/api/v1/session`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey })
+      });
+      expect(login.status).toBe(204);
+      const setCookies = login.headers.getSetCookie();
+      const cookie = setCookies.map((value) => value.split(";", 1)[0]).join("; ");
+      const csrf = decodeURIComponent(
+        setCookies.find((value) => value.startsWith("lip_admin_csrf="))!
+          .split(";", 1)[0]!
+          .slice("lip_admin_csrf=".length)
+      );
+      const adminPreview = await fetch(`${running.url}/admin/api/v1/segments/preview`, {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          "x-lip-csrf": csrf
+        },
+        body: JSON.stringify({ segment_id: segment.segment.segment_id })
+      });
+      expect(adminPreview.status).toBe(200);
+      expect(await adminPreview.json()).toMatchObject({ estimated_size: 1 });
+
       const campaignResponse = await request("/platform/v1/campaigns", {
         method: "PUT",
         body: JSON.stringify({
@@ -150,6 +175,20 @@ describe("platform HTTP API", () => {
       expect(await analytics.json()).toMatchObject({
         customer_data: { profiles: { total: 1 }, events: { total: 2 } },
         loyalty: { campaigns: { runs: 1, rewards_issued: 1 } }
+      });
+      const adminSnapshot = await fetch(`${running.url}/admin/api/v1/snapshot`, {
+        headers: { cookie }
+      });
+      expect(await adminSnapshot.json()).toMatchObject({
+        customer_data: {
+          profiles: [expect.objectContaining({ member_id: "member-001" })],
+          events: expect.arrayContaining([
+            expect.objectContaining({ type: "purchase.completed" })
+          ])
+        },
+        engagement: {
+          connectors: [expect.objectContaining({ secret_configured: true })]
+        }
       });
     } finally {
       await running.close();

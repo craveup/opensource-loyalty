@@ -249,6 +249,38 @@ export class CustomerDataService {
     return structuredClone(result!);
   }
 
+  /**
+   * Copies profile-shaped attributes from already-enrolled synthetic/demo
+   * members into the non-protocol customer store. Existing profiles win.
+   */
+  public async seedProfilesFromEngine(): Promise<number> {
+    let created = 0;
+    for (const { member } of this.engine.inspectAdmin().members) {
+      if (this.state.profiles.some(({ member_id }) => member_id === member.member_id)) continue;
+      const attributes = member.attributes ?? {};
+      const profile = this.upsertProfileInMemory({
+        member_id: member.member_id,
+        ...(typeof attributes["name"] === "string"
+          ? { display_name: attributes["name"] }
+          : typeof attributes["display_name"] === "string"
+            ? { display_name: attributes["display_name"] }
+            : {}),
+        ...(typeof attributes["email"] === "string" ? { email: attributes["email"] } : {}),
+        ...(typeof attributes["phone"] === "string" ? { phone: attributes["phone"] } : {}),
+        attributes: Object.fromEntries(Object.entries(attributes).filter(([key]) =>
+          !["name", "display_name", "email", "phone", "marketing_consent"].includes(key)
+        )),
+        consent: {
+          marketing: attributes["marketing_consent"] === true,
+          source: "demo-seed"
+        }
+      }, false);
+      if (profile) created += 1;
+    }
+    if (created > 0) await this.save();
+    return created;
+  }
+
   public async ingestEvent(input: {
     event_id?: string;
     idempotency_key: string;
