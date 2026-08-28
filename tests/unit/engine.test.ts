@@ -151,6 +151,9 @@ describe("LoyaltyEngine members and evaluation", () => {
       program_id: "demo-foodservice"
     }).member).toBeNull();
     expect(engine.eraseMember("member-001")).toEqual(erased);
+    const serializedState = JSON.stringify(engine.exportState());
+    expect(serializedState).not.toContain("Ada Lovelace");
+    expect(serializedState).not.toContain("customer-001");
     const restored = new LoyaltyEngine(makeProgram(), { state: engine.exportState() });
     expect(restored.inspectMemberErasure("member-001")).toEqual(erased);
     expect(restored.getLedger()).toHaveLength(1);

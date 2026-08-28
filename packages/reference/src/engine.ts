@@ -244,6 +244,28 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+function scrubCachedMemberSnapshot(value: unknown, member: Member): unknown {
+  if (Array.isArray(value)) {
+    return value.map((nested) => scrubCachedMemberSnapshot(nested, member));
+  }
+  if (!value || typeof value !== "object") return value;
+  const object = value as Record<string, unknown>;
+  if (
+    object["member_id"] === member.member_id &&
+    object["program_id"] === member.program_id &&
+    typeof object["joined_at"] === "string" &&
+    Array.isArray(object["identities"])
+  ) {
+    return clone(member);
+  }
+  return Object.fromEntries(
+    Object.entries(object).map(([key, nested]) => [
+      key,
+      scrubCachedMemberSnapshot(nested, member)
+    ])
+  );
+}
+
 export function programDefinitionFingerprint(program: ProgramDefinition): string {
   return fingerprint(program);
 }
@@ -491,6 +513,9 @@ export class LoyaltyEngine {
       value: member.member_id
     }];
     delete member.attributes;
+    for (const record of this.idempotency.values()) {
+      record.response = scrubCachedMemberSnapshot(record.response, member);
+    }
     return this.inspectMemberErasure(memberId);
   }
 
