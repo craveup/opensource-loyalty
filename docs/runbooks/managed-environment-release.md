@@ -4,6 +4,25 @@ This is the release authority for the shared LIP sandbox and production clusters
 [`shared-cluster-provisioning.md`](shared-cluster-provisioning.md), which covers tenant onboarding
 inside one cluster.
 
+## Current activation status
+
+The managed-service code and configuration can merge independently of provider activation. A merge
+does not approve either environment for traffic, and `render.yaml` keeps automatic deploys disabled.
+As of 2026-08-28, activation remains blocked until release evidence records all of the following:
+
+- Render has the required GitHub repository access and the operator has completed the provider
+  authorization flow.
+- The production Neon role password has been rotated, with the new value stored only in the
+  approved secret manager and Render.
+- Both environments have their own direct Neon URLs and independently generated API and encryption
+  keys in Render. Credential values must never be copied into this repository or release evidence.
+- `lip-cloud-sandbox` and `lip-cloud-production` exist on paid Starter plans with one 1 GB disk each.
+- Sandbox deployment, restore rehearsal, rollback rehearsal, and the required lifecycle smoke tests
+  below have passed before production promotion.
+
+The settlement bridge remains a separate Crave integration dependency; managed-cluster activation
+does not by itself prove end-to-end order settlement.
+
 ## Fixed topology and safety rules
 
 - `lip-cloud-sandbox` and `lip-cloud-production` are separate Render services.
@@ -13,6 +32,10 @@ inside one cluster.
   Neon hostname. A `-pooler` hostname or `pgbouncer=true` fails before migrations or startup.
 - `numInstances: 1` is a correctness limit, not a sizing preference. Do not scale out until Admin
   state and webhook dispatch no longer depend on one process.
+- `LIP_CLOUD_SHARED_KEY_DISABLED` is operator-managed (`sync: false`) so a Blueprint sync cannot
+  reopen the deprecated shared-key bootstrap. Set it to `false` only while creating the first
+  platform administrator, then set it permanently to `true` and redeploy as described in
+  `shared-cluster-provisioning.md`.
 - Migrations run in `preDeployCommand`. The engine and control-plane migrators each serialize with a
   PostgreSQL advisory transaction lock and record applied versions.
 - Source rollback never runs a down migration. Restore a Neon branch and repoint both database

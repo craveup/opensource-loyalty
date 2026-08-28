@@ -42,7 +42,7 @@ services:
       - key: LIP_CLOUD_ALLOWED_ORIGINS
         sync: false
       - key: LIP_CLOUD_SHARED_KEY_DISABLED
-        value: "false"
+        sync: false # set false only for first-operator bootstrap, then permanently true
       - key: LIP_CLOUD_HOST
         value: 0.0.0.0
       - key: LIP_CLOUD_PORT
@@ -124,7 +124,7 @@ services:
       - key: LIP_CLOUD_ALLOWED_ORIGINS
         sync: false
       - key: LIP_CLOUD_SHARED_KEY_DISABLED
-        value: "false"
+        sync: false # set false only for first-operator bootstrap, then permanently true
       - key: LIP_CLOUD_HOST
         value: 0.0.0.0
       - key: LIP_CLOUD_PORT
