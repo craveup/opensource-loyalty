@@ -61,6 +61,7 @@ export interface CloudServerOptions {
     environment: string;
     release: string;
   };
+  healthCheck?: () => Promise<void>;
   /**
    * Data-plane hook for POST /cloud/v1/environments/{id}/credentials/rotate
    * (PLA-416). When absent the route answers 409
@@ -635,6 +636,7 @@ export function createCloudServer(
 
     void (async () => {
       if (method === "GET" && path === "/health") {
+        await options.healthCheck?.();
         sendJson(response, 200, {
           status: "ok",
           service: "lip-cloud-control-plane",

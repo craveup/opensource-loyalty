@@ -310,6 +310,10 @@ export class PostgresCloudRepository implements CloudRepository {
     });
   }
 
+  public async healthCheck(): Promise<void> {
+    await this.pool.query("SELECT 1");
+  }
+
   public async createOrganization(input: {
     organization: CloudOrganization;
     owner: CloudOrganizationMembership;

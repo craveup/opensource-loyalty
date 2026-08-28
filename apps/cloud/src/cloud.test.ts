@@ -8,7 +8,7 @@ import {
   exportJWK,
   generateKeyPair
 } from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDemoPlatform, startReferenceServer } from "@loyalty-interchange/server";
 import { OidcAuthenticator } from "./auth.js";
 import { MemoryCloudRepository } from "./memory-repository.js";
@@ -334,9 +334,11 @@ describe("Cloud control plane", () => {
       now: () => new Date(fixedNow)
     });
     const { authenticator, tokenFor } = await oidcHarness();
+    const healthCheck = vi.fn(async () => undefined);
     const running = await startCloudServer(cloud, {
       authenticator,
       deployment: { environment: "sandbox", release: "candidate-commit" },
+      healthCheck,
       port: 0
     });
     const headers = {
@@ -353,6 +355,7 @@ describe("Cloud control plane", () => {
         service: "lip-cloud-control-plane",
         status: "ok"
       });
+      expect(healthCheck).toHaveBeenCalledOnce();
       const metrics = await fetch(`${running.url}/metrics`);
       expect(metrics.status).toBe(200);
       expect(metrics.headers.get("content-type")).toContain("text/plain");

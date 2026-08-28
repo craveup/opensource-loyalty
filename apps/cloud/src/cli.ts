@@ -240,6 +240,7 @@ const running = await startCloudServer(controlPlane, {
     ? { authenticator }
     : apiKey ? { apiKey } : {}),
   operators,
+  healthCheck: () => repository.healthCheck(),
   ...(process.env["LIP_CLOUD_DEPLOYMENT_ENVIRONMENT"]
     ? {
         deployment: {

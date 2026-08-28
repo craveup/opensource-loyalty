@@ -67,6 +67,33 @@ services:
         value: lip-cloud-sandbox
       - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
         value: "13210"
+      # Optional production-equivalent auth/billing/customer integrations.
+      - key: LIP_CLOUD_OIDC_ISSUER
+        sync: false
+      - key: LIP_CLOUD_OIDC_AUDIENCE
+        sync: false
+      - key: LIP_CLOUD_OIDC_JWKS_URI
+        sync: false
+      - key: LIP_CLOUD_BOOTSTRAP_SUBJECTS
+        sync: false
+      - key: LIP_CLOUD_STRIPE_SECRET_KEY
+        sync: false
+      - key: LIP_CLOUD_STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: LIP_CLOUD_STRIPE_PRICE_PRO
+        sync: false
+      - key: LIP_CLOUD_STRIPE_PRICE_BUSINESS
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_OIDC_ISSUER
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_OIDC_AUDIENCE
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_AUTHORIZED_PARTIES
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_TENANT_ID
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_PROVIDER_ID
+        sync: false
 
   - type: web
     name: lip-cloud-production
@@ -122,3 +149,29 @@ services:
         value: lip-cloud-production
       - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
         value: "13210"
+      - key: LIP_CLOUD_OIDC_ISSUER
+        sync: false
+      - key: LIP_CLOUD_OIDC_AUDIENCE
+        sync: false
+      - key: LIP_CLOUD_OIDC_JWKS_URI
+        sync: false
+      - key: LIP_CLOUD_BOOTSTRAP_SUBJECTS
+        sync: false
+      - key: LIP_CLOUD_STRIPE_SECRET_KEY
+        sync: false
+      - key: LIP_CLOUD_STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: LIP_CLOUD_STRIPE_PRICE_PRO
+        sync: false
+      - key: LIP_CLOUD_STRIPE_PRICE_BUSINESS
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_OIDC_ISSUER
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_OIDC_AUDIENCE
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_AUTHORIZED_PARTIES
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_TENANT_ID
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_PROVIDER_ID
+        sync: false
