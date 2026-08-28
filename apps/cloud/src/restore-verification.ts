@@ -6,6 +6,17 @@ export interface RestoreEvidence {
   relations: Record<string, { checksum: string; row_count: number }>;
 }
 
+function databaseIdentity(value: string): string {
+  const parsed = new URL(value);
+  return `${parsed.hostname.toLowerCase()}:${parsed.port || "5432"}${parsed.pathname}`;
+}
+
+export function assertDistinctRestoreDatabases(sourceUrl: string, restoredUrl: string): void {
+  if (databaseIdentity(sourceUrl) === databaseIdentity(restoredUrl)) {
+    throw new Error("Backup source and restored databases must be distinct");
+  }
+}
+
 const relations = [
   "lip_cloud_environments",
   "lip_cloud_organizations",

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { compareRestoreEvidence, type RestoreEvidence } from "./restore-verification.js";
+import {
+  assertDistinctRestoreDatabases,
+  compareRestoreEvidence,
+  type RestoreEvidence
+} from "./restore-verification.js";
 
 const evidence = (): RestoreEvidence => ({
   cloud_schema_versions: [1, 2, 3, 4, 5],
@@ -19,5 +23,17 @@ describe("backup restore verification", () => {
     const restored = evidence();
     restored.relations.lip_engine_ledger = { checksum: "different", row_count: 12 };
     expect(() => compareRestoreEvidence(evidence(), restored)).toThrow(/does not match/i);
+  });
+
+  it("rejects the source database reused through different credentials or query options", () => {
+    const source = "postgresql://source:secret@ep-source.neon.tech/loyalty?sslmode=require";
+    expect(() => assertDistinctRestoreDatabases(
+      source,
+      "postgresql://restore:other@ep-source.neon.tech/loyalty?sslmode=verify-full"
+    )).toThrow(/must be distinct/i);
+    expect(() => assertDistinctRestoreDatabases(
+      source,
+      "postgresql://restore:other@ep-restored.neon.tech/loyalty?sslmode=require"
+    )).not.toThrow();
   });
 });

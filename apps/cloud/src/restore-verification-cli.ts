@@ -2,7 +2,11 @@
 
 import { Pool } from "pg";
 import { assertSessionLeaseCompatibleUrl } from "@loyalty-interchange/storage-postgres";
-import { captureRestoreEvidence, compareRestoreEvidence } from "./restore-verification.js";
+import {
+  assertDistinctRestoreDatabases,
+  captureRestoreEvidence,
+  compareRestoreEvidence
+} from "./restore-verification.js";
 
 const sourceUrl = process.env["LIP_BACKUP_SOURCE_DATABASE_URL"];
 const restoredUrl = process.env["LIP_BACKUP_RESTORE_DATABASE_URL"];
@@ -13,9 +17,7 @@ if (!sourceUrl || !restoredUrl) {
 }
 assertSessionLeaseCompatibleUrl(sourceUrl, "LIP_BACKUP_SOURCE_DATABASE_URL");
 assertSessionLeaseCompatibleUrl(restoredUrl, "LIP_BACKUP_RESTORE_DATABASE_URL");
-if (sourceUrl === restoredUrl) {
-  throw new Error("Backup source and restored database URLs must be distinct");
-}
+assertDistinctRestoreDatabases(sourceUrl, restoredUrl);
 
 const source = new Pool({ connectionString: sourceUrl, max: 1 });
 const restored = new Pool({ connectionString: restoredUrl, max: 1 });
