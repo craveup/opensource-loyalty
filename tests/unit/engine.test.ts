@@ -325,8 +325,19 @@ describe("LoyaltyEngine members and evaluation", () => {
   });
 
   it("applies the member tier multiplier and preserves it for later refunds", () => {
-    const engine = enrolledEngine();
+    const program = makeProgram();
+    program.membership_policy = {
+      plans: [{ plan_id: "premium", name: "Premium", earn_multiplier_bps: 15_000 }]
+    };
+    const engine = new LoyaltyEngine(program, { ids: sequentialIds() });
+    engine.enroll(makeEnroll());
     accrue(engine);
+    engine.setMemberMembership("member-001", {
+      plan_id: "premium",
+      status: "active",
+      valid_from: "2026-07-01T00:00:00.000Z",
+      valid_until: "2027-07-01T00:00:00.000Z"
+    });
 
     const secondOrder = makeOrder({ order_id: "tier-multiplier-order" });
     const evaluated = engine.evaluate({
@@ -334,16 +345,22 @@ describe("LoyaltyEngine members and evaluation", () => {
       member_id: "member-001",
       order: secondOrder
     });
-    expect(evaluated.estimated_accrual.amount).toBe(132);
+    expect(evaluated.estimated_accrual.amount).toBe(198);
 
     const accrued = engine.postAccrual({
       context: makeContext("tier-multiplier-accrual-key"),
       member_id: "member-001",
       order: secondOrder
     });
-    expect(accrued.entry.amount).toBe(132);
+    expect(accrued.entry.amount).toBe(198);
 
-    const adjusted = engine.adjustOrder({
+    const restored = new LoyaltyEngine(program, {
+      ids: sequentialIds(),
+      state: engine.exportState()
+    });
+    restored.setMemberMembership("member-001");
+
+    const adjusted = restored.adjustOrder({
       context: makeContext("tier-multiplier-refund-key"),
       member_id: "member-001",
       program_id: "demo-foodservice",
@@ -357,13 +374,13 @@ describe("LoyaltyEngine members and evaluation", () => {
         eligible_spend_delta: { amount: -500, currency: "USD" }
       }
     });
-    expect(adjusted.entry.amount).toBe(-60);
-    expect(adjusted.balances[0]?.amount).toBe(182);
-    expect(engine.getAccount({
+    expect(adjusted.entry.amount).toBe(-90);
+    expect(adjusted.balances[0]?.amount).toBe(218);
+    expect(restored.getAccount({
       context: makeContext("tier-multiplier-expiry-buckets-key"),
       member_id: "member-001",
       program_id: "demo-foodservice"
-    }).expiring_balances.map((bucket) => bucket.amount)).toEqual([182]);
+    }).expiring_balances.reduce((sum, bucket) => sum + bucket.amount, 0)).toBe(218);
   });
 
   it("posts only the unspent portion as an immutable expiration entry after 365 days", () => {
