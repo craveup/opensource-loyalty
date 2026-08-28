@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { LoyaltyEngine } from "@loyalty-interchange/reference";
 import {
   PostgresEngineRepository,
-  PostgresJsonStateStore
+  PostgresJsonStateStore,
+  assertSessionLeaseCompatibleUrl
 } from "@loyalty-interchange/storage-postgres";
 import { StateRevisionConflictError } from "@loyalty-interchange/storage";
 import { makeEnroll, makeProgram, sequentialIds } from "../fixtures.js";
@@ -53,6 +54,19 @@ describe("Postgres storage contract", () => {
       actualRevision: 5
     });
   });
+
+  it("rejects transaction-pooler URLs before constructing a repository", () => {
+    const secret = "must-not-leak";
+    const pooled =
+      `postgresql://loyalty:${secret}@ep-example-pooler.us-east-2.aws.neon.tech/loyalty`;
+    expect(() => assertSessionLeaseCompatibleUrl(pooled, "LIP_DATABASE_URL"))
+      .toThrow(/direct endpoint.*session advisory lease/i);
+    try {
+      assertSessionLeaseCompatibleUrl(pooled, "LIP_DATABASE_URL");
+    } catch (error) {
+      expect(String(error)).not.toContain(secret);
+    }
+  });
 });
 
 const postgresUrl = process.env["LIP_TEST_POSTGRES_URL"];
@@ -94,5 +108,5 @@ postgresDescribe("Postgres storage integration", () => {
       await first.clear();
       await Promise.all([first.close(), second.close()]);
     }
-  });
+  }, 90_000);
 });

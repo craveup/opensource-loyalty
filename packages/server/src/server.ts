@@ -793,6 +793,9 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
     allowedMethods.set("/admin/api/v1/logout", ["POST"]);
     allowedMethods.set("/admin/api/v1/snapshot", ["GET"]);
     allowedMethods.set("/admin/api/v1/maintenance", ["GET", "POST"]);
+    allowedMethods.set("/admin/api/v1/members/cancel", ["POST"]);
+    allowedMethods.set("/admin/api/v1/members/erase", ["POST"]);
+    allowedMethods.set("/admin/api/v1/members/inspect", ["POST"]);
     if (options.admin?.access) {
       allowedMethods.set("/admin/api/v1/access/users", ["PUT"]);
       allowedMethods.set("/admin/api/v1/access/api-keys", ["POST"]);
@@ -808,7 +811,6 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
       allowedMethods.set("/admin/api/v1/program/rewards/delete", ["POST"]);
     }
     if (options.admin?.webhookManager) {
-      allowedMethods.set("/admin/api/v1/members/cancel", ["POST"]);
       allowedMethods.set("/admin/api/v1/webhooks/health", ["GET"]);
       allowedMethods.set("/admin/api/v1/webhooks/subscription", ["PUT"]);
       allowedMethods.set("/admin/api/v1/webhooks/subscription/delete", ["POST"]);
@@ -1626,7 +1628,32 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
       if (
         adminEnabled &&
         method === "POST" &&
-        path === "/admin/api/v1/members/cancel"
+        path === "/admin/api/v1/members/inspect"
+      ) {
+        if (!(await isAdminAuthorized(request, options, adminSessions))) {
+          sendJson(response, 401, problem(401, "Unauthorized", "unauthorized"), "application/problem+json");
+          return;
+        }
+        const body = await readBody(request);
+        const values = body && typeof body === "object" && !Array.isArray(body)
+          ? body as Record<string, unknown>
+          : {};
+        if (typeof values["member_id"] !== "string") {
+          throw new TransportError(
+            422,
+            "validation_failed",
+            "Request validation failed",
+            "member_id is required"
+          );
+        }
+        sendJson(response, 200, engine.inspectMemberErasure(values["member_id"]));
+        return;
+      }
+
+      if (
+        adminEnabled &&
+        method === "POST" &&
+        (path === "/admin/api/v1/members/cancel" || path === "/admin/api/v1/members/erase")
       ) {
         if (!(await isAdminAuthorized(request, options, adminSessions))) {
           sendJson(response, 401, problem(401, "Unauthorized", "unauthorized"), "application/problem+json");
@@ -1654,11 +1681,14 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
           );
         }
         const memberId = values["member_id"];
-        const cancelled = options.executeEngineOperation
-          ? await options.executeEngineOperation(() => engine.cancelMember(memberId))
-          : engine.cancelMember(memberId);
+        const operation = () => path === "/admin/api/v1/members/erase"
+          ? engine.eraseMember(memberId)
+          : { member: engine.cancelMember(memberId) };
+        const result = options.executeEngineOperation
+          ? await options.executeEngineOperation(operation)
+          : operation();
         if (!options.executeEngineOperation) options.persistState?.(engine.exportState());
-        sendJson(response, 200, { member: cancelled });
+        sendJson(response, 200, result);
         return;
       }
 

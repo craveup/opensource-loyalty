@@ -1,4 +1,8 @@
-# Shared LIP cluster: deployment + tenant provisioning runbook (PLA-417)
+# Shared LIP cluster: tenant provisioning runbook (PLA-417)
+
+> Managed sandbox/production release, restore rehearsal, and rollback authority now lives in
+> [`managed-environment-release.md`](managed-environment-release.md). This runbook describes tenant
+> provisioning inside either independently deployed cluster.
 
 This runbook stands up ONE regional Postgres-backed LIP cluster that serves
 every brand, and onboards brands onto it. A brand is a `tenant_id` — a row
@@ -14,9 +18,10 @@ scope inside the shared database — never a per-brand deployment.
   tenant inside the same process. The single-tenant reference server
   (`packages/server/src/cli.ts`) cannot serve multiple brands from one
   process, so it is not the unit here.
-- **One database.** Control-plane tables (`lip_cloud_*`) and every tenant's
-  engine rows (`lip_engine_*`, keyed by `tenant_id` + `program_id`) share the
-  one managed Postgres.
+- **One database per environment.** Inside one cluster, control-plane tables (`lip_cloud_*`) and
+  tenant engine rows (`lip_engine_*`, keyed by `tenant_id` + `program_id`) share that environment's
+  Neon database. Sandbox and production never share a Neon project/database/role, and neither uses
+  a Crave database.
 - **One service instance — a hard constraint.** `docs/postgres.md`: run at
   most one platform instance per tenant until PLA-428/429 land (Admin
   extension stores cache per-process revisions; webhook journals assume a
@@ -42,37 +47,26 @@ scope inside the shared database — never a per-brand deployment.
     file — deprecated, never handed out, kept only for backward
     compatibility with pre-v2 consumers.
 
-## 1. Create the shared Postgres
+## 1. Create the environment's independent Neon Postgres
 
-### Variant A — Render managed Postgres (default; what `render.yaml` does)
-
-Nothing manual: the blueprint's `databases:` block creates
-`lip-shared-postgres` (Postgres 17, database `loyalty`, empty `ipAllowList`
-so it is private-network only) and injects its connection string into the
-service. Skip to step 2.
-
-### Variant B — Neon
-
-1. Neon console → **New project** → Postgres 17, region matching the Render
-   region (e.g. AWS `us-west-2` for Render Oregon). Database `loyalty`, role
-   `loyalty`.
+1. Create a distinct Neon project for `sandbox` or `production`, in the region matching Render
+   Oregon. Create database `loyalty` and an environment-specific role. Never reuse the other LIP
+   environment or any Crave project/database/role.
 2. Copy the **direct (unpooled)** connection string. Do not use the
    `-pooler` endpoint: the engine manages its own `pg` pool and uses
-   advisory locks (`withLease` takes session-scoped locks that break under
-   transaction pooling).
+   advisory locks (`withLease` takes session-scoped locks that break under transaction pooling).
+   Startup and migrations reject pooled endpoints before connecting.
 3. Project → **Settings → Compute**: disable autosuspend (scale-to-zero) for
    production; cold starts would stall checkout-path loyalty calls.
 4. Project → **Settings → Storage**: set history retention to at least 7
    days — this is your point-in-time-recovery window.
-5. Delete the `databases:` block from `render.yaml` (or leave it unused) and
-   set both `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL`
-   on the service to the Neon URL in the Render dashboard (mark them as
-   secret files/env in dashboard; they contain credentials).
+5. Set both database variables on only the matching Render service. Keep connection strings in
+   Render secrets; release evidence records project/branch/role identifiers, never values.
 
 ## 2. Deploy the service from the blueprint
 
-1. Render dashboard → **New → Blueprint** → select this repo and branch →
-   it reads `render.yaml`.
+1. Render dashboard → **New → Blueprint** → select this repo and exact reviewed branch/commit. The
+   blueprint creates `lip-cloud-sandbox` and `lip-cloud-production`, both intentionally manual.
 2. Fill the `sync: false` secrets when prompted:
    - `LIP_CLOUD_API_KEY`: ≥ 16 random characters (e.g. `openssl rand -base64 24`).
      This is only the **bootstrap** credential now — after section 4½ it is
@@ -88,7 +82,11 @@ service. Skip to step 2.
 
    ```bash
    curl -s https://<service>.onrender.com/health
-   # {"status":"ok","service":"lip-cloud-control-plane"}
+   # includes status, service, instance_policy, environment, and exact release
+
+   LIP_DEPLOYMENT_URL=https://<service>.onrender.com \
+   LIP_EXPECTED_ENVIRONMENT=<sandbox-or-production> \
+   LIP_EXPECTED_RELEASE=<git-commit> npm run cloud:deployment-verify
    ```
 
 ## 3. Seed program definitions
@@ -99,7 +97,7 @@ JSON (see `deploy/acme-sandbox/acme-program.json` for a template) and place
 it on the disk:
 
 ```bash
-render ssh lip-shared-data-plane
+render ssh <lip-cloud-sandbox-or-production-service-id>
 mkdir -p /data/programs
 cat > /data/programs/demo-rewards.json <<'EOF'
 { "program_id": "demo-rewards", ... }
@@ -135,7 +133,7 @@ audit annotation. The legacy `LIP_CLOUD_API_KEY` is rejected by this command
 operator first with `npm run cloud:operator`.)
 
 Prints `{"event":"tenant_provisioned", "tenant_id":"tenant_...", "status":"ready",
-"api_url":"http://lip-shared-data-plane:13210...", ...}` and exits non-zero on
+"api_url":"http://<environment-service>:13210...", ...}` and exits non-zero on
 failure or timeout. Re-running with the same slugs is idempotent (reuses the
 org/project/environment); reusing an environment slug with a different
 `--program-id` is rejected. `--region` must be listed in the service's
@@ -161,7 +159,7 @@ curl "${H[@]}" $BASE/cloud/v1/projects/<project_id>/environments
 
 The environment response carries the generated `tenant_id` and, once ready,
 `api_url`/`admin_url` on the private-network host
-(`lip-shared-data-plane:<port>`).
+(`<environment-service>:<port>`).
 
 ### 4c. Retrieve or rotate the merchant API key (via the control plane)
 
@@ -229,7 +227,7 @@ nothing is ever delivered. Two ways to wire the first one:
 - **Manually via the runtime admin API** (with the merchant key from 4c):
 
   ```bash
-  curl -X PUT http://lip-shared-data-plane:<port>/admin/api/v1/webhooks/subscription \
+  curl -X PUT http://<environment-service>:<port>/admin/api/v1/webhooks/subscription \
     -H "Authorization: Bearer $LIP_API_KEY" -H "Content-Type: application/json" \
     -d '{"url":"https://bff.example.com/hooks/loyalty","secret":"<>=16 chars>"}'
   ```
@@ -239,8 +237,8 @@ Confirm with `GET /admin/api/v1/webhooks/health` (`subscription_count` >= 1).
 ### 4e. Verify before routing traffic
 
 ```bash
-npm run lip -- doctor http://lip-shared-data-plane:<port> --api-key "$LIP_API_KEY"
-npm run lip -- cloud-verify http://lip-shared-data-plane:<port> \
+npm run lip -- doctor http://<environment-service>:<port> --api-key "$LIP_API_KEY"
+npm run lip -- cloud-verify http://<environment-service>:<port> \
   --api-key "$LIP_API_KEY" --program-id demo-rewards
 ```
 
@@ -311,14 +309,11 @@ clusters as a migration):
 
 ## 5. Backups and point-in-time recovery
 
-- **Render Postgres:** paid instances take daily backups and support
-  point-in-time recovery from continuous WAL archiving. Dashboard →
-  database → **Recovery** → pick a timestamp → Render provisions a new
-  instance from that point. Then update the service's two database env vars
-  to the recovered instance and redeploy. Always freeze writes first (below).
 - **Neon:** restore = create a branch at a timestamp (**Restore** tab or
   `neon branches create --parent-timestamp ...`) inside the history-retention
-  window, then repoint the service env vars at the new branch's endpoint.
+  window. While writes remain frozen, run `npm run cloud:restore-verify` with
+  the direct source and restored-branch URLs. Repoint both service database
+  variables only after schema versions, row counts, and content fingerprints match.
 - **The service disk is state too.** `/data` holds program JSONs and the
   per-environment credentials files. Render disks take daily snapshots;
   restore from the disk's **Snapshots** tab. Additionally keep programs in
@@ -358,7 +353,7 @@ a stable `503 {"code":"write_frozen"}` + `Retry-After` while reads and
 - **Per-tenant, at runtime (the path that works on the shared cluster):**
 
   ```bash
-  curl -X POST http://lip-shared-data-plane:<port>/admin/api/v1/maintenance \
+  curl -X POST http://<environment-service>:<port>/admin/api/v1/maintenance \
     -H "Authorization: Bearer $LIP_API_KEY" -H "Content-Type: application/json" \
     -d '{"write_frozen": true}'   # false to unfreeze
   ```
@@ -376,7 +371,7 @@ Monitor per layer:
 | Signal | Where | Alert on |
 | --- | --- | --- |
 | Control-plane liveness | `GET /health` on the public URL (Render health check uses it) | non-200; Render "server failed health check" notification |
-| Tenant runtime liveness + freeze state | `GET http://lip-shared-data-plane:<port>/health` per tenant (reports `status`, `write_frozen`) | non-200, or `write_frozen: true` outside a planned window |
+| Tenant runtime liveness + freeze state | `GET http://<environment-service>:<port>/health` per tenant (reports `status`, `write_frozen`) | non-200, or `write_frozen: true` outside a planned window |
 | Webhook delivery health | `GET /admin/api/v1/webhooks/health` per tenant (merchant key; returns delivery counts, `success_rate`, `healthy`) | `healthy: false` or falling `success_rate` |
 | Request metrics | `GET /metrics` per tenant runtime (authenticated, Prometheus text) | error-rate/latency regressions |
 | Provisioning | service logs: `cloud_environment_provisioned` / `cloud_environment_restored` / `cloud_environment_restore_failed` events; environments stuck `pending`/`failed` in `/cloud/v1/projects/{id}/environments` | any `cloud_environment_restore_failed` (that tenant is down until fixed); job `attempts >= 5` (worker gives up) |
@@ -393,7 +388,7 @@ failure + health-check alerts to the engineering Slack. Stream logs (Render
 | One platform instance per tenant → `numInstances: 1`, no horizontal scaling of the shared host | PLA-428 / PLA-429 |
 | **Per-operator control-plane auth (PLA-442, shipped):** management calls authenticate as individual operators (`lip_ok_` keys or OIDC subjects mapped to operator records); the subject header no longer grants identity. The shared `LIP_CLOUD_API_KEY` is bootstrap-only and is retired the moment the first operator exists — every other route returns `401 shared_key_retired`, with or without the `LIP_CLOUD_SHARED_KEY_DISABLED=true` flag (the flag additionally refuses the bootstrap route itself). Run the section 4½ cutover to set it | done: PLA-442; residual action = section 4½ cutover per cluster |
 | Tenant runtimes are private-network only (one public port per Render service) | follow-up: per-tenant public hostnames or gateway routing |
-| Credentials files still hold the merchant key (and deprecated root key) in **plaintext on disk** (`0600`, atomic writes; rotation shipped, encryption at rest pending) | listed in `docs/cloud.md` "Next production steps" |
+| Credentials files retain tenant access material on the environment disk | encrypted v3 files (`0600`, atomic writes); preserve the environment encryption key through restore and rotation |
 
 ## Owner actions checklist (dashboard-only steps)
 
@@ -404,8 +399,8 @@ failure + health-check alerts to the engineering Slack. Stream logs (Render
 2½. Run the section 4½ operator cutover: bootstrap the platform-admin
    operator, create per-human/service operators, swap callers to
    `LIP_CLOUD_OPERATOR_KEY`, then set `LIP_CLOUD_SHARED_KEY_DISABLED=true`.
-3. (Neon variant only) Create the Neon project, disable autosuspend, set
-   history retention, paste both database URLs into the service env.
+3. Create independent sandbox and production Neon projects/roles, disable production autosuspend,
+   set history retention, and paste each direct URL only into its matching service.
 4. Render: enable failure/health notifications; optionally add a log stream.
 5. Seed `/data/programs/<program_id>.json` via `render ssh` per brand.
 6. Per onboarded brand: run `rotate-credentials` (step 4c) to mint the
@@ -413,3 +408,5 @@ failure + health-check alerts to the engineering Slack. Stream logs (Render
    key in the password manager.
 7. Per onboarded brand: create the first webhook subscription (step 4d) —
    without it the tenant delivers no webhooks.
+8. Follow `managed-environment-release.md` to record exact deploy, migration, health/metrics,
+   backup/restore, and rollback evidence for both environments.

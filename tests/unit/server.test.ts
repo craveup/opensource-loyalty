@@ -845,6 +845,52 @@ describe("reference HTTP server", () => {
       expect(await cancelMember.json()).toMatchObject({
         member: { member_id: "member-001", status: "closed" }
       });
+
+      const inspectBeforeErasure = await fetch(
+        `${running.url}/admin/api/v1/members/inspect`,
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ member_id: "member-001" })
+        }
+      );
+      expect(inspectBeforeErasure.status).toBe(200);
+      expect(await inspectBeforeErasure.json()).toMatchObject({
+        erased: false,
+        member: { member_id: "member-001", status: "closed" }
+      });
+
+      const eraseMember = await fetch(`${running.url}/admin/api/v1/members/erase`, {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          "x-lip-csrf": csrf
+        },
+        body: JSON.stringify({ member_id: "member-001" })
+      });
+      expect(eraseMember.status).toBe(200);
+      expect(await eraseMember.json()).toMatchObject({
+        erased: true,
+        member: {
+          identities: [
+            { issuer: "lip-erasure", type: "loyalty_id", value: "member-001" }
+          ],
+          member_id: "member-001",
+          status: "closed"
+        }
+      });
+
+      const inspectAfterErasure = await fetch(
+        `${running.url}/admin/api/v1/members/inspect`,
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ member_id: "member-001" })
+        }
+      );
+      expect(inspectAfterErasure.status).toBe(200);
+      expect(await inspectAfterErasure.json()).toMatchObject({ erased: true });
     } finally {
       await running.close();
       await platform.close();

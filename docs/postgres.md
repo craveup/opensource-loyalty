@@ -21,6 +21,13 @@ LIP_API_KEY=replace-with-a-secret \
 npm run serve
 ```
 
+The runtime validates PostgreSQL URLs before constructing a pool. Because
+`withLease()` holds session-scoped advisory locks, managed and standalone
+Postgres runtimes must use a direct endpoint. Neon `-pooler` hostnames and
+URLs carrying `pgbouncer=true` are rejected without echoing credentials.
+Transaction pooling remains unsupported until a separately reviewed lease
+design passes concurrency and failover conformance.
+
 Startup applies numbered migrations from
 `@loyalty-interchange/storage-postgres`, which is available on npm.
 `LIP_RESET=true` explicitly deletes the selected tenant/program engine state
@@ -95,6 +102,11 @@ counted in the report but not persisted until the next real write commits.
 > last-writer-wins snapshots under a single-dispatcher assumption. Multi-
 > instance Admin/webhook serving needs per-delivery revisioned rows or a
 > `withLease`-guarded singleton dispatcher — tracked as follow-up work.
+
+The managed Render blueprint enforces this with two independent services,
+separate Neon databases/roles, attached environment-specific disks, and
+`numInstances: 1`. See
+[`docs/runbooks/managed-environment-release.md`](runbooks/managed-environment-release.md).
 
 ## Integration test
 
