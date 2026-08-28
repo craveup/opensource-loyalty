@@ -29,6 +29,14 @@ npm run serve
 
 </CodeGroup>
 
+<Warning>
+  Postgres runtimes must use a direct endpoint. `withLease()` holds
+  session-scoped advisory locks, so Neon `-pooler` hostnames and URLs carrying
+  `pgbouncer=true` are rejected without echoing credentials. Transaction
+  pooling remains unsupported until a separately reviewed lease design passes
+  concurrency and failover conformance.
+</Warning>
+
 <Info>
   The SQLite runtime remains on port `3210`. The Postgres-backed runtime is available on port `3211` by default. Set `LIP_POSTGRES_PORT` to change it.
 </Info>
@@ -131,6 +139,12 @@ and never queues behind accruals or redemptions.
   Multi-instance Admin and webhook serving needs per-delivery revisioned rows
   or a `withLease`-guarded singleton dispatcher — tracked as follow-up work.
 </Warning>
+
+The managed Render blueprint enforces the singleton constraint with separate
+sandbox and production services, independent Neon databases and roles,
+environment-specific disks, and `numInstances: 1`. Deployment, backup/restore,
+and rollback procedures are recorded in the repository's managed-environment
+release runbook.
 
 ## Integration test
 
