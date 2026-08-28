@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { resolve } from "node:path";
+import { assertSessionLeaseCompatibleUrl } from "@loyalty-interchange/storage-postgres";
 import { createDemoPlatform, createPostgresProtocolPlatform } from "./platform.js";
 import { assertStrongApiKey, startReferenceServer } from "./server.js";
 
@@ -23,7 +24,10 @@ const rateLimit = positiveIntegerEnvironment("LIP_RATE_LIMIT_REQUESTS", 120);
 const rateWindowMs = positiveIntegerEnvironment("LIP_RATE_LIMIT_WINDOW_MS", 60_000);
 // Postgres mode means a shared/cloud deployment: refuse to boot with the
 // local development default or a short key (PLA-416 static-key hygiene).
-if (databaseUrl) assertStrongApiKey(apiKey);
+if (databaseUrl) {
+  assertSessionLeaseCompatibleUrl(databaseUrl, "LIP_DATABASE_URL");
+  assertStrongApiKey(apiKey);
+}
 const platform = databaseUrl
   ? await createPostgresProtocolPlatform({
       connectionString: databaseUrl,

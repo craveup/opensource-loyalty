@@ -11,6 +11,9 @@ import {
   type StateStoreStatus,
   type VersionedState
 } from "@loyalty-interchange/storage";
+import { assertSessionLeaseCompatibleUrl } from "./connection-policy.js";
+
+export { assertSessionLeaseCompatibleUrl } from "./connection-policy.js";
 
 const migrationUrl = new URL("../migrations/001_normalized_engine.sql", import.meta.url);
 const engineTables = [
@@ -67,6 +70,9 @@ function json(value: unknown): string {
  * end it after every store is closed).
  */
 export function createPostgresPool(options: Omit<PostgresStorageOptions, "pool"> = {}): Pool {
+  if (options.connectionString) {
+    assertSessionLeaseCompatibleUrl(options.connectionString, "Postgres connectionString");
+  }
   return new Pool({
     ...(options.poolConfig ?? {}),
     ...(options.connectionString ? { connectionString: options.connectionString } : {})
@@ -75,6 +81,9 @@ export function createPostgresPool(options: Omit<PostgresStorageOptions, "pool">
 
 function createPool(options: PostgresStorageOptions): { pool: Pool; ownsPool: boolean } {
   if (options.pool) return { pool: options.pool, ownsPool: false };
+  if (options.connectionString) {
+    assertSessionLeaseCompatibleUrl(options.connectionString, "Postgres connectionString");
+  }
   return {
     pool: new Pool({
       ...(options.poolConfig ?? {}),
