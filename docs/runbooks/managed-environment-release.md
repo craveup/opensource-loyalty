@@ -121,7 +121,29 @@ drift, or content-checksum drift.
 
 ## Required release evidence
 
-For sandbox and production, retain: service ID/hostname, Neon project/branch/role identifiers,
+Record it in a file shaped by
+[`docs/releases/managed-environment-evidence.schema.json`](../releases/managed-environment-evidence.schema.json)
+and validate it before activation:
+
+```
+npm run cloud:evidence:check -- path/to/evidence.json
+```
+
+For sandbox and production, retain: service ID/hostname, Neon project/branch identifiers,
 database-directness check, deploy ID, Git commit, image digest, migration log event, `/health`
 response, `/metrics` probe, instance count, backup branch/timestamp, restore verification result,
-rollback target, and reviewer sign-off. Never record connection strings or credential values.
+rollback target, and reviewer sign-off. Never record connection strings or credential values — the
+checker refuses a record that contains anything matching a credential.
+
+The evidence file itself is operator-supplied and is not committed. Only the schema, the checker and
+a secret-free example live in this repository, so the record can be validated without the repository
+ever holding an environment's secrets.
+
+Two properties the checker enforces beyond shape:
+
+- **Sandbox and production must report different `databaseFingerprint` values.** Each deployment
+  publishes `control_plane_database` on `GET /health`, a SHA-256 prefix of `host:port/database` that
+  contains no role or password. Neither process can see the other's URL, so comparing the two
+  published identities is the only way to prove the deployments are independent.
+- **An anonymous `/metrics` scrape must have been refused (401).** The series name tenants and
+  environments, and the control plane is on a public URL.

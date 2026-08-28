@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { assertSessionLeaseCompatibleUrl } from "@loyalty-interchange/storage-postgres";
 
 export interface ManagedDatabaseConfiguration {
@@ -12,12 +13,29 @@ export function managedDatabaseConfiguration(
   const dataPlaneUrl = environment["LIP_CLOUD_DATA_PLANE_DATABASE_URL"]?.trim() ?? "";
   assertSessionLeaseCompatibleUrl(controlPlaneUrl, "LIP_CLOUD_DATABASE_URL");
   assertSessionLeaseCompatibleUrl(dataPlaneUrl, "LIP_CLOUD_DATA_PLANE_DATABASE_URL");
+  // Both variables intentionally address one environment's direct endpoint
+  // (render.yaml), so they are NOT asserted to differ. The independence this
+  // deployment has to prove is sandbox against production, and no single
+  // process can see both — see databaseIdentityFingerprint.
   return { controlPlaneUrl, dataPlaneUrl };
 }
 
 function databaseIdentity(value: string): string {
   const parsed = new URL(value);
   return `${parsed.hostname.toLowerCase()}:${parsed.port || "5432"}${parsed.pathname}`;
+}
+
+/**
+ * A non-secret, stable identity for a database, safe to publish on /health.
+ *
+ * Sandbox and production never share a process, so neither can compare its own
+ * URL against the other's. Publishing a fingerprint of host:port/database —
+ * never the role or password — lets an operator or a release check prove the
+ * two deployments are independent from outside, which is the property PLA-417
+ * has to certify.
+ */
+export function databaseIdentityFingerprint(value: string): string {
+  return createHash("sha256").update(databaseIdentity(value)).digest("hex").slice(0, 16);
 }
 
 export function assertIndependentDeploymentDatabases(input: {

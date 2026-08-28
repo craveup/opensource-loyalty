@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertIndependentDeploymentDatabases,
+  databaseIdentityFingerprint,
   managedDatabaseConfiguration
 } from "./database-configuration.js";
 
@@ -31,6 +32,37 @@ describe("managed database configuration", () => {
     };
     expect(() => assertIndependentDeploymentDatabases({ production, sandbox }))
       .toThrow(/independent databases and roles/i);
+  });
+
+  it("fingerprints a database without exposing its role or password", () => {
+    const secret = "never-print-this";
+    const url = `postgresql://loyalty:${secret}@ep-sandbox.us-west-2.aws.neon.tech/loyalty`;
+    const fingerprint = databaseIdentityFingerprint(url);
+    expect(fingerprint).toMatch(/^[a-f0-9]{16}$/u);
+    expect(fingerprint).not.toContain(secret);
+    expect(fingerprint).not.toContain("loyalty");
+  });
+
+  it("gives one identity per database and different ones across environments", () => {
+    // This is what lets an operator prove sandbox and production are separate:
+    // neither process can see the other's URL, only publish its own identity.
+    expect(databaseIdentityFingerprint(direct("sandbox"))).toBe(
+      databaseIdentityFingerprint(direct("sandbox").replace("loyalty:secret", "other:other"))
+    );
+    expect(databaseIdentityFingerprint(direct("sandbox"))).not.toBe(
+      databaseIdentityFingerprint(direct("production"))
+    );
+  });
+
+  it("accepts both plane variables addressing one environment database", () => {
+    // render.yaml points both at the same direct endpoint on purpose; asserting
+    // otherwise would refuse to boot either deployment.
+    expect(() =>
+      managedDatabaseConfiguration({
+        LIP_CLOUD_DATABASE_URL: direct("sandbox"),
+        LIP_CLOUD_DATA_PLANE_DATABASE_URL: direct("sandbox")
+      })
+    ).not.toThrow();
   });
 
   it("accepts independent direct sandbox and production databases", () => {

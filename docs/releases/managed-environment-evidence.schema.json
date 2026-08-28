@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://craveup.com/loyalty/managed-environment-evidence.schema.json",
+  "title": "Managed loyalty environment release evidence",
+  "description": "The operator-supplied record that PLA-417 activation is gated on. It holds identifiers and outcomes only: never a connection string, role, password, API key or encryption key.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["recordedAt", "recordedBy", "environments", "rollback", "signOff"],
+  "properties": {
+    "recordedAt": { "type": "string", "format": "date-time" },
+    "recordedBy": { "type": "string", "minLength": 1 },
+    "environments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sandbox", "production"],
+      "properties": {
+        "sandbox": { "$ref": "#/$defs/environment" },
+        "production": { "$ref": "#/$defs/environment" }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rehearsedAt", "targetDeployId", "outcome"],
+      "properties": {
+        "rehearsedAt": { "type": "string", "format": "date-time" },
+        "targetDeployId": { "type": "string", "minLength": 1 },
+        "outcome": { "enum": ["succeeded", "failed"] },
+        "notes": { "type": "string" }
+      }
+    },
+    "signOff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer", "reviewedAt"],
+      "properties": {
+        "reviewer": { "type": "string", "minLength": 1 },
+        "reviewedAt": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serviceId",
+        "hostname",
+        "neonProjectId",
+        "neonBranchId",
+        "connectionMode",
+        "databaseFingerprint",
+        "deployId",
+        "gitCommit",
+        "imageDigest",
+        "migration",
+        "health",
+        "metricsProbe",
+        "instanceCount",
+        "backup",
+        "restoreDrill"
+      ],
+      "properties": {
+        "serviceId": { "type": "string", "minLength": 1 },
+        "hostname": { "type": "string", "minLength": 1 },
+        "neonProjectId": { "type": "string", "minLength": 1 },
+        "neonBranchId": { "type": "string", "minLength": 1 },
+        "connectionMode": {
+          "const": "direct",
+          "description": "A pooled endpoint cannot hold the session-scoped advisory leases this service depends on."
+        },
+        "databaseFingerprint": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16}$",
+          "description": "The control_plane_database value reported by GET /health. Sandbox and production must differ."
+        },
+        "deployId": { "type": "string", "minLength": 1 },
+        "gitCommit": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },
+        "imageDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "migration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["appliedAt", "outcome"],
+          "properties": {
+            "appliedAt": { "type": "string", "format": "date-time" },
+            "outcome": { "enum": ["succeeded", "failed"] },
+            "logReference": { "type": "string" }
+          }
+        },
+        "health": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["checkedAt", "status", "instancePolicy"],
+          "properties": {
+            "checkedAt": { "type": "string", "format": "date-time" },
+            "status": { "const": "ok" },
+            "instancePolicy": { "const": "single" },
+            "release": { "type": "string" }
+          }
+        },
+        "metricsProbe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["checkedAt", "authenticatedStatus", "anonymousStatus"],
+          "properties": {
+            "checkedAt": { "type": "string", "format": "date-time" },
+            "authenticatedStatus": { "const": 200 },
+            "anonymousStatus": {
+              "const": 401,
+              "description": "Metrics name tenants and environments; an anonymous scrape must be refused."
+            }
+          }
+        },
+        "instanceCount": { "const": 1 },
+        "backup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["branchId", "capturedAt"],
+          "properties": {
+            "branchId": { "type": "string", "minLength": 1 },
+            "capturedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "restoreDrill": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["performedAt", "outcome", "verifiedRowCounts"],
+          "properties": {
+            "performedAt": { "type": "string", "format": "date-time" },
+            "outcome": { "enum": ["succeeded", "failed"] },
+            "verifiedRowCounts": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "alertTest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["firedAt", "routedTo"],
+          "properties": {
+            "firedAt": { "type": "string", "format": "date-time" },
+            "routedTo": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}
