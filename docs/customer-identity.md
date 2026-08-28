@@ -110,6 +110,14 @@ resolver is constructed with `cancelMember` (or `cancelLipMember` against the
 reference Admin API), each linked LIP member is closed so accruals and
 redemptions fail while the immutable ledger remains.
 
+Application privacy workflows should use the authenticated
+`POST /admin/api/v1/members/erase` contract and reconcile through
+`POST /admin/api/v1/members/inspect`. Erasure closes the member, removes every
+external identity and member attribute, and retains only a pseudonymous
+`loyalty_id` reference so balances and immutable ledger history remain
+auditable. The operation is idempotent and `inspect` reports `erased: true`
+only when that exact minimized state is present.
+
 The application remains responsible for:
 
 - deleting or disabling the account at Clerk/Auth0;
@@ -118,4 +126,3 @@ The application remains responsible for:
 - recording an auditable deletion workflow.
 
 The identity package never calls provider account-management APIs.
-
