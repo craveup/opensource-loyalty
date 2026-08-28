@@ -116,6 +116,47 @@ describe("LoyaltyEngine members and evaluation", () => {
     expect(() => engine.cancelMember("missing-member")).toThrowError(/not found/);
   });
 
+  it("erases member identity and attributes without deleting ledger history", () => {
+    const engine = makeEngine();
+    engine.enroll({
+      ...makeEnroll(),
+      attributes: { name: "Ada Lovelace" },
+      identity: { issuer: "crm", type: "external", value: "customer-001" }
+    });
+    accrue(engine, "erase-member-accrual-key");
+
+    expect(engine.inspectMemberErasure("member-001")).toMatchObject({
+      erased: false,
+      member: {
+        attributes: { name: "Ada Lovelace" },
+        identities: [{ issuer: "crm", type: "external", value: "customer-001" }],
+        status: "active"
+      }
+    });
+
+    const erased = engine.eraseMember("member-001");
+    expect(erased).toMatchObject({
+      erased: true,
+      member: {
+        identities: [{ issuer: "lip-erasure", type: "loyalty_id", value: "member-001" }],
+        member_id: "member-001",
+        status: "closed"
+      }
+    });
+    expect(erased.member).not.toHaveProperty("attributes");
+    expect(engine.getLedger()).toHaveLength(1);
+    expect(engine.lookup({
+      context: makeContext("erased-identity-lookup"),
+      identity: { issuer: "crm", type: "external", value: "customer-001" },
+      program_id: "demo-foodservice"
+    }).member).toBeNull();
+    expect(engine.eraseMember("member-001")).toEqual(erased);
+    const restored = new LoyaltyEngine(makeProgram(), { state: engine.exportState() });
+    expect(restored.inspectMemberErasure("member-001")).toEqual(erased);
+    expect(restored.getLedger()).toHaveLength(1);
+    expect(() => engine.inspectMemberErasure("missing-member")).toThrowError(/not found/);
+  });
+
   it("provides a non-normative operator snapshot", () => {
     const engine = enrolledEngine();
     accrue(engine, "admin-snapshot-accrual-key");
