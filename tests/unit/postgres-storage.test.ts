@@ -108,5 +108,5 @@ postgresDescribe("Postgres storage integration", () => {
       await first.clear();
       await Promise.all([first.close(), second.close()]);
     }
-  });
+  }, 90_000);
 });

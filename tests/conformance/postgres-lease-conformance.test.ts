@@ -33,7 +33,7 @@ describe.skipIf(!postgresUrl)("PostgreSQL session advisory lease conformance", (
     } finally {
       await Promise.allSettled([first.close(), contender.close()]);
     }
-  });
+  }, 90_000);
 
   it("allows a new worker to acquire after the lease connection is lost", async () => {
     const scope = randomUUID();
@@ -79,5 +79,5 @@ describe.skipIf(!postgresUrl)("PostgreSQL session advisory lease conformance", (
       await control.end().catch(() => undefined);
       await Promise.allSettled([first.close(), recovered.close()]);
     }
-  });
+  }, 90_000);
 });

@@ -287,6 +287,11 @@ export class PostgresEngineRepository {
   ): Promise<{ acquired: boolean; result?: T }> {
     const client = await this.pool.connect();
     const key = `lip:lease:${this.tenantId}:${this.programId}:${leaseName}`;
+    let connectionError: Error | undefined;
+    const rememberConnectionError = (error: Error): void => {
+      connectionError = error;
+    };
+    client.on("error", rememberConnectionError);
     try {
       const acquired = await client.query<{ acquired: boolean }>(
         "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
@@ -298,8 +303,13 @@ export class PostgresEngineRepository {
       } finally {
         await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [key]);
       }
+    } catch (error) {
+      if (error instanceof Error) connectionError ??= error;
+      throw error;
     } finally {
-      client.release();
+      client.release(connectionError ?? undefined);
+      // Broken clients can emit again while the socket finishes closing.
+      if (!connectionError) client.removeListener("error", rememberConnectionError);
     }
   }
 

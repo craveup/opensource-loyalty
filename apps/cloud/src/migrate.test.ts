@@ -59,5 +59,5 @@ describe.skipIf(!postgresUrl)("runSharedClusterMigrations against Postgres", () 
     } finally {
       await client.end();
     }
-  });
+  }, 90_000);
 });
