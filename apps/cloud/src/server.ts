@@ -57,6 +57,10 @@ export interface CloudServerOptions {
    */
   bootstrapSubjects?: string[];
   allowedOrigins?: string[];
+  deployment?: {
+    environment: string;
+    release: string;
+  };
   /**
    * Data-plane hook for POST /cloud/v1/environments/{id}/credentials/rotate
    * (PLA-416). When absent the route answers 409
@@ -260,6 +264,47 @@ function sendJson(
     ...headers
   });
   response.end(payload);
+}
+
+function sendText(response: ServerResponse, status: number, body: string): void {
+  response.writeHead(status, {
+    "content-type": "text/plain; version=0.0.4; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
+    "cache-control": "no-store"
+  });
+  response.end(body);
+}
+
+class CloudHttpMetrics {
+  private readonly startedAt = Date.now();
+  private readonly requests = new Map<string, number>();
+
+  public observe(method: string, status: number): void {
+    const key = `${method}:${status}`;
+    this.requests.set(key, (this.requests.get(key) ?? 0) + 1);
+  }
+
+  public render(): string {
+    const lines = [
+      "# HELP lip_cloud_http_requests_total Completed control-plane HTTP requests.",
+      "# TYPE lip_cloud_http_requests_total counter"
+    ];
+    for (const [key, count] of [...this.requests.entries()].sort()) {
+      const [method, status] = key.split(":");
+      lines.push(
+        `lip_cloud_http_requests_total{method="${method}",status="${status}"} ${count}`
+      );
+    }
+    lines.push(
+      "# HELP lip_cloud_process_uptime_seconds Control-plane process uptime.",
+      "# TYPE lip_cloud_process_uptime_seconds gauge",
+      `lip_cloud_process_uptime_seconds ${Math.floor((Date.now() - this.startedAt) / 1000)}`,
+      "# HELP lip_cloud_process_resident_memory_bytes Control-plane resident memory.",
+      "# TYPE lip_cloud_process_resident_memory_bytes gauge",
+      `lip_cloud_process_resident_memory_bytes ${process.memoryUsage().rss}`
+    );
+    return `${lines.join("\n")}\n`;
+  }
 }
 
 function sendProblem(
@@ -575,10 +620,12 @@ export function createCloudServer(
   // `cloud_shared_key_deprecated` notice in cli.ts is the single, once-per-boot
   // deprecation warning.
   const resolvedOptions: CloudServerOptions = options;
+  const metrics = new CloudHttpMetrics();
   return createServer((request, response) => {
     const method = request.method ?? "GET";
     const url = new URL(request.url ?? "/", "http://cloud.local");
     const path = url.pathname;
+    response.once("finish", () => metrics.observe(method, response.statusCode));
     const headers = corsHeaders(request, options);
     if (method === "OPTIONS") {
       response.writeHead(204, headers);
@@ -588,7 +635,21 @@ export function createCloudServer(
 
     void (async () => {
       if (method === "GET" && path === "/health") {
-        sendJson(response, 200, { status: "ok", service: "lip-cloud-control-plane" });
+        sendJson(response, 200, {
+          status: "ok",
+          service: "lip-cloud-control-plane",
+          instance_policy: "single",
+          ...(options.deployment
+            ? {
+                environment: options.deployment.environment,
+                release: options.deployment.release
+              }
+            : {})
+        });
+        return;
+      }
+      if (method === "GET" && path === "/metrics") {
+        sendText(response, 200, metrics.render());
         return;
       }
       if (method === "POST" && path === "/cloud/v1/billing/webhooks/stripe") {
