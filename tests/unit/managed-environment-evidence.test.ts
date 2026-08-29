@@ -15,6 +15,41 @@ describe("managed environment release evidence", () => {
     expect(checkManagedEnvironmentEvidence(await readFile(examplePath, "utf8"))).toEqual([]);
   });
 
+  it("requires independently verified development evidence", async () => {
+    const document = await example();
+    const environments = document["environments"] as Record<string, Record<string, unknown>>;
+    environments["development"] = {
+      ...environments["sandbox"],
+      databaseFingerprint: "1122334455667788",
+      hostname: "crave-loyalty-development.onrender.com",
+      neonBranchId: "br-development-main",
+      neonProjectId: "neon-development-project",
+      serviceId: "srv-crave-loyalty-development"
+    };
+    expect(checkManagedEnvironmentEvidence(JSON.stringify(document))).toEqual([]);
+
+    delete environments["development"];
+    expect(paths(checkManagedEnvironmentEvidence(JSON.stringify(document)))).toContain(
+      "environments.development"
+    );
+  });
+
+  it("refuses a development database reused by sandbox", async () => {
+    const document = await example();
+    const environments = document["environments"] as Record<string, Record<string, unknown>>;
+    environments["development"] = {
+      ...environments["sandbox"],
+      hostname: "crave-loyalty-development.onrender.com",
+      neonBranchId: "br-development-main",
+      neonProjectId: "neon-development-project",
+      serviceId: "srv-crave-loyalty-development"
+    };
+
+    const problems = checkManagedEnvironmentEvidence(JSON.stringify(document));
+    expect(paths(problems)).toContain("environments.sandbox.databaseFingerprint");
+    expect(problems.some((problem) => /not independent/i.test(problem.message))).toBe(true);
+  });
+
   it("refuses two deployments that report the same database", async () => {
     const document = await example();
     const environments = document["environments"] as Record<string, Record<string, unknown>>;
@@ -84,7 +119,12 @@ describe("managed environment release evidence", () => {
   it("names every missing environment rather than stopping at the first", () => {
     const problems = checkManagedEnvironmentEvidence(JSON.stringify({}));
     expect(paths(problems)).toEqual(
-      expect.arrayContaining(["environments", "environments.sandbox", "environments.production"])
+      expect.arrayContaining([
+        "environments",
+        "environments.development",
+        "environments.sandbox",
+        "environments.production"
+      ])
     );
   });
 

@@ -12,8 +12,9 @@
     "environments": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sandbox", "production"],
+      "required": ["development", "sandbox", "production"],
       "properties": {
+        "development": { "$ref": "#/$defs/environment" },
         "sandbox": { "$ref": "#/$defs/environment" },
         "production": { "$ref": "#/$defs/environment" }
       }
@@ -73,7 +74,7 @@
         "databaseFingerprint": {
           "type": "string",
           "pattern": "^[a-f0-9]{16}$",
-          "description": "The control_plane_database value reported by GET /health. Sandbox and production must differ."
+          "description": "The control_plane_database value reported by GET /health. Development, sandbox, and production must all differ."
         },
         "deployId": { "type": "string", "minLength": 1 },
         "gitCommit": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },

@@ -95,8 +95,8 @@ Enable MCP: [`mcp.json`](../mcp.json) · Skills: [`skills/README.md`](../skills/
 - [Shared-cluster provisioning runbook](runbooks/shared-cluster-provisioning.md):
   onboard brands as tenants inside one environment and operate write-freeze and monitoring.
 - [Managed environment release runbook](runbooks/managed-environment-release.md): deploy and
-  verify separate sandbox/production Render services and Neon databases, rehearse restore, and
-  roll back exact artifacts.
+  verify separate development/sandbox/production Render services and Neon databases, rehearse
+  restore, and roll back exact artifacts.
 - [Customer identity integration](customer-identity.md)
 - [Cloud customer identity contract](cloud-customer-identity.md): managed Cloud CIAM boundary, consent, and LIP member linking: use Clerk, Auth0, or
   another OIDC provider while mapping stable customers to LIP members.

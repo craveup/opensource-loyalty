@@ -10,9 +10,10 @@ import { resolve } from "node:path";
  * the schema and this checker are code, the evidence is not.
  *
  * Two properties are enforced beyond shape:
- *   1. Sandbox and production must report DIFFERENT database fingerprints.
- *      Neither deployment can see the other's URL, so their self-reported
- *      /health identities are the only proof they are independent.
+ *   1. Development, sandbox, and production must report DIFFERENT database
+ *      fingerprints. No deployment can see another's URL, so their
+ *      self-reported /health identities are the only proof they are
+ *      independent.
  *   2. Nothing in the record may look like a credential. Evidence is retained
  *      and shared; a connection string in it is a live secret leak.
  */
@@ -33,7 +34,7 @@ const CREDENTIAL_PATTERNS: Array<{ id: string; pattern: RegExp }> = [
   { id: "password-field", pattern: /"?password"?\s*[:=]/i }
 ];
 
-const ENVIRONMENTS = ["sandbox", "production"] as const;
+const ENVIRONMENTS = ["development", "sandbox", "production"] as const;
 type EnvironmentName = (typeof ENVIRONMENTS)[number];
 
 export interface EvidenceProblem {
@@ -171,24 +172,24 @@ export function checkManagedEnvironmentEvidence(raw: string): EvidenceProblem[] 
   if (!environments) {
     problems.push({ path: "environments", message: "is required" });
   }
-  const fingerprints = new Map<EnvironmentName, string>();
+  const fingerprints = new Map<string, EnvironmentName>();
   for (const name of ENVIRONMENTS) {
     const fingerprint = checkEnvironment(
       environments?.[name],
       `environments.${name}`,
       problems
     );
-    if (fingerprint) fingerprints.set(name, fingerprint);
-  }
-  if (
-    fingerprints.size === ENVIRONMENTS.length &&
-    fingerprints.get("sandbox") === fingerprints.get("production")
-  ) {
-    problems.push({
-      path: "environments.production.databaseFingerprint",
-      message:
-        "matches sandbox; the two deployments are addressing one database and are not independent"
-    });
+    if (!fingerprint) continue;
+    const owner = fingerprints.get(fingerprint);
+    if (owner) {
+      problems.push({
+        path: `environments.${name}.databaseFingerprint`,
+        message:
+          `matches ${owner}; the two deployments are addressing one database and are not independent`
+      });
+      continue;
+    }
+    fingerprints.set(fingerprint, name);
   }
 
   const rollback = isRecord(document["rollback"]) ? document["rollback"] : {};
