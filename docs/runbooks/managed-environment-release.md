@@ -153,11 +153,15 @@ The evidence file itself is operator-supplied and is not committed. Only the sch
 a secret-free example live in this repository, so the record can be validated without the repository
 ever holding an environment's secrets.
 
-Two properties the checker enforces beyond shape:
+The checker also enforces release and isolation invariants:
 
-- **Development, sandbox, and production must report different `databaseFingerprint` values.** Each deployment
-  publishes `control_plane_database` on `GET /health`, a SHA-256 prefix of `host:port/database` that
-  contains no role or password. No process can see another environment's URL, so comparing all three
-  published identities is the only way to prove the deployments are independent.
+- **Each environment must name a different Neon project, and neither database-plane fingerprint may
+  appear in another environment.** Each deployment publishes `control_plane_database` and
+  `data_plane_database` on `GET /health`, SHA-256 prefixes of `host:port/database` that contain no
+  role or password. Control and data may intentionally match inside one environment, but comparing
+  all six reported values across environments proves no database was reused.
+- **Development, sandbox, and production must run the same Git commit and image digest.** Each
+  `/health` response must also report that environment's declared Git commit as `release`; a stale
+  response or mixed artifact cannot satisfy the gate.
 - **An anonymous `/metrics` scrape must have been refused (401).** The series name tenants and
   environments, and the control plane is on a public URL.

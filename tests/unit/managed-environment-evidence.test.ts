@@ -20,7 +20,8 @@ describe("managed environment release evidence", () => {
     const environments = document["environments"] as Record<string, Record<string, unknown>>;
     environments["development"] = {
       ...environments["sandbox"],
-      databaseFingerprint: "1122334455667788",
+      controlPlaneDatabaseFingerprint: "1122334455667788",
+      dataPlaneDatabaseFingerprint: "1122334455667788",
       hostname: "crave-loyalty-development.onrender.com",
       neonBranchId: "br-development-main",
       neonProjectId: "neon-development-project",
@@ -46,24 +47,30 @@ describe("managed environment release evidence", () => {
     };
 
     const problems = checkManagedEnvironmentEvidence(JSON.stringify(document));
-    expect(paths(problems)).toContain("environments.sandbox.databaseFingerprint");
+    expect(paths(problems)).toContain(
+      "environments.sandbox.controlPlaneDatabaseFingerprint"
+    );
     expect(problems.some((problem) => /not independent/i.test(problem.message))).toBe(true);
   });
 
   it("refuses two deployments that report the same database", async () => {
     const document = await example();
     const environments = document["environments"] as Record<string, Record<string, unknown>>;
-    environments["production"]!["databaseFingerprint"] =
-      environments["sandbox"]!["databaseFingerprint"];
+    environments["production"]!["controlPlaneDatabaseFingerprint"] =
+      environments["sandbox"]!["controlPlaneDatabaseFingerprint"];
 
     const problems = checkManagedEnvironmentEvidence(JSON.stringify(document));
-    expect(paths(problems)).toContain("environments.production.databaseFingerprint");
-    expect(problems[0]?.message).toMatch(/not independent/i);
+    expect(paths(problems)).toContain(
+      "environments.production.controlPlaneDatabaseFingerprint"
+    );
+    expect(problems.some((problem) => /not independent/i.test(problem.message))).toBe(true);
   });
 
   it.each([
     ["a connection string", "postgresql://loyalty:secret@ep-x.neon.tech/loyalty"],
-    ["an operator key", "lip_op_ABCDEFGH12345678"],
+    ["a current operator key", "lip_ok_ABCDEFGH12345678"],
+    ["a current merchant key", "lip_sk_ABCDEFGH12345678"],
+    ["a legacy operator key", "lip_op_ABCDEFGH12345678"],
     ["a bearer token", "Bearer abcdefghijklmnopqrstuvwxyz"],
     ["an sslmode parameter", "sslmode=require"]
   ])("refuses evidence containing %s", async (_label, secret) => {
@@ -114,6 +121,64 @@ describe("managed environment release evidence", () => {
     expect(paths(checkManagedEnvironmentEvidence(JSON.stringify(document)))).toContain(
       "environments.production.instanceCount"
     );
+  });
+
+  it("refuses a Neon project reused by another environment", async () => {
+    const document = await example();
+    const environments = document["environments"] as Record<string, Record<string, unknown>>;
+    environments["production"]!["neonProjectId"] = environments["sandbox"]!["neonProjectId"];
+
+    expect(paths(checkManagedEnvironmentEvidence(JSON.stringify(document)))).toContain(
+      "environments.production.neonProjectId"
+    );
+  });
+
+  it("refuses either database plane reused across environments", async () => {
+    const document = await example();
+    const environments = document["environments"] as Record<string, Record<string, unknown>>;
+    environments["production"]!["dataPlaneDatabaseFingerprint"] =
+      environments["sandbox"]!["controlPlaneDatabaseFingerprint"];
+
+    const problems = checkManagedEnvironmentEvidence(JSON.stringify(document));
+    expect(paths(problems)).toContain(
+      "environments.production.dataPlaneDatabaseFingerprint"
+    );
+    expect(problems.some((problem) => /not independent/i.test(problem.message))).toBe(true);
+  });
+
+  it("requires every environment to run the same release artifact", async () => {
+    const document = await example();
+    const environments = document["environments"] as Record<string, Record<string, unknown>>;
+    environments["production"]!["gitCommit"] = "b1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+    environments["sandbox"]!["imageDigest"] = `sha256:${"cd".repeat(32)}`;
+
+    const problemPaths = paths(checkManagedEnvironmentEvidence(JSON.stringify(document)));
+    expect(problemPaths).toContain("environments.sandbox.imageDigest");
+    expect(problemPaths).toContain("environments.production.gitCommit");
+  });
+
+  it("binds each health response to its declared release", async () => {
+    const document = await example();
+    const environments = document["environments"] as Record<string, Record<string, unknown>>;
+    const productionHealth = environments["production"]!["health"] as Record<string, unknown>;
+    productionHealth["release"] = "deadbee";
+
+    expect(paths(checkManagedEnvironmentEvidence(JSON.stringify(document)))).toContain(
+      "environments.production.health.release"
+    );
+
+    delete productionHealth["release"];
+    expect(paths(checkManagedEnvironmentEvidence(JSON.stringify(document)))).toContain(
+      "environments.production.health.release"
+    );
+  });
+
+  it("rejects fields excluded by the committed JSON Schema", async () => {
+    const document = await example();
+    document["unexpected"] = true;
+
+    const problems = checkManagedEnvironmentEvidence(JSON.stringify(document));
+    expect(problems.some((problem) => /additional properties/i.test(problem.message))).toBe(true);
   });
 
   it("names every missing environment rather than stopping at the first", () => {

@@ -67,21 +67,39 @@ scope inside the shared database — never a per-brand deployment.
 
 ## 2. Deploy the service from the blueprint
 
-1. Render dashboard → **New → Blueprint** → select this repo and exact reviewed branch/commit. The
-   blueprint creates `crave-loyalty-development`, `crave-loyalty-sandbox`, and
-   `crave-loyalty-production` in Virginia, all intentionally manual.
-2. Fill the `sync: false` secrets when prompted:
-   - `LIP_CLOUD_API_KEY`: ≥ 16 random characters (e.g. `openssl rand -base64 24`).
-     This is only the **bootstrap** credential now — after section 4½ it is
-     disabled and can be deleted. Store it in the team password manager
-     until then.
-   - `LIP_CLOUD_ALLOWED_ORIGINS`: the Business Manager origin(s), e.g.
-     `https://dashboard.craveup.com`.
-3. Apply. The deploy runs `preDeployCommand: node apps/cloud/dist/migrate-cli.js`
+1. Render dashboard → **New → Blueprint** → select this repo and exact reviewed branch/commit. Set
+   **Blueprint Auto Sync to No** before linking or applying it; `autoDeploy: false` controls service
+   deploys but does not disable Blueprint Auto Sync. The blueprint creates
+   `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` in Virginia,
+   all intentionally manual.
+2. Fill every required `sync: false` value independently on each service when prompted:
+   - `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL`: use the same direct,
+     unpooled URL from that service's matching Neon project. Never reuse a URL across environments.
+   - `LIP_CLOUD_API_KEY`: at least 16 random characters (for example,
+     `openssl rand -base64 24`). This is only the **bootstrap** credential; after section 4½ it is
+     disabled and can be deleted. Store it in the team password manager until then.
+   - `LIP_CLOUD_CREDENTIAL_KEY`: an independent 32-byte unpadded base64url key for AES-256-GCM
+     (for example, `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Never reuse this key.
+   - `LIP_CLOUD_ALLOWED_ORIGINS`: the exact Business Manager origin(s) for that environment, with no
+     wildcard (for example, `https://dashboard.craveup.com`).
+   - `LIP_CLOUD_SHARED_KEY_DISABLED`: set `false` only for the first-operator bootstrap in section
+     4½, then change it permanently to `true` and redeploy.
+3. Leave optional groups completely unset unless that capability is enabled and fully configured:
+   - operator OIDC: `LIP_CLOUD_OIDC_ISSUER`, `LIP_CLOUD_OIDC_AUDIENCE`,
+     `LIP_CLOUD_OIDC_JWKS_URI`, and `LIP_CLOUD_BOOTSTRAP_SUBJECTS`;
+   - Stripe billing: `LIP_CLOUD_STRIPE_SECRET_KEY`, `LIP_CLOUD_STRIPE_WEBHOOK_SECRET`,
+     `LIP_CLOUD_STRIPE_PRICE_PRO`, and `LIP_CLOUD_STRIPE_PRICE_BUSINESS`;
+   - customer OIDC: `LIP_CLOUD_CUSTOMER_OIDC_ISSUER`, `LIP_CLOUD_CUSTOMER_OIDC_AUDIENCE`,
+     `LIP_CLOUD_CUSTOMER_AUTHORIZED_PARTIES`, `LIP_CLOUD_CUSTOMER_TENANT_ID`, and
+     `LIP_CLOUD_CUSTOMER_PROVIDER_ID`.
+
+   Do not partially populate a group. If a capability is enabled, satisfy the whole group's startup
+   contract before applying the Blueprint.
+4. Apply. The deploy runs `preDeployCommand: node apps/cloud/dist/migrate-cli.js`
    before going live; confirm the deploy log contains
    `{"event":"shared_cluster_migrations_applied","shared_database":true,...}`.
    The command is advisory-locked and idempotent — reruns are no-ops.
-4. Verify health:
+5. Verify health:
 
    ```bash
    curl -s https://<service>.onrender.com/health
