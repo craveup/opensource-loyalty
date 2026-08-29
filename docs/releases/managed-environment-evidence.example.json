@@ -1,0 +1,104 @@
+{
+  "recordedAt": "2026-08-29T10:00:00.000Z",
+  "recordedBy": "operator@example.com",
+  "environments": {
+    "sandbox": {
+      "serviceId": "srv-lip-cloud-sandbox",
+      "hostname": "lip-cloud-sandbox.onrender.com",
+      "neonProjectId": "neon-sandbox-project",
+      "neonBranchId": "br-sandbox-main",
+      "connectionMode": "direct",
+      "databaseFingerprint": "3f2a91c7d4e08b56",
+      "deployId": "dep-sandbox-0001",
+      "gitCommit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "imageDigest": "sha256:abababababababababababababababababababababababababababababababab",
+      "migration": {
+        "appliedAt": "2026-08-29T09:05:00.000Z",
+        "outcome": "succeeded",
+        "logReference": "render/sandbox/pre-deploy/0001"
+      },
+      "health": {
+        "checkedAt": "2026-08-29T09:07:00.000Z",
+        "status": "ok",
+        "instancePolicy": "single",
+        "release": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+      },
+      "metricsProbe": {
+        "checkedAt": "2026-08-29T09:08:00.000Z",
+        "authenticatedStatus": 200,
+        "anonymousStatus": 401
+      },
+      "instanceCount": 1,
+      "backup": {
+        "branchId": "br-sandbox-backup-20260829",
+        "capturedAt": "2026-08-29T09:00:00.000Z"
+      },
+      "restoreDrill": {
+        "performedAt": "2026-08-29T09:30:00.000Z",
+        "outcome": "succeeded",
+        "verifiedRowCounts": {
+          "ledger_entries": 1284,
+          "members": 317
+        }
+      },
+      "alertTest": {
+        "firedAt": "2026-08-29T09:40:00.000Z",
+        "routedTo": "loyalty-oncall"
+      }
+    },
+    "production": {
+      "serviceId": "srv-lip-cloud-production",
+      "hostname": "lip-cloud-production.onrender.com",
+      "neonProjectId": "neon-production-project",
+      "neonBranchId": "br-production-main",
+      "connectionMode": "direct",
+      "databaseFingerprint": "9c14be77a2f3d051",
+      "deployId": "dep-production-0001",
+      "gitCommit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "imageDigest": "sha256:abababababababababababababababababababababababababababababababab",
+      "migration": {
+        "appliedAt": "2026-08-29T09:05:00.000Z",
+        "outcome": "succeeded",
+        "logReference": "render/production/pre-deploy/0001"
+      },
+      "health": {
+        "checkedAt": "2026-08-29T09:07:00.000Z",
+        "status": "ok",
+        "instancePolicy": "single",
+        "release": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+      },
+      "metricsProbe": {
+        "checkedAt": "2026-08-29T09:08:00.000Z",
+        "authenticatedStatus": 200,
+        "anonymousStatus": 401
+      },
+      "instanceCount": 1,
+      "backup": {
+        "branchId": "br-production-backup-20260829",
+        "capturedAt": "2026-08-29T09:00:00.000Z"
+      },
+      "restoreDrill": {
+        "performedAt": "2026-08-29T09:30:00.000Z",
+        "outcome": "succeeded",
+        "verifiedRowCounts": {
+          "ledger_entries": 1284,
+          "members": 317
+        }
+      },
+      "alertTest": {
+        "firedAt": "2026-08-29T09:40:00.000Z",
+        "routedTo": "loyalty-oncall"
+      }
+    }
+  },
+  "rollback": {
+    "rehearsedAt": "2026-08-29T09:50:00.000Z",
+    "targetDeployId": "dep-production-0000",
+    "outcome": "succeeded",
+    "notes": "Application-only rollback; data rollback repoints both plane variables at a restored branch."
+  },
+  "signOff": {
+    "reviewer": "reviewer@example.com",
+    "reviewedAt": "2026-08-29T10:00:00.000Z"
+  }
+}

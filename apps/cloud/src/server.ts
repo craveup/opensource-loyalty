@@ -61,6 +61,15 @@ export interface CloudServerOptions {
     environment: string;
     release: string;
   };
+  /**
+   * Non-secret identities of the two databases this process is bound to.
+   * Published on /health so an operator can prove sandbox and production are
+   * independent from outside; neither process can see the other's URL.
+   */
+  databaseFingerprints?: {
+    controlPlane: string;
+    dataPlane: string;
+  };
   healthCheck?: () => Promise<void>;
   /**
    * Data-plane hook for POST /cloud/v1/environments/{id}/credentials/rotate
@@ -641,6 +650,12 @@ export function createCloudServer(
           status: "ok",
           service: "lip-cloud-control-plane",
           instance_policy: "single",
+          ...(options.databaseFingerprints
+            ? {
+                control_plane_database: options.databaseFingerprints.controlPlane,
+                data_plane_database: options.databaseFingerprints.dataPlane
+              }
+            : {}),
           ...(options.deployment
             ? {
                 environment: options.deployment.environment,
@@ -651,6 +666,10 @@ export function createCloudServer(
         return;
       }
       if (method === "GET" && path === "/metrics") {
+        // Operator-only. The per-tenant server already gates its metrics; this
+        // one is on a public URL and its series name tenants and environments,
+        // so an unauthenticated scrape is a tenant-topology disclosure.
+        await principal(request, resolvedOptions, { method, path });
         sendText(response, 200, metrics.render());
         return;
       }

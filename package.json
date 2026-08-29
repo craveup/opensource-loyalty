@@ -23,6 +23,7 @@
     "cloud:provision": "tsx apps/cloud/src/tenant-onboarding-cli.ts",
     "cloud:restore-verify": "tsx apps/cloud/src/restore-verification-cli.ts",
     "cloud:deployment-verify": "tsx apps/cloud/src/deployment-verification-cli.ts",
+    "cloud:evidence:check": "tsx scripts/check-managed-environment-evidence.ts",
     "clean": "tsc -b --clean && rm -rf coverage spec/schemas",
     "conformance": "vitest run tests/conformance",
     "docs:check": "tsx scripts/check-docs-mirror.ts",

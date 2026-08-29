@@ -9,7 +9,10 @@ import { LipClient } from "@loyalty-interchange/sdk";
 import { PostgresCustomerRepository } from "./customer-postgres-repository.js";
 import { OidcCustomerIdentityProvider } from "./customer-provider.js";
 import { CustomerPlatform } from "./customer-service.js";
-import { managedDatabaseConfiguration } from "./database-configuration.js";
+import {
+  databaseIdentityFingerprint,
+  managedDatabaseConfiguration
+} from "./database-configuration.js";
 import { LocalDataPlaneProvisioner } from "./data-plane-provisioner.js";
 import {
   CloudOperatorService,
@@ -240,6 +243,10 @@ const running = await startCloudServer(controlPlane, {
     ? { authenticator }
     : apiKey ? { apiKey } : {}),
   operators,
+  databaseFingerprints: {
+    controlPlane: databaseIdentityFingerprint(connectionString),
+    dataPlane: databaseIdentityFingerprint(dataPlaneConnectionString)
+  },
   healthCheck: () => repository.healthCheck(),
   ...(process.env["LIP_CLOUD_DEPLOYMENT_ENVIRONMENT"]
     ? {

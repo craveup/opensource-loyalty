@@ -356,7 +356,13 @@ describe("Cloud control plane", () => {
         status: "ok"
       });
       expect(healthCheck).toHaveBeenCalledOnce();
-      const metrics = await fetch(`${running.url}/metrics`);
+      // Metrics series name tenants and environments, so an unauthenticated
+      // scrape of a public URL would disclose the tenant topology.
+      const anonymousMetrics = await fetch(`${running.url}/metrics`);
+      expect(anonymousMetrics.status).toBe(401);
+      const metrics = await fetch(`${running.url}/metrics`, {
+        headers: { authorization: headers.authorization }
+      });
       expect(metrics.status).toBe(200);
       expect(metrics.headers.get("content-type")).toContain("text/plain");
       expect(await metrics.text()).toContain("lip_cloud_http_requests_total");
