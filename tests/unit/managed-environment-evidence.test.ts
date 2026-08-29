@@ -181,6 +181,18 @@ describe("managed environment release evidence", () => {
     expect(problems.some((problem) => /additional properties/i.test(problem.message))).toBe(true);
   });
 
+  it("rejects impossible timestamps in every schema date-time field", async () => {
+    const document = await example();
+    document["recordedAt"] = "2026-99-99T09:00:00Z";
+    const environments = document["environments"] as Record<string, Record<string, unknown>>;
+    const productionAlert = environments["production"]!["alertTest"] as Record<string, unknown>;
+    productionAlert["firedAt"] = "not-a-timestamp";
+
+    expect(paths(checkManagedEnvironmentEvidence(JSON.stringify(document)))).toEqual(
+      expect.arrayContaining(["recordedAt", "environments.production.alertTest.firedAt"])
+    );
+  });
+
   it("names every missing environment rather than stopping at the first", () => {
     const problems = checkManagedEnvironmentEvidence(JSON.stringify({}));
     expect(paths(problems)).toEqual(

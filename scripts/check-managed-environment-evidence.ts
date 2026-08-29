@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { ErrorObject } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
+import addFormatsImport, { type FormatsPlugin } from "ajv-formats";
 
 /**
  * Validates a managed-environment release evidence record (PLA-417).
@@ -58,11 +59,13 @@ const evidenceSchema = JSON.parse(
     "utf8"
   )
 ) as object;
-const validateEvidenceSchema = new Ajv2020({
+const schemaValidator = new Ajv2020({
   allErrors: true,
-  strict: false,
-  validateFormats: false
-}).compile(evidenceSchema);
+  strict: false
+});
+const addFormats = addFormatsImport as unknown as FormatsPlugin;
+addFormats(schemaValidator, { mode: "full" });
+const validateEvidenceSchema = schemaValidator.compile(evidenceSchema);
 
 export interface EvidenceProblem {
   path: string;
