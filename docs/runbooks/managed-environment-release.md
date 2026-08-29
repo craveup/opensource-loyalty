@@ -54,8 +54,13 @@ does not by itself prove end-to-end order settlement.
    LIP_DEPLOYMENT_URL=https://lip-cloud-sandbox.onrender.com \
    LIP_EXPECTED_ENVIRONMENT=sandbox \
    LIP_EXPECTED_RELEASE=<git-commit> \
+   LIP_CLOUD_OPERATOR_KEY=lip_ok_... \
    npm run cloud:deployment-verify
    ```
+
+   Metrics are operator-only, so the key is required. The command also proves an
+   anonymous scrape is refused, and prints `control_plane_database`,
+   `data_plane_database` and both metrics statuses for the evidence record.
 
 5. Exercise tenant provisioning, enrollment, accrual, refund adjustment, member closure, and
    webhook delivery in sandbox. Confirm the original accrual multiplier is used after membership or
