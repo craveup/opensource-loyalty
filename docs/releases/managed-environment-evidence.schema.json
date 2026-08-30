@@ -12,8 +12,9 @@
     "environments": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sandbox", "production"],
+      "required": ["development", "sandbox", "production"],
       "properties": {
+        "development": { "$ref": "#/$defs/environment" },
         "sandbox": { "$ref": "#/$defs/environment" },
         "production": { "$ref": "#/$defs/environment" }
       }
@@ -50,7 +51,8 @@
         "neonProjectId",
         "neonBranchId",
         "connectionMode",
-        "databaseFingerprint",
+        "controlPlaneDatabaseFingerprint",
+        "dataPlaneDatabaseFingerprint",
         "deployId",
         "gitCommit",
         "imageDigest",
@@ -70,10 +72,15 @@
           "const": "direct",
           "description": "A pooled endpoint cannot hold the session-scoped advisory leases this service depends on."
         },
-        "databaseFingerprint": {
+        "controlPlaneDatabaseFingerprint": {
           "type": "string",
           "pattern": "^[a-f0-9]{16}$",
-          "description": "The control_plane_database value reported by GET /health. Sandbox and production must differ."
+          "description": "The control_plane_database value reported by GET /health. It may equal the data-plane value in the same environment, but cannot appear in another environment."
+        },
+        "dataPlaneDatabaseFingerprint": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16}$",
+          "description": "The data_plane_database value reported by GET /health. It may equal the control-plane value in the same environment, but cannot appear in another environment."
         },
         "deployId": { "type": "string", "minLength": 1 },
         "gitCommit": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },
@@ -91,12 +98,12 @@
         "health": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["checkedAt", "status", "instancePolicy"],
+          "required": ["checkedAt", "status", "instancePolicy", "release"],
           "properties": {
             "checkedAt": { "type": "string", "format": "date-time" },
             "status": { "const": "ok" },
             "instancePolicy": { "const": "single" },
-            "release": { "type": "string" }
+            "release": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" }
           }
         },
         "metricsProbe": {

@@ -1,9 +1,10 @@
-# Managed LIP shared clusters (PLA-798)
+# Managed Crave Loyalty shared clusters (PLA-798)
 #
-# Sandbox and production are intentionally separate services with separate
-# disks, secrets, and independently managed Neon databases. Both database
-# variables in one service point at that environment's direct (unpooled) Neon
-# endpoint. Never reuse a Crave application database or a `-pooler` endpoint.
+# Development, sandbox, and production are intentionally separate services
+# with separate disks, secrets, and independently managed Neon databases. Both
+# database variables in one service point at that environment's direct
+# (unpooled) Neon endpoint. Never reuse a Crave application database or a
+# `-pooler` endpoint.
 #
 # `numInstances: 1` is a correctness constraint while Admin extension state
 # and webhook dispatch retain single-process assumptions. The attached disks
@@ -14,9 +15,9 @@ previews:
 
 services:
   - type: web
-    name: lip-cloud-sandbox
+    name: crave-loyalty-development
     runtime: docker
-    region: oregon
+    region: virginia
     plan: starter
     numInstances: 1
     autoDeploy: false
@@ -25,16 +26,16 @@ services:
     preDeployCommand: node apps/cloud/dist/migrate-cli.js
     healthCheckPath: /health
     disk:
-      name: lip-cloud-sandbox-data
+      name: crave-loyalty-development-data
       mountPath: /data
       sizeGB: 1
     envVars:
       - key: LIP_CLOUD_DEPLOYMENT_ENVIRONMENT
-        value: sandbox
+        value: development
       - key: LIP_CLOUD_DATABASE_URL
-        sync: false # direct sandbox Neon URL; never a Crave DB or pooler
+        sync: false # direct development Neon URL; never a Crave DB or pooler
       - key: LIP_CLOUD_DATA_PLANE_DATABASE_URL
-        sync: false # same direct sandbox Neon URL
+        sync: false # same direct development Neon URL
       - key: LIP_CLOUD_API_KEY
         sync: false # bootstrap only; retire after the first operator exists
       - key: LIP_CLOUD_CREDENTIAL_KEY
@@ -50,7 +51,7 @@ services:
       - key: HEALTH_PORT
         value: "10000"
       - key: LIP_CLOUD_REGIONS
-        value: render-oregon
+        value: render-virginia
       - key: LIP_CLOUD_DEFAULT_PLAN
         value: free
       - key: LIP_CLOUD_PROGRAM_DIR
@@ -64,7 +65,7 @@ services:
       - key: LIP_CLOUD_DATA_PLANE_HOST
         value: 0.0.0.0
       - key: LIP_CLOUD_DATA_PLANE_PUBLIC_HOST
-        value: lip-cloud-sandbox
+        value: crave-loyalty-development
       - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
         value: "13210"
       # Optional production-equivalent auth/billing/customer integrations.
@@ -96,9 +97,9 @@ services:
         sync: false
 
   - type: web
-    name: lip-cloud-production
+    name: crave-loyalty-sandbox
     runtime: docker
-    region: oregon
+    region: virginia
     plan: starter
     numInstances: 1
     autoDeploy: false
@@ -107,7 +108,89 @@ services:
     preDeployCommand: node apps/cloud/dist/migrate-cli.js
     healthCheckPath: /health
     disk:
-      name: lip-cloud-production-data
+      name: crave-loyalty-sandbox-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: LIP_CLOUD_DEPLOYMENT_ENVIRONMENT
+        value: sandbox
+      - key: LIP_CLOUD_DATABASE_URL
+        sync: false # direct sandbox Neon URL; never a Crave DB or pooler
+      - key: LIP_CLOUD_DATA_PLANE_DATABASE_URL
+        sync: false # same direct sandbox Neon URL
+      - key: LIP_CLOUD_API_KEY
+        sync: false # bootstrap only; retire after the first operator exists
+      - key: LIP_CLOUD_CREDENTIAL_KEY
+        sync: false # 32-byte unpadded base64url AES-256-GCM key
+      - key: LIP_CLOUD_ALLOWED_ORIGINS
+        sync: false
+      - key: LIP_CLOUD_SHARED_KEY_DISABLED
+        sync: false # set false only for first-operator bootstrap, then permanently true
+      - key: LIP_CLOUD_HOST
+        value: 0.0.0.0
+      - key: LIP_CLOUD_PORT
+        value: "10000"
+      - key: HEALTH_PORT
+        value: "10000"
+      - key: LIP_CLOUD_REGIONS
+        value: render-virginia
+      - key: LIP_CLOUD_DEFAULT_PLAN
+        value: free
+      - key: LIP_CLOUD_PROGRAM_DIR
+        value: /data/programs
+      - key: LIP_CLOUD_DATA_DIR
+        value: /data/lip-cloud
+      - key: LIP_CLOUD_BACKUP_DIR
+        value: /data/lip-cloud/backups
+      - key: LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION
+        value: "false"
+      - key: LIP_CLOUD_DATA_PLANE_HOST
+        value: 0.0.0.0
+      - key: LIP_CLOUD_DATA_PLANE_PUBLIC_HOST
+        value: crave-loyalty-sandbox
+      - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
+        value: "13210"
+      # Optional production-equivalent auth/billing/customer integrations.
+      - key: LIP_CLOUD_OIDC_ISSUER
+        sync: false
+      - key: LIP_CLOUD_OIDC_AUDIENCE
+        sync: false
+      - key: LIP_CLOUD_OIDC_JWKS_URI
+        sync: false
+      - key: LIP_CLOUD_BOOTSTRAP_SUBJECTS
+        sync: false
+      - key: LIP_CLOUD_STRIPE_SECRET_KEY
+        sync: false
+      - key: LIP_CLOUD_STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: LIP_CLOUD_STRIPE_PRICE_PRO
+        sync: false
+      - key: LIP_CLOUD_STRIPE_PRICE_BUSINESS
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_OIDC_ISSUER
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_OIDC_AUDIENCE
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_AUTHORIZED_PARTIES
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_TENANT_ID
+        sync: false
+      - key: LIP_CLOUD_CUSTOMER_PROVIDER_ID
+        sync: false
+
+  - type: web
+    name: crave-loyalty-production
+    runtime: docker
+    region: virginia
+    plan: starter
+    numInstances: 1
+    autoDeploy: false
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node apps/cloud/dist/cli.js
+    preDeployCommand: node apps/cloud/dist/migrate-cli.js
+    healthCheckPath: /health
+    disk:
+      name: crave-loyalty-production-data
       mountPath: /data
       sizeGB: 1
     envVars:
@@ -132,7 +215,7 @@ services:
       - key: HEALTH_PORT
         value: "10000"
       - key: LIP_CLOUD_REGIONS
-        value: render-oregon
+        value: render-virginia
       - key: LIP_CLOUD_DEFAULT_PLAN
         value: free
       - key: LIP_CLOUD_PROGRAM_DIR
@@ -146,7 +229,7 @@ services:
       - key: LIP_CLOUD_DATA_PLANE_HOST
         value: 0.0.0.0
       - key: LIP_CLOUD_DATA_PLANE_PUBLIC_HOST
-        value: lip-cloud-production
+        value: crave-loyalty-production
       - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
         value: "13210"
       - key: LIP_CLOUD_OIDC_ISSUER

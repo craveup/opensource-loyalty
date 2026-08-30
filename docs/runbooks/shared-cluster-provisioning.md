@@ -1,8 +1,8 @@
 # Shared LIP cluster: tenant provisioning runbook (PLA-417)
 
-> Managed sandbox/production release, restore rehearsal, and rollback authority now lives in
+> Managed development/sandbox/production release, restore rehearsal, and rollback authority lives in
 > [`managed-environment-release.md`](managed-environment-release.md). This runbook describes tenant
-> provisioning inside either independently deployed cluster.
+> provisioning inside any independently deployed cluster.
 
 This runbook stands up ONE regional Postgres-backed LIP cluster that serves
 every brand, and onboards brands onto it. A brand is a `tenant_id` — a row
@@ -20,8 +20,8 @@ scope inside the shared database — never a per-brand deployment.
   process, so it is not the unit here.
 - **One database per environment.** Inside one cluster, control-plane tables (`lip_cloud_*`) and
   tenant engine rows (`lip_engine_*`, keyed by `tenant_id` + `program_id`) share that environment's
-  Neon database. Sandbox and production never share a Neon project/database/role, and neither uses
-  a Crave database.
+  Neon database. Development, sandbox, and production never share a Neon project/database/role, and
+  none uses a Crave platform database.
 - **One service instance — a hard constraint.** `docs/postgres.md`: run at
   most one platform instance per tenant until PLA-428/429 land (Admin
   extension stores cache per-process revisions; webhook journals assume a
@@ -49,15 +49,17 @@ scope inside the shared database — never a per-brand deployment.
 
 ## 1. Create the environment's independent Neon Postgres
 
-1. Create a distinct Neon project for `sandbox` or `production`, in the region matching Render
-   Oregon. Create database `loyalty` and an environment-specific role. Never reuse the other LIP
-   environment or any Crave project/database/role.
+1. Create the matching PostgreSQL 17 Neon project in AWS US East 1 (N. Virginia):
+   `crave-loyalty-development`, `crave-loyalty-sandbox`, or `crave-loyalty-production`. Create
+   database `loyalty` and an environment-specific role. Never reuse another LIP environment or any
+   Crave platform project/database/role.
 2. Copy the **direct (unpooled)** connection string. Do not use the
    `-pooler` endpoint: the engine manages its own `pg` pool and uses
    advisory locks (`withLease` takes session-scoped locks that break under transaction pooling).
    Startup and migrations reject pooled endpoints before connecting.
-3. Project → **Settings → Compute**: disable autosuspend (scale-to-zero) for
-   production; cold starts would stall checkout-path loyalty calls.
+3. Project → **Settings → Compute**: disable autosuspend (scale-to-zero) for sandbox and production;
+   cold starts would stall externally exercised checkout-path loyalty calls. Development may retain
+   autosuspend until continuous internal testing requires otherwise.
 4. Project → **Settings → Storage**: set history retention to at least 7
    days — this is your point-in-time-recovery window.
 5. Set both database variables on only the matching Render service. Keep connection strings in
@@ -65,27 +67,46 @@ scope inside the shared database — never a per-brand deployment.
 
 ## 2. Deploy the service from the blueprint
 
-1. Render dashboard → **New → Blueprint** → select this repo and exact reviewed branch/commit. The
-   blueprint creates `lip-cloud-sandbox` and `lip-cloud-production`, both intentionally manual.
-2. Fill the `sync: false` secrets when prompted:
-   - `LIP_CLOUD_API_KEY`: ≥ 16 random characters (e.g. `openssl rand -base64 24`).
-     This is only the **bootstrap** credential now — after section 4½ it is
-     disabled and can be deleted. Store it in the team password manager
-     until then.
-   - `LIP_CLOUD_ALLOWED_ORIGINS`: the Business Manager origin(s), e.g.
-     `https://dashboard.craveup.com`.
-3. Apply. The deploy runs `preDeployCommand: node apps/cloud/dist/migrate-cli.js`
+1. Render dashboard → **New → Blueprint** → select this repo and exact reviewed branch/commit. Set
+   **Blueprint Auto Sync to No** before linking or applying it; `autoDeploy: false` controls service
+   deploys but does not disable Blueprint Auto Sync. The blueprint creates
+   `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` in Virginia,
+   all intentionally manual.
+2. Fill every required `sync: false` value independently on each service when prompted:
+   - `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL`: use the same direct,
+     unpooled URL from that service's matching Neon project. Never reuse a URL across environments.
+   - `LIP_CLOUD_API_KEY`: at least 16 random characters (for example,
+     `openssl rand -base64 24`). This is only the **bootstrap** credential; after section 4½ it is
+     disabled and can be deleted. Store it in the team password manager until then.
+   - `LIP_CLOUD_CREDENTIAL_KEY`: an independent 32-byte unpadded base64url key for AES-256-GCM
+     (for example, `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Never reuse this key.
+   - `LIP_CLOUD_ALLOWED_ORIGINS`: the exact Business Manager origin(s) for that environment, with no
+     wildcard (for example, `https://dashboard.craveup.com`).
+   - `LIP_CLOUD_SHARED_KEY_DISABLED`: set `false` only for the first-operator bootstrap in section
+     4½, then change it permanently to `true` and redeploy.
+3. Leave optional groups completely unset unless that capability is enabled and fully configured:
+   - operator OIDC: `LIP_CLOUD_OIDC_ISSUER`, `LIP_CLOUD_OIDC_AUDIENCE`,
+     `LIP_CLOUD_OIDC_JWKS_URI`, and `LIP_CLOUD_BOOTSTRAP_SUBJECTS`;
+   - Stripe billing: `LIP_CLOUD_STRIPE_SECRET_KEY`, `LIP_CLOUD_STRIPE_WEBHOOK_SECRET`,
+     `LIP_CLOUD_STRIPE_PRICE_PRO`, and `LIP_CLOUD_STRIPE_PRICE_BUSINESS`;
+   - customer OIDC: `LIP_CLOUD_CUSTOMER_OIDC_ISSUER`, `LIP_CLOUD_CUSTOMER_OIDC_AUDIENCE`,
+     `LIP_CLOUD_CUSTOMER_AUTHORIZED_PARTIES`, `LIP_CLOUD_CUSTOMER_TENANT_ID`, and
+     `LIP_CLOUD_CUSTOMER_PROVIDER_ID`.
+
+   Do not partially populate a group. If a capability is enabled, satisfy the whole group's startup
+   contract before applying the Blueprint.
+4. Apply. The deploy runs `preDeployCommand: node apps/cloud/dist/migrate-cli.js`
    before going live; confirm the deploy log contains
    `{"event":"shared_cluster_migrations_applied","shared_database":true,...}`.
    The command is advisory-locked and idempotent — reruns are no-ops.
-4. Verify health:
+5. Verify health:
 
    ```bash
    curl -s https://<service>.onrender.com/health
    # includes status, service, instance_policy, environment, and exact release
 
    LIP_DEPLOYMENT_URL=https://<service>.onrender.com \
-   LIP_EXPECTED_ENVIRONMENT=<sandbox-or-production> \
+   LIP_EXPECTED_ENVIRONMENT=<development-or-sandbox-or-production> \
    LIP_EXPECTED_RELEASE=<git-commit> npm run cloud:deployment-verify
    ```
 
@@ -97,7 +118,7 @@ JSON (see `deploy/acme-sandbox/acme-program.json` for a template) and place
 it on the disk:
 
 ```bash
-render ssh <lip-cloud-sandbox-or-production-service-id>
+render ssh <crave-loyalty-environment-service-id>
 mkdir -p /data/programs
 cat > /data/programs/demo-rewards.json <<'EOF'
 { "program_id": "demo-rewards", ... }
@@ -122,7 +143,7 @@ LIP_CLOUD_OPERATOR_KEY=lip_ok_... npm run cloud:provision -- \
   --org-slug demo-restaurants --org-name "Demo Restaurants" \
   --project-slug loyalty --project-name "Loyalty" \
   --env-slug production --env-name "Production" \
-  --kind production --region render-oregon \
+  --kind production --region render-virginia \
   --program-id demo-rewards
 ```
 
@@ -152,7 +173,7 @@ curl "${H[@]}" -X POST $BASE/cloud/v1/organizations/<organization_id>/projects \
   -d '{"name":"Loyalty","slug":"loyalty"}'
 curl "${H[@]}" -X POST $BASE/cloud/v1/projects/<project_id>/environments \
   -d '{"name":"Production","slug":"production","kind":"production",
-       "region":"render-oregon","program_id":"demo-rewards"}'
+       "region":"render-virginia","program_id":"demo-rewards"}'
 # poll until status == "ready" (worker polls every 5s):
 curl "${H[@]}" $BASE/cloud/v1/projects/<project_id>/environments
 ```
@@ -399,8 +420,9 @@ failure + health-check alerts to the engineering Slack. Stream logs (Render
 2½. Run the section 4½ operator cutover: bootstrap the platform-admin
    operator, create per-human/service operators, swap callers to
    `LIP_CLOUD_OPERATOR_KEY`, then set `LIP_CLOUD_SHARED_KEY_DISABLED=true`.
-3. Create independent sandbox and production Neon projects/roles, disable production autosuspend,
-   set history retention, and paste each direct URL only into its matching service.
+3. Create independent development, sandbox, and production Neon projects/roles in AWS US East 1
+   (N. Virginia), disable sandbox/production autosuspend, set history retention, and paste each direct
+   URL only into its matching service.
 4. Render: enable failure/health notifications; optionally add a log stream.
 5. Seed `/data/programs/<program_id>.json` via `render ssh` per brand.
 6. Per onboarded brand: run `rotate-credentials` (step 4c) to mint the
@@ -409,4 +431,4 @@ failure + health-check alerts to the engineering Slack. Stream logs (Render
 7. Per onboarded brand: create the first webhook subscription (step 4d) —
    without it the tenant delivers no webhooks.
 8. Follow `managed-environment-release.md` to record exact deploy, migration, health/metrics,
-   backup/restore, and rollback evidence for both environments.
+   backup/restore, and rollback evidence for all three environments.

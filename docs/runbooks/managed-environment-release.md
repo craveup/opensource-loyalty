@@ -1,33 +1,37 @@
-# Managed sandbox and production release runbook
+# Managed development, sandbox, and production release runbook
 
-This is the release authority for the shared LIP sandbox and production clusters. It complements
+This is the release authority for the shared Crave Loyalty development, sandbox, and production
+clusters. It complements
 [`shared-cluster-provisioning.md`](shared-cluster-provisioning.md), which covers tenant onboarding
 inside one cluster.
 
 ## Current activation status
 
 The managed-service code and configuration can merge independently of provider activation. A merge
-does not approve either environment for traffic, and `render.yaml` keeps automatic deploys disabled.
+does not approve any environment for traffic, and `render.yaml` keeps automatic deploys disabled.
 As of 2026-08-28, activation remains blocked until release evidence records all of the following:
 
 - Render has the required GitHub repository access and the operator has completed the provider
   authorization flow.
 - The production Neon role password has been rotated, with the new value stored only in the
   approved secret manager and Render.
-- Both environments have their own direct Neon URLs and independently generated API and encryption
+- All three environments have their own direct Neon URLs and independently generated API and encryption
   keys in Render. Credential values must never be copied into this repository or release evidence.
-- `lip-cloud-sandbox` and `lip-cloud-production` exist on paid Starter plans with one 1 GB disk each.
-- Sandbox deployment, restore rehearsal, rollback rehearsal, and the required lifecycle smoke tests
-  below have passed before production promotion.
+- `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` exist on paid
+  Starter plans in Virginia with one independent 1 GB disk each.
+- Development verification passes before sandbox receives a candidate. Sandbox deployment, restore
+  rehearsal, rollback rehearsal, and the required lifecycle smoke tests below pass before production
+  promotion.
 
 The settlement bridge remains a separate Crave integration dependency; managed-cluster activation
 does not by itself prove end-to-end order settlement.
 
 ## Fixed topology and safety rules
 
-- `lip-cloud-sandbox` and `lip-cloud-production` are separate Render services.
+- `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` are separate
+  Render services in Virginia.
 - Each service has its own disk, bootstrap/operator credentials, encryption key, and independently
-  managed Neon project/database/role. Neither environment uses a Crave database.
+  managed Neon project/database/role. No environment uses a Crave platform database.
 - Both `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL` use the environment's direct
   Neon hostname. A `-pooler` hostname or `pgbouncer=true` fails before migrations or startup.
 - `numInstances: 1` is a correctness limit, not a sizing preference. Do not scale out until Admin
@@ -44,14 +48,19 @@ does not by itself prove end-to-end order settlement.
 ## Candidate promotion
 
 1. Record the exact Git commit and immutable image digest from the candidate build.
-2. Validate `render.yaml`; confirm exactly two services, `autoDeploy: false`, and
-   `numInstances: 1` for both.
-3. Deploy sandbox first. The pre-deploy log must contain
+2. Validate `render.yaml`; confirm exactly three services, `autoDeploy: false`, `region: virginia`,
+   and `numInstances: 1` for all three.
+3. Deploy development first. The pre-deploy log must contain
    `shared_cluster_migrations_applied`; a pooled URL must stop here with a safe direct-endpoint error.
-4. Verify the exact candidate:
+4. Verify development with `LIP_EXPECTED_ENVIRONMENT=development`, then exercise provisioning,
+   enrollment, accrual, refund adjustment, member closure, and webhook delivery against synthetic
+   data. Record its independent database fingerprint and restore rehearsal.
+5. Deploy the exact development-verified commit/image to sandbox. The pre-deploy log must contain
+   `shared_cluster_migrations_applied`; a pooled URL must stop here with a safe direct-endpoint error.
+6. Verify the exact candidate:
 
    ```bash
-   LIP_DEPLOYMENT_URL=https://lip-cloud-sandbox.onrender.com \
+   LIP_DEPLOYMENT_URL=https://crave-loyalty-sandbox.onrender.com \
    LIP_EXPECTED_ENVIRONMENT=sandbox \
    LIP_EXPECTED_RELEASE=<git-commit> \
    LIP_CLOUD_OPERATOR_KEY=lip_ok_... \
@@ -62,11 +71,11 @@ does not by itself prove end-to-end order settlement.
    anonymous scrape is refused, and prints `control_plane_database`,
    `data_plane_database` and both metrics statuses for the evidence record.
 
-5. Exercise tenant provisioning, enrollment, accrual, refund adjustment, member closure, and
+7. Exercise tenant provisioning, enrollment, accrual, refund adjustment, member closure, and
    webhook delivery in sandbox. Confirm the original accrual multiplier is used after membership or
    tier changes.
-6. Create a Neon restore branch and complete the restore rehearsal below.
-7. Promote the same reviewed commit/image to production. Repeat migration, health, metrics, and
+8. Create a Neon restore branch and complete the restore rehearsal below.
+9. Promote the same reviewed commit/image to production. Repeat migration, health, metrics, and
    restore checks with `LIP_EXPECTED_ENVIRONMENT=production` before routing Crave traffic.
 
 ## Health and metrics
@@ -134,7 +143,7 @@ and validate it before activation:
 npm run cloud:evidence:check -- path/to/evidence.json
 ```
 
-For sandbox and production, retain: service ID/hostname, Neon project/branch identifiers,
+For development, sandbox, and production, retain: service ID/hostname, Neon project/branch identifiers,
 database-directness check, deploy ID, Git commit, image digest, migration log event, `/health`
 response, `/metrics` probe, instance count, backup branch/timestamp, restore verification result,
 rollback target, and reviewer sign-off. Never record connection strings or credential values — the
@@ -144,11 +153,15 @@ The evidence file itself is operator-supplied and is not committed. Only the sch
 a secret-free example live in this repository, so the record can be validated without the repository
 ever holding an environment's secrets.
 
-Two properties the checker enforces beyond shape:
+The checker also enforces release and isolation invariants:
 
-- **Sandbox and production must report different `databaseFingerprint` values.** Each deployment
-  publishes `control_plane_database` on `GET /health`, a SHA-256 prefix of `host:port/database` that
-  contains no role or password. Neither process can see the other's URL, so comparing the two
-  published identities is the only way to prove the deployments are independent.
+- **Each environment must name a different Neon project, and neither database-plane fingerprint may
+  appear in another environment.** Each deployment publishes `control_plane_database` and
+  `data_plane_database` on `GET /health`, SHA-256 prefixes of `host:port/database` that contain no
+  role or password. Control and data may intentionally match inside one environment, but comparing
+  all six reported values across environments proves no database was reused.
+- **Development, sandbox, and production must run the same Git commit and image digest.** Each
+  `/health` response must also report that environment's declared Git commit as `release`; a stale
+  response or mixed artifact cannot satisfy the gate.
 - **An anonymous `/metrics` scrape must have been refused (401).** The series name tenants and
   environments, and the control plane is on a public URL.
