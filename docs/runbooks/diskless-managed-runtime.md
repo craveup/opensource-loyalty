@@ -184,8 +184,8 @@ store. Distributed leasing has to land before the instance count moves.
 5. Restart and redeploy; confirm URLs, programs, credentials, members, balances
    and webhook state all survive.
 6. Suspend/freeze the development runtime, prove its database fingerprint is stable twice at least
-   five seconds apart, then exercise an isolated Neon branch restore and record the evidence. Resume
-   the service only after the comparison passes.
+   five seconds apart with `npm run cloud:restore-source-stability`, then exercise an isolated Neon
+   branch restore and record the evidence. Resume the service only after the comparison passes.
 7. Confirm `/health` and `/ready`.
 8. Optionally return the development service to Free. Because Free has no pre-deploy step, redeploy
    once and repeat `/health`, `/ready`, runtime restoration, and authenticated/anonymous metrics

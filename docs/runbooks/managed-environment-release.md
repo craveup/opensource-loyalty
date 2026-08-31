@@ -111,8 +111,8 @@ does not by itself prove end-to-end order settlement.
 
 ## Backup and restore rehearsal
 
-Neon history retention/PITR is the only backup authority; there is no disk to snapshot. The former encrypted service disk backup is
-separate and covers program definitions and local environment credential material.
+Neon history retention/PITR is the only backup authority; there is no disk to snapshot. Legacy
+standalone file backups are not evidence for a managed environment.
 
 1. Freeze writes on every tenant runtime and record the freeze timestamp, source database branch,
    current Render deploy ID, Git commit, and image digest. For a single-instance development drill,
@@ -120,6 +120,15 @@ separate and covers program definitions and local environment credential materia
 2. Prove the source is stable before branching: capture the same schema/row-count/checksum evidence
    twice at least five seconds apart and require an exact match. A graceful service suspension can
    finish one last lease or scheduler write, so "suspended" alone is not sufficient evidence.
+
+   ```bash
+   LIP_BACKUP_SOURCE_DATABASE_URL='<direct frozen source URL>' \
+   npm run cloud:restore-source-stability
+   ```
+
+   The command fails closed on any schema, row-count, or checksum drift and prints only the interval
+   and counts of compared evidence fields, never connection details or row evidence.
+
 3. Create a Neon branch only after the stability check passes. Use its direct endpoint and a
    restore-only role. Neon Console may visually wrap a hostname; use the endpoint metadata rather
    than copying formatting whitespace, and use `sslmode=verify-full` with current `pg` clients.

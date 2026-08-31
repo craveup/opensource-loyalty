@@ -353,9 +353,11 @@ clusters as a migration):
 
 - **Neon:** restore = create a branch at a timestamp (**Restore** tab or
   `neon branches create --parent-timestamp ...`) inside the history-retention
-  window. While writes remain frozen, run `npm run cloud:restore-verify` with
-  the direct source and restored-branch URLs. Repoint both service database
-  variables only after schema versions, row counts, and content fingerprints match.
+  window. While writes remain frozen, first run `npm run cloud:restore-source-stability` with
+  `LIP_BACKUP_SOURCE_DATABASE_URL` set to the direct source URL. Create the branch only after that
+  two-sample check passes. Then run `npm run cloud:restore-verify` with the direct source and
+  restored-branch URLs. Repoint both service database variables only after schema versions, row
+  counts, and content fingerprints match.
 - **There is no service disk on a managed deployment.** Programs, credentials
   and every other durable byte are rows in the same Neon database, so the
   branch/PITR path above is the whole story. Preserve

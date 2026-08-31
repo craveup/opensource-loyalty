@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertDistinctRestoreDatabases,
+  captureStableRestoreSourceEvidence,
   compareRestoreEvidence,
   type RestoreEvidence,
 } from "./restore-verification.js";
@@ -64,6 +65,34 @@ describe("backup restore verification", () => {
       "Restored loyalty database does not match the frozen source evidence: " +
         "relations.lip_engine_ledger",
     );
+  });
+
+  it("captures the source twice after the required stability interval", async () => {
+    const captures = [evidence(), structuredClone(evidence())];
+    const waits: number[] = [];
+
+    const stable = await captureStableRestoreSourceEvidence(
+      async () => captures.shift()!,
+      {
+        intervalMs: 5_000,
+        wait: async (intervalMs) => {
+          waits.push(intervalMs);
+        },
+      },
+    );
+
+    expect(stable).toEqual(evidence());
+    expect(captures).toHaveLength(0);
+    expect(waits).toEqual([5_000]);
+  });
+
+  it("rejects an unsafe source stability interval", async () => {
+    await expect(
+      captureStableRestoreSourceEvidence(async () => evidence(), {
+        intervalMs: 4_999,
+        wait: async () => {},
+      }),
+    ).rejects.toThrow(/at least 5000 milliseconds/u);
   });
 
   it("rejects the source database reused through different credentials or query options", () => {

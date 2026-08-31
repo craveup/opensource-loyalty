@@ -1,3 +1,4 @@
+import { setTimeout as waitFor } from "node:timers/promises";
 import type { Pool } from "pg";
 
 export interface RestoreEvidence {
@@ -122,4 +123,25 @@ export function compareRestoreEvidence(
       `Restored loyalty database does not match the frozen source evidence: ${differences.join(", ")}`,
     );
   }
+}
+
+export async function captureStableRestoreSourceEvidence(
+  capture: () => Promise<RestoreEvidence>,
+  options: {
+    intervalMs?: number;
+    wait?: (intervalMs: number) => Promise<void>;
+  } = {},
+): Promise<RestoreEvidence> {
+  const intervalMs = options.intervalMs ?? 5_000;
+  if (!Number.isSafeInteger(intervalMs) || intervalMs < 5_000) {
+    throw new Error(
+      "Restore source stability interval must be at least 5000 milliseconds",
+    );
+  }
+
+  const first = await capture();
+  await (options.wait ?? waitFor)(intervalMs);
+  const second = await capture();
+  compareRestoreEvidence(first, second);
+  return second;
 }
