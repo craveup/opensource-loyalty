@@ -1,9 +1,11 @@
 # Loyalty Interchange Protocol (LIP)
 # Compact index for AI coding agents. When docs and spec disagree, spec/ wins.
 
-> LIP is a vendor-neutral loyalty transaction protocol for restaurant, QSR, and
-> franchise ordering. It is NOT a customer auth platform — apps use a BFF that
-> holds the merchant API key and maps users to member_id.
+> LIP is an open-source restaurant loyalty platform with a separate,
+> vendor-neutral transaction protocol. `/platform/v1` handles customer data,
+> segments, campaigns, and analytics; `/lip/v1` stays portable. It is NOT a
+> customer auth provider — apps use a BFF that holds merchant credentials and
+> maps users to member_id.
 
 ## Quick commands
 
@@ -91,6 +93,19 @@ POST /lip/v1/issued-rewards/cancel
 Discovery: GET /.well-known/lip, GET /health
 Operations: GET /metrics (Bearer auth), RateLimit-* headers, JSON request logs
 Admin: http://127.0.0.1:3210/admin/ (same key as API)
+Platform API: http://127.0.0.1:3210/platform/v1 (same Bearer auth)
+Synthetic guest wallet: http://127.0.0.1:3230/
+
+## Reference product API (non-normative)
+
+`/platform/v1` provides profiles and consent, behavioral events, bounded
+member CSV imports, dynamic/static segments, segment preview, reward campaigns,
+deterministic holdouts, attribution, redacted connectors, and analytics.
+Reference: docs/platform-api.md and spec/platform-openapi.yaml.
+
+This product API is not covered by LIP protocol conformance and must never be
+added to spec/openapi.yaml. Location-scoped credentials fail closed because
+the current platform API reads tenant-wide customer data.
 
 ## Checkout lifecycle (foodservice)
 
@@ -124,11 +139,15 @@ Failed deliveries persist in the SQLite outbox and resume after restart.
 - packages/adapter-kit/src — ordering adapter contract and certification runner
 - packages/reference/src/engine.ts — loyalty engine rules
 - packages/server/src/server.ts — HTTP routes
+- packages/server/src/customer-data.ts — profiles, consent, events, imports, attribution
+- packages/server/src/telemetry.ts — optional disabled-by-default self-host heartbeat
+- packages/adapter-kit/src/square.ts — Square mapping + raw-body signature verification
 - packages/server/src/program-management.ts — non-normative draft/publish/rollback
 - packages/sdk/src/client.ts — idiomatic TypeScript client
 - packages/identity/src — external OIDC validation + stable customer/member mapping
 - packages/cli/src/cli.ts — lip CLI (serve, doctor, test, validate)
 - apps/admin/src/App.tsx — reference Admin dashboard
+- apps/wallet/src — OIDC Authorization Code + PKCE reference wallet BFF
 
 ## BFF integration pattern (customer apps)
 
@@ -139,12 +158,14 @@ reserve→pay→accrue→capture. `@loyalty-interchange/identity` supplies the t
 server-side verifier and mapping contract; it does not own sign-in or sessions.
 Reference: docs/customer-identity.md (BFF integration pattern and mapping contract).
 
-## Not in LIP (build in your app or wait for platform)
+## Not in the normative LIP protocol
 
 - Customer auth (OTP, social, sessions)
 - Hosted sign-up/sign-in UI and customer session issuance
 - Universal vendor-certified adapters (mappings require source fixtures)
-- Portable program-authoring APIs (the reference Admin has non-normative local draft/publish)
+- Customer profiles, imports, segments, campaigns, connectors, and attribution
+  (the reference product exposes these at non-normative `/platform/v1`)
+- Portable program-authoring APIs (the Admin has non-normative draft/publish)
 - Live loyalty operations over MCP (official MCP supplies docs, schemas, and validation only)
 
 ## Maintainer

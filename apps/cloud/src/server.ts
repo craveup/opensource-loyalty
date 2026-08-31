@@ -31,7 +31,7 @@ import {
 
 const maxBodyBytes = 1_048_576;
 
-/** Audit-only on-behalf-of annotation ceiling (PLA-442 fix 8). */
+/** Audit-only on-behalf-of annotation ceiling. */
 const maxSubjectHeaderLength = 320;
 
 /** Subject stamped as the audit actor for the shared-key bootstrap request. */
@@ -39,7 +39,7 @@ const CLOUD_BOOTSTRAP_SUBJECT = "urn:lip:cloud-bootstrap";
 
 export interface CloudServerOptions {
   /**
-   * Legacy shared trusted-gateway key. Deprecated (PLA-442): it authenticates
+   * Legacy shared trusted-gateway key. Deprecated: it authenticates
    * NOTHING except the first-operator bootstrap route, and only while zero
    * operators exist. Once any operator exists it is retired (401
    * `shared_key_retired`) on every route. Set `sharedKeyDisabled` to reject it
@@ -53,7 +53,7 @@ export interface CloudServerOptions {
   sharedKeyDisabled?: boolean;
   /**
    * OIDC-verified subjects allowed to bootstrap the first platform-admin
-   * operator while zero operators exist (PLA-442 fix 3). Inert thereafter.
+   * operator while zero operators exist. Inert thereafter.
    */
   bootstrapSubjects?: string[];
   allowedOrigins?: string[];
@@ -73,7 +73,7 @@ export interface CloudServerOptions {
   healthCheck?: () => Promise<void>;
   /**
    * Data-plane hook for POST /cloud/v1/environments/{id}/credentials/rotate
-   * (PLA-416). When absent the route answers 409
+   * for tenant-scoped key rotation. When absent the route answers 409
    * credential_rotation_unavailable.
    */
   rotateEnvironmentCredentials?: (
@@ -108,7 +108,7 @@ function bearer(request: IncomingMessage): string | undefined {
 
 /**
  * The audit-only on-behalf-of annotation. Validated before it ever reaches
- * audit metadata (PLA-442 fix 8): bounded length, no control characters or
+ * audit metadata: bounded length, no control characters or
  * newlines. It is never used for authorization.
  */
 function subjectHeader(request: IncomingMessage): string | undefined {
@@ -146,7 +146,7 @@ async function principal(
   const secret = bearer(request);
   const claimed = subjectHeader(request);
 
-  // Operator API keys (PLA-442): the acting identity comes from the resolved
+  // Operator API keys: the acting identity comes from the resolved
   // operator record. The subject header is ONLY an on-behalf-of annotation.
   if (secret?.startsWith(OPERATOR_KEY_PREFIX)) {
     const resolved = options.operators
@@ -173,7 +173,7 @@ async function principal(
     // A verified subject with an active operator record gains that
     // operator's scope; anyone else stays a plain member principal. A verified
     // subject in the bootstrap allowlist, while zero operators exist, is
-    // flagged to create the first platform-admin for itself (PLA-442 fix 3).
+    // flagged to create the first platform-admin for itself.
     const operator = await options.operators?.operatorForSubject(verified.subject);
     const bootstrapAdmin =
       !operator &&
@@ -190,12 +190,12 @@ async function principal(
     };
   }
 
-  // Legacy shared trusted-gateway key (PLA-442 fix 1): retired to a
+  // Legacy shared trusted-gateway key retired to a
   // bootstrap-only credential. It authenticates NOTHING except the
   // first-operator bootstrap route, and only while zero operators exist. Once
   // any operator exists — or on any other route — it is rejected. It never
   // produces a general data-plane principal again, and the bootstrap request
-  // needs no X-LIP-Cloud-Subject header (fix 2): the new operator's identity
+  // needs no X-LIP-Cloud-Subject header: the new operator's identity
   // comes from the request body.
   if (!secret || !options.apiKey || !secureEqual(secret, options.apiKey)) {
     throw new CloudError(401, "unauthorized", "Valid Cloud API credentials are required");
@@ -499,7 +499,7 @@ interface OperatorRouteResult {
 }
 
 /**
- * Operator lifecycle routes (PLA-442). Authorization lives in
+ * Operator lifecycle routes. Authorization lives in
  * CloudOperatorService: platform-admin operators only, except the one-time
  * shared-key bootstrap of the first operator. Returns undefined when the
  * request is not an operator route.
@@ -625,8 +625,8 @@ export function createCloudServer(
   if (options.apiKey && options.apiKey.length < 16) {
     throw new Error("Cloud API key must contain at least 16 characters");
   }
-  // The shared key can no longer reach data routes (PLA-442 fix 1), so there
-  // is no per-request deprecation signal to throttle (fix 10): the boot-time
+  // The shared key can no longer reach data routes, so there
+  // is no per-request deprecation signal to throttle: the boot-time
   // `cloud_shared_key_deprecated` notice in cli.ts is the single, once-per-boot
   // deprecation warning.
   const resolvedOptions: CloudServerOptions = options;

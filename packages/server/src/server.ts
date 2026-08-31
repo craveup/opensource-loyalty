@@ -33,6 +33,7 @@ import {
 import type { WebhookAdminStatus, WebhookDispatcher, WebhookSubscription } from "./webhooks.js";
 import type { ProgramManagementService } from "./program-management.js";
 import type { CampaignService } from "./campaigns.js";
+import type { CustomerDataService, CustomerProfileInput } from "./customer-data.js";
 import type { MembershipService } from "./memberships.js";
 import {
   engagementAnalytics,
@@ -138,6 +139,7 @@ export interface ServerOptions {
     webhookManager?: WebhookDispatcher;
     programs?: ProgramManagementService;
     campaigns?: CampaignService;
+    customerData?: CustomerDataService;
     memberships?: MembershipService;
     access?: AccessControlService;
     engagement?: EngagementService;
@@ -229,6 +231,7 @@ function rootPrincipal(options: ServerOptions): TenantPrincipal {
     role: "owner",
     permissions: [
       "admin:read", "admin:write", "program:publish", "access:manage",
+      "platform:read", "platform:write",
       "protocol:read", "protocol:write"
     ]
   };
@@ -257,6 +260,23 @@ async function protocolAuthorized(
     (principal.actor_type === "root" ||
       options.admin?.access?.hasPermission(principal, permission))
   );
+}
+
+async function platformPrincipal(
+  request: IncomingMessage,
+  options: ServerOptions,
+  permission: "platform:read" | "platform:write"
+): Promise<{ principal?: TenantPrincipal; error?: "unauthorized" | "forbidden" | "location_scoped" }> {
+  const principal = await bearerPrincipal(request, options);
+  if (!principal) return { error: "unauthorized" };
+  if (principal.allowed_location_ids) return { principal, error: "location_scoped" };
+  if (
+    principal.actor_type !== "root" &&
+    !options.admin?.access?.hasPermission(principal, permission)
+  ) {
+    return { principal, error: "forbidden" };
+  }
+  return { principal };
 }
 
 /**
@@ -787,6 +807,21 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
     methods.push(routeMethod);
     allowedMethods.set(routePath, methods);
   }
+  if (options.admin?.customerData && options.admin.campaigns) {
+    allowedMethods.set("/platform/v1", ["GET"]);
+    allowedMethods.set("/platform/v1/members", ["GET", "PUT"]);
+    allowedMethods.set("/platform/v1/events", ["GET", "POST"]);
+    allowedMethods.set("/platform/v1/segments", ["GET", "PUT"]);
+    allowedMethods.set("/platform/v1/segments/preview", ["POST"]);
+    allowedMethods.set("/platform/v1/campaigns", ["GET", "PUT"]);
+    allowedMethods.set("/platform/v1/campaigns/status", ["POST"]);
+    allowedMethods.set("/platform/v1/campaigns/run", ["POST"]);
+    allowedMethods.set("/platform/v1/campaigns/report", ["GET"]);
+    allowedMethods.set("/platform/v1/connectors", ["GET", "PUT"]);
+    allowedMethods.set("/platform/v1/connectors/delete", ["POST"]);
+    allowedMethods.set("/platform/v1/analytics", ["GET"]);
+    allowedMethods.set("/platform/v1/imports/members", ["POST"]);
+  }
   if (adminEnabled) {
     allowedMethods.set("/admin/api/v1/bootstrap", ["GET"]);
     allowedMethods.set("/admin/api/v1/session", ["POST"]);
@@ -820,8 +855,10 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
     }
     if (options.admin?.campaigns) {
       allowedMethods.set("/admin/api/v1/segments", ["PUT"]);
+      allowedMethods.set("/admin/api/v1/segments/preview", ["POST"]);
       allowedMethods.set("/admin/api/v1/segments/delete", ["POST"]);
       allowedMethods.set("/admin/api/v1/campaigns", ["PUT"]);
+      allowedMethods.set("/admin/api/v1/campaigns/status", ["POST"]);
       allowedMethods.set("/admin/api/v1/campaigns/delete", ["POST"]);
       allowedMethods.set("/admin/api/v1/campaigns/run", ["POST"]);
     }
@@ -888,6 +925,27 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
           await options.admin?.access?.recordAudit(
             principal,
             "protocol.write",
+            path,
+            undefined,
+            { status: response.statusCode },
+            requestId
+          );
+        })().catch(() => {
+          // Audit persistence must never change an already completed response.
+        });
+      }
+      if (
+        options.admin?.access &&
+        path.startsWith("/platform/v1/") &&
+        !["GET", "HEAD", "OPTIONS"].includes(method) &&
+        response.statusCode < 400
+      ) {
+        void (async () => {
+          const principal = await bearerPrincipal(request, options);
+          if (!principal) return;
+          await options.admin?.access?.recordAudit(
+            principal,
+            "platform.write",
             path,
             undefined,
             { status: response.statusCode },
@@ -974,6 +1032,443 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
         if (!enforceRateLimit()) return;
         sendJson(response, 200, capabilitiesDocument(options.reservationTtlSeconds ?? 120));
         return;
+      }
+
+      const customerData = options.admin?.customerData;
+      const platformCampaigns = options.admin?.campaigns;
+      if (
+        customerData &&
+        platformCampaigns &&
+        path.startsWith("/platform/v1")
+      ) {
+        const permission = method === "GET" || method === "HEAD"
+          ? "platform:read"
+          : "platform:write";
+        const authorization = await platformPrincipal(request, options, permission);
+        if (authorization.error === "unauthorized") {
+          response.setHeader("www-authenticate", "Bearer");
+          sendJson(
+            response,
+            401,
+            problem(401, "Unauthorized", "unauthorized"),
+            "application/problem+json"
+          );
+          return;
+        }
+        if (authorization.error === "location_scoped") {
+          sendJson(
+            response,
+            403,
+            problem(
+              403,
+              "Forbidden",
+              "location_scoped_forbidden",
+              "Customer-wide platform APIs cannot be used by a location-scoped principal"
+            ),
+            "application/problem+json"
+          );
+          return;
+        }
+        if (authorization.error === "forbidden") {
+          sendJson(
+            response,
+            403,
+            problem(403, "Forbidden", "forbidden", `Permission ${permission} is required`),
+            "application/problem+json"
+          );
+          return;
+        }
+        if (permission === "platform:write" && writeFrozen) {
+          response.setHeader("retry-after", "30");
+          sendJson(
+            response,
+            503,
+            problem(
+              503,
+              "Write operations are temporarily frozen",
+              "write_frozen",
+              "The provider is in a maintenance window; retry after it closes"
+            ),
+            "application/problem+json"
+          );
+          return;
+        }
+        if (!enforceRateLimit()) return;
+        const url = new URL(request.url ?? "/", "http://localhost");
+
+        if (method === "GET" && path === "/platform/v1") {
+          sendJson(response, 200, {
+            api_version: "1.0",
+            protocol_api: "/lip/v1",
+            resources: [
+              "members", "events", "segments", "campaigns", "connectors",
+              "analytics", "imports"
+            ],
+            boundaries: {
+              transaction_protocol: "/lip/v1",
+              customer_engagement: "/platform/v1"
+            }
+          });
+          return;
+        }
+
+        if (method === "GET" && path === "/platform/v1/members") {
+          const memberId = url.searchParams.get("member_id");
+          if (memberId) {
+            const profile = customerData.profile(memberId);
+            if (!profile) {
+              sendJson(
+                response,
+                404,
+                problem(404, "Not Found", "not_found", "Customer profile was not found"),
+                "application/problem+json"
+              );
+              return;
+            }
+            sendJson(response, 200, { member: profile });
+            return;
+          }
+          sendJson(response, 200, { members: customerData.listProfiles() });
+          return;
+        }
+
+        if (method === "GET" && path === "/platform/v1/events") {
+          const requestedLimit = Number(url.searchParams.get("limit") ?? "100");
+          sendJson(response, 200, {
+            events: customerData.listEvents({
+              ...(url.searchParams.get("member_id")
+                ? { member_id: url.searchParams.get("member_id")! }
+                : {}),
+              ...(url.searchParams.get("type")
+                ? { type: url.searchParams.get("type")! }
+                : {}),
+              ...(url.searchParams.get("campaign_id")
+                ? { campaign_id: url.searchParams.get("campaign_id")! }
+                : {}),
+              limit: Number.isFinite(requestedLimit) ? requestedLimit : 100
+            })
+          });
+          return;
+        }
+
+        if (method === "GET" && path === "/platform/v1/segments") {
+          sendJson(response, 200, { segments: platformCampaigns.snapshot().segments });
+          return;
+        }
+
+        if (method === "GET" && path === "/platform/v1/campaigns") {
+          const snapshot = platformCampaigns.snapshot();
+          sendJson(response, 200, { campaigns: snapshot.campaigns, runs: snapshot.runs });
+          return;
+        }
+
+        if (method === "GET" && path === "/platform/v1/connectors") {
+          sendJson(response, 200, options.admin?.engagement?.snapshot() ?? {
+            connectors: [],
+            jobs: []
+          });
+          return;
+        }
+
+        if (method === "GET" && path === "/platform/v1/analytics") {
+          sendJson(response, 200, {
+            customer_data: customerData.analytics(),
+            loyalty: engagementAnalytics(engine, platformCampaigns)
+          });
+          return;
+        }
+
+        if (method === "GET" && path === "/platform/v1/campaigns/report") {
+          const campaignId = url.searchParams.get("campaign_id");
+          if (!campaignId) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "campaign_id is required"
+            );
+          }
+          const snapshot = platformCampaigns.snapshot();
+          const campaign = snapshot.campaigns.find((candidate) =>
+            candidate.campaign_id === campaignId
+          );
+          if (!campaign) {
+            throw new TransportError(404, "not_found", "Not Found", "Campaign was not found");
+          }
+          const runs = snapshot.runs.filter((run) => run.campaign_id === campaignId);
+          const targetedMemberIds = [...new Set(runs.flatMap((run) =>
+            run.outcomes
+              .filter((outcome) => outcome.cohort !== "holdout" && outcome.status !== "failed")
+              .map(({ member_id }) => member_id)
+          ))];
+          sendJson(response, 200, {
+            campaign,
+            runs,
+            attribution: customerData.attribution(campaignId, targetedMemberIds)
+          });
+          return;
+        }
+
+        const body = await readBody(request);
+        const values = body && typeof body === "object" && !Array.isArray(body)
+          ? body as Record<string, unknown>
+          : {};
+
+        if (method === "PUT" && path === "/platform/v1/members") {
+          if (typeof values["member_id"] !== "string") {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "member_id is required"
+            );
+          }
+          sendJson(response, 200, {
+            member: await customerData.upsertProfile(values as CustomerProfileInput)
+          });
+          return;
+        }
+
+        if (method === "POST" && path === "/platform/v1/events") {
+          if (
+            typeof values["idempotency_key"] !== "string" ||
+            typeof values["member_id"] !== "string" ||
+            typeof values["type"] !== "string"
+          ) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "idempotency_key, member_id, and type are required"
+            );
+          }
+          sendJson(response, 201, {
+            event: await customerData.ingestEvent(values as never)
+          });
+          return;
+        }
+
+        if (method === "PUT" && path === "/platform/v1/segments") {
+          if (typeof values["name"] !== "string") {
+            throw new TransportError(422, "validation_failed", "Validation Failed", "name is required");
+          }
+          sendJson(response, 200, {
+            segment: await platformCampaigns.upsertSegment({
+              ...(typeof values["segment_id"] === "string"
+                ? { segment_id: values["segment_id"] }
+                : {}),
+              name: values["name"],
+              ...(Array.isArray(values["member_ids"])
+                ? {
+                    member_ids: values["member_ids"].filter(
+                      (value): value is string => typeof value === "string"
+                    )
+                  }
+                : {}),
+              ...(values["rules"] && typeof values["rules"] === "object"
+                ? { rules: values["rules"] as never }
+                : {})
+            })
+          });
+          return;
+        }
+
+        if (method === "POST" && path === "/platform/v1/segments/preview") {
+          if (typeof values["segment_id"] !== "string") {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "segment_id is required"
+            );
+          }
+          sendJson(
+            response,
+            200,
+            platformCampaigns.previewSegment(
+              values["segment_id"],
+              typeof values["sample_size"] === "number" ? values["sample_size"] : 25
+            )
+          );
+          return;
+        }
+
+        if (method === "PUT" && path === "/platform/v1/campaigns") {
+          if (
+            typeof values["name"] !== "string" ||
+            typeof values["reward_id"] !== "string" ||
+            typeof values["segment_id"] !== "string"
+          ) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "name, reward_id, and segment_id are required"
+            );
+          }
+          sendJson(response, 200, {
+            campaign: await platformCampaigns.upsertCampaign({
+              ...(typeof values["campaign_id"] === "string"
+                ? { campaign_id: values["campaign_id"] }
+                : {}),
+              name: values["name"],
+              reward_id: values["reward_id"],
+              segment_id: values["segment_id"],
+              ...(typeof values["issued_reward_ttl_seconds"] === "number"
+                ? { issued_reward_ttl_seconds: values["issued_reward_ttl_seconds"] }
+                : {}),
+              ...(typeof values["holdout_percent"] === "number"
+                ? { holdout_percent: values["holdout_percent"] }
+                : {}),
+              ...(typeof values["attribution_window_days"] === "number"
+                ? { attribution_window_days: values["attribution_window_days"] }
+                : {}),
+              ...(typeof values["starts_at"] === "string" ? { starts_at: values["starts_at"] } : {}),
+              ...(typeof values["ends_at"] === "string" ? { ends_at: values["ends_at"] } : {})
+            })
+          });
+          return;
+        }
+
+        if (method === "POST" && path === "/platform/v1/campaigns/status") {
+          if (
+            typeof values["campaign_id"] !== "string" ||
+            !["active", "paused"].includes(String(values["status"]))
+          ) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "campaign_id and an active/paused status are required"
+            );
+          }
+          sendJson(response, 200, {
+            campaign: await platformCampaigns.setCampaignStatus(
+              values["campaign_id"],
+              values["status"] as "active" | "paused"
+            )
+          });
+          return;
+        }
+
+        if (method === "POST" && path === "/platform/v1/campaigns/run") {
+          if (typeof values["campaign_id"] !== "string") {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "campaign_id is required"
+            );
+          }
+          sendJson(response, 200, {
+            run: await platformCampaigns.runCampaign(
+              values["campaign_id"],
+              authorization.principal?.actor_id ?? "platform-api"
+            )
+          });
+          return;
+        }
+
+        const engagement = options.admin?.engagement;
+        if (method === "PUT" && path === "/platform/v1/connectors") {
+          if (!engagement) {
+            throw new TransportError(503, "unavailable", "Unavailable", "Engagement service is unavailable");
+          }
+          if (
+            typeof values["name"] !== "string" ||
+            typeof values["type"] !== "string" ||
+            !values["configuration"] ||
+            typeof values["configuration"] !== "object" ||
+            Array.isArray(values["configuration"])
+          ) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "name, type, and configuration are required"
+            );
+          }
+          sendJson(response, 200, {
+            connector: await engagement.upsertConnector({
+              ...(typeof values["connector_id"] === "string"
+                ? { connector_id: values["connector_id"] }
+                : {}),
+              name: values["name"],
+              type: values["type"],
+              configuration: values["configuration"] as Record<string, unknown>,
+              ...(typeof values["active"] === "boolean" ? { active: values["active"] } : {}),
+              ...(typeof values["secret"] === "string" ? { secret: values["secret"] } : {})
+            })
+          });
+          return;
+        }
+
+        if (method === "POST" && path === "/platform/v1/connectors/delete") {
+          if (!engagement || typeof values["connector_id"] !== "string") {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "connector_id is required"
+            );
+          }
+          sendJson(response, 200, {
+            removed: await engagement.removeConnector(values["connector_id"])
+          });
+          return;
+        }
+
+        if (method === "POST" && path === "/platform/v1/imports/members") {
+          if (
+            typeof values["idempotency_key"] !== "string" ||
+            (!Array.isArray(values["rows"]) && typeof values["csv"] !== "string")
+          ) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "idempotency_key and rows or csv are required"
+            );
+          }
+          if (typeof values["csv"] === "string") {
+            sendJson(response, 201, {
+              import: await customerData.importMemberCsv({
+                idempotency_key: values["idempotency_key"],
+                csv: values["csv"]
+              })
+            });
+            return;
+          }
+          const rawRows = values["rows"];
+          if (!Array.isArray(rawRows)) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "rows must be an array when csv is not provided"
+            );
+          }
+          const rows = rawRows.filter(
+            (row): row is CustomerProfileInput =>
+              Boolean(row) && typeof row === "object" && !Array.isArray(row) &&
+              typeof (row as Record<string, unknown>)["member_id"] === "string"
+          );
+          if (rows.length !== rawRows.length) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Validation Failed",
+              "Every import row requires member_id"
+            );
+          }
+          sendJson(response, 201, {
+            import: await customerData.importMembers({
+              idempotency_key: values["idempotency_key"],
+              rows
+            })
+          });
+          return;
+        }
       }
 
       if (adminEnabled && method === "GET" && path === "/admin") {
@@ -1091,6 +1586,11 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
             segments: [],
             campaigns: [],
             runs: []
+          },
+          customer_data: options.admin?.customerData?.snapshot() ?? {
+            profiles: [],
+            events: [],
+            imports: []
           },
           memberships: options.admin?.memberships?.snapshot() ?? {
             memberships: [],
@@ -1527,7 +2027,9 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
         adminEnabled &&
         campaigns &&
         ["/admin/api/v1/segments", "/admin/api/v1/segments/delete",
+          "/admin/api/v1/segments/preview",
           "/admin/api/v1/campaigns", "/admin/api/v1/campaigns/delete",
+          "/admin/api/v1/campaigns/status",
           "/admin/api/v1/campaigns/run"].includes(path) &&
         ["PUT", "POST"].includes(method)
       ) {
@@ -1578,6 +2080,20 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
           sendJson(response, 200, { deleted: true });
           return;
         }
+        if (method === "POST" && path === "/admin/api/v1/segments/preview") {
+          if (typeof values["segment_id"] !== "string") {
+            throw new TransportError(422, "validation_failed", "Request validation failed", "segment_id is required");
+          }
+          sendJson(
+            response,
+            200,
+            campaigns.previewSegment(
+              values["segment_id"],
+              typeof values["sample_size"] === "number" ? values["sample_size"] : 25
+            )
+          );
+          return;
+        }
         if (method === "PUT" && path === "/admin/api/v1/campaigns") {
           if (
             typeof values["name"] !== "string" ||
@@ -1596,9 +2112,33 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
             ...(typeof values["issued_reward_ttl_seconds"] === "number"
               ? { issued_reward_ttl_seconds: values["issued_reward_ttl_seconds"] }
               : {}),
+            ...(typeof values["holdout_percent"] === "number"
+              ? { holdout_percent: values["holdout_percent"] }
+              : {}),
+            ...(typeof values["attribution_window_days"] === "number"
+              ? { attribution_window_days: values["attribution_window_days"] }
+              : {}),
             ...(typeof values["starts_at"] === "string" ? { starts_at: values["starts_at"] } : {}),
             ...(typeof values["ends_at"] === "string" ? { ends_at: values["ends_at"] } : {})
           }));
+          return;
+        }
+        if (method === "POST" && path === "/admin/api/v1/campaigns/status") {
+          if (
+            typeof values["campaign_id"] !== "string" ||
+            !["active", "paused"].includes(String(values["status"]))
+          ) {
+            throw new TransportError(
+              422,
+              "validation_failed",
+              "Request validation failed",
+              "campaign_id and an active/paused status are required"
+            );
+          }
+          sendJson(response, 200, await campaigns.setCampaignStatus(
+            values["campaign_id"],
+            values["status"] as "active" | "paused"
+          ));
           return;
         }
         if (method === "POST" && path === "/admin/api/v1/campaigns/delete") {

@@ -38,7 +38,17 @@ for (const [needle, label] of [
   ["overflow-x: hidden", "page overflow containment"],
   ["overflow: clip", "hero overflow containment"],
   ["Design partner", "design-partner path"],
-  ["Self-host", "self-host path"]
+  ["Self-host", "self-host path"],
+  ["The open-source loyalty platform", "platform positioning"],
+  ["Marketer workspace", "marketer workflow"],
+  ["Reference guest wallet", "guest wallet"],
+  ['name="posthog-key" content=""', "analytics disabled by default"],
+  ['cookieless_mode: "always"', "cookieless analytics"],
+  ['person_profiles: "never"', "anonymous analytics"],
+  ["autocapture: false", "autocapture disabled"],
+  ["disable_session_recording: true", "session recording disabled"],
+  ["advanced_disable_flags: true", "PostHog remote flags disabled"],
+  ["before_send", "analytics event allowlist"]
 ] as const) requireText(landing, needle, label);
 
 if (/noindex/i.test(landing)) failures.push("landing must be indexable");
@@ -70,6 +80,12 @@ const technicalPages = [
   "docs/security-and-operations.md",
   "docs/launch-kit.md",
   "docs/metrics.md",
+  "docs/platform-api.md",
+  "docs/wallet.md",
+  "docs/square.md",
+  "docs/deployment.md",
+  "docs/telemetry.md",
+  "docs/distribution.md",
   "llms.txt",
   "llms-full.txt"
 ];
@@ -89,7 +105,13 @@ for (const page of [
   "guides/member-migration",
   "concepts/provider-selection",
   "about/design-partners",
-  "about/security-operations"
+  "about/security-operations",
+  "guides/platform-api",
+  "guides/wallet",
+  "guides/square",
+  "guides/deployment",
+  "guides/telemetry",
+  "api-reference/platform-overview"
 ]) requireText(docsNavigation, page, "docs navigation");
 
 const textExtensions = new Set([

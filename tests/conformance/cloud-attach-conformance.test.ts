@@ -8,6 +8,7 @@ import { MemoryCloudRepository } from "../../apps/cloud/src/memory-repository.js
 import { CloudControlPlane } from "../../apps/cloud/src/service.js";
 import { startCloudServer } from "../../apps/cloud/src/server.js";
 import { CloudOperatorService } from "../../apps/cloud/src/operator-service.js";
+import { RemoteEnvironmentAttacher } from "../../apps/cloud/src/remote-attach.js";
 import { TRUSTED_GATEWAY_ISSUER } from "../../apps/cloud/src/types.js";
 
 const fixedNow = new Date("2026-07-15T12:00:00.000Z");
@@ -49,7 +50,8 @@ describe("Cloud attach -> cloud-verify conformance", () => {
     const repository = new MemoryCloudRepository();
     const cloud = new CloudControlPlane({
       repository,
-      now: () => new Date(fixedNow)
+      now: () => new Date(fixedNow),
+      attacher: new RemoteEnvironmentAttacher({ allowPrivateNetworks: true })
     });
     const cloudApiKey = "cloud-verify-conformance-key";
     const operators = new CloudOperatorService({ repository });
@@ -58,7 +60,7 @@ describe("Cloud attach -> cloud-verify conformance", () => {
       operators,
       port: 0
     });
-    // PLA-442: the attach flow authenticates with a platform-admin operator
+    // The attach flow authenticates with a platform-admin operator
     // key, whose verified identity carries owner scope on every organization.
     const admin = await operators.createOperator(
       { issuer: TRUSTED_GATEWAY_ISSUER, subject: "bootstrap" },

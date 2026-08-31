@@ -14,22 +14,31 @@ export type TenantPermission =
   | "admin:write"
   | "program:publish"
   | "access:manage"
+  | "platform:read"
+  | "platform:write"
   | "protocol:read"
   | "protocol:write";
 
 const rolePermissions: Record<TenantRole, TenantPermission[]> = {
   owner: [
     "admin:read", "admin:write", "program:publish", "access:manage",
+    "platform:read", "platform:write",
     "protocol:read", "protocol:write"
   ],
   admin: [
     "admin:read", "admin:write", "program:publish", "access:manage",
+    "platform:read", "platform:write",
     "protocol:read", "protocol:write"
   ],
-  operator: ["admin:read", "admin:write", "protocol:read", "protocol:write"],
-  developer: ["admin:read", "protocol:read", "protocol:write"],
-  viewer: ["admin:read"],
-  integration: ["protocol:read", "protocol:write"]
+  operator: [
+    "admin:read", "admin:write", "platform:read", "platform:write",
+    "protocol:read", "protocol:write"
+  ],
+  developer: [
+    "admin:read", "platform:read", "platform:write", "protocol:read", "protocol:write"
+  ],
+  viewer: ["admin:read", "platform:read"],
+  integration: ["platform:read", "platform:write", "protocol:read", "protocol:write"]
 };
 
 export interface Tenant {

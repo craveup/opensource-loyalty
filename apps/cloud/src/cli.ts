@@ -14,6 +14,7 @@ import {
   managedDatabaseConfiguration
 } from "./database-configuration.js";
 import { LocalDataPlaneProvisioner } from "./data-plane-provisioner.js";
+import { RemoteEnvironmentAttacher } from "./remote-attach.js";
 import {
   CloudOperatorService,
   assertOperatorManagementReachable
@@ -37,7 +38,7 @@ const oidcAudience = process.env["LIP_CLOUD_OIDC_AUDIENCE"];
 if (Boolean(oidcIssuer) !== Boolean(oidcAudience)) {
   throw new Error("LIP_CLOUD_OIDC_ISSUER and LIP_CLOUD_OIDC_AUDIENCE must be set together");
 }
-// OIDC subjects allowed to bootstrap the first operator (PLA-442 fix 3).
+// OIDC subjects allowed to bootstrap the first operator.
 const bootstrapSubjects = (
   process.env["LIP_CLOUD_BOOTSTRAP_SUBJECTS"] ??
   process.env["LIP_CLOUD_BOOTSTRAP_SUBJECT"] ??
@@ -56,7 +57,7 @@ if (apiKey && !sharedKeyDisabled) {
   console.warn(JSON.stringify({
     event: "cloud_shared_key_deprecated",
     message:
-      "LIP_CLOUD_API_KEY is deprecated (PLA-442): bootstrap the first " +
+      "LIP_CLOUD_API_KEY is deprecated: bootstrap the first " +
       "operator with `npm run cloud:operator -- create`, migrate every " +
       "caller to LIP_CLOUD_OPERATOR_KEY, then set " +
       "LIP_CLOUD_SHARED_KEY_DISABLED=true"
@@ -102,11 +103,14 @@ const controlPlane = new CloudControlPlane({
   repository,
   regions,
   defaultPlanId: process.env["LIP_CLOUD_DEFAULT_PLAN"] ?? "free",
+  ...(process.env["LIP_CLOUD_ALLOW_PRIVATE_ATTACH_NETWORKS"] === "true"
+    ? { attacher: new RemoteEnvironmentAttacher({ allowPrivateNetworks: true }) }
+    : {}),
   ...(billing ? { billing } : {})
 });
 await controlPlane.migrate();
 
-// Fail-fast (PLA-442 fix 4): refuse to boot if the control plane has zero
+// Fail fast: refuse to boot if the control plane has zero
 // operators and no viable path to create the first one — otherwise operator
 // management would be silently unreachable.
 assertOperatorManagementReachable({

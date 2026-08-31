@@ -1,187 +1,206 @@
-# LIP 0.2 launch and adoption plan
+# Open-source restaurant loyalty platform plan
 
-Status: publication blocked on npm authentication and GHCR visibility
-Owner: CraveUp
-Target: `0.2.0`
+Status: product implementation built; final repository verification in
+progress; external validation and publication gates remain evidence-dependent
 
-## Decision
+## Product decision
 
-LIP will win first as the open, foodservice-native loyalty infrastructure for
-ordering platforms and multi-location restaurant technology teams. The moat is
-correct checkout, refund, replay, offline, franchise, and migration behavior —
-not generic campaign breadth.
+Build the open-source loyalty platform for teams that own restaurant technology
+integrations:
 
-The product is separated into three explicit layers:
+1. POS, ordering, payment, and restaurant software platforms adding loyalty.
+2. Multi-unit restaurant technical teams that need data ownership, portability,
+   and correct checkout/refund behavior.
+3. Restaurant integrators and agencies that repeatedly rebuild loyalty plumbing.
 
-1. **LIP Protocol** — vendor-neutral contracts and conformance.
-2. **LIP Reference Platform** — Apache-2.0 self-hosted implementation.
-3. **Crave Loyalty Cloud** — managed hosting, migration, adapters, operations,
-   and support.
+The product is not positioned as a turnkey no-code marketing service for a
+restaurant without a technical owner. The project can win by combining an
+inspectable marketer and guest product with a portable, foodservice-correct
+transaction core—not by claiming that open source alone creates adoption.
 
-## Evidence behind this plan
+## Architecture that must remain explicit
 
-- The supported Node 22 baseline passes 311 tests without PostgreSQL and all 319
-  tests with PostgreSQL 17, with 87.23% statement coverage, runnable lifecycle
-  examples, the Admin build, and inspection of all 11 publishable packages.
-- The reference platform already implements the complete foodservice lifecycle,
-  multiple program models, engagement, tenant/location scope, SQLite/Postgres,
-  signed webhooks, an Admin console, a TypeScript SDK, CLI, MCP, and conformance.
-- The latest published npm release (`0.1.2`) predates dozens of substantive
-  commits and still understates the current product.
-- The live product has had little qualified discovery: the August 15 audit found
-  one GitHub star, no forks, no Discussions, no open product issues, and ten
-  unique repository viewers over the preceding 14 days.
-- The live landing and docs had stale repository links, no hosted walkthrough,
-  no commercial path, no customer proof, and a mobile overflow defect.
-- Commercial APIs are mature, and OfferKit is a direct open-source competitor.
-  Open source, TypeScript, CLI, and MCP are therefore table stakes; foodservice
-  correctness and credible operations are the differentiation.
+1. **LIP Protocol (`/lip/v1`)** — vendor-neutral transaction contracts,
+   generated schemas/OpenAPI, SDK, and conformance.
+2. **Reference Product (`/platform/v1`)** — customer profiles and consent,
+   behavioral events, imports, segments, campaigns, attribution, connectors,
+   analytics, marketer Admin, and guest wallet.
+3. **Adapters** — source-specific mappings and reproducible synthetic/sanitized
+   certification evidence; never inferred vendor endorsement.
+4. **Managed Layer (`/cloud/v1`)** — optional hosting/control plane without
+   making the open runtime depend on it.
 
-## Release acceptance criteria
+Customer identity and payment authorization remain external. A BFF keeps
+provider tokens and merchant credentials server-side and maps identity to an
+opaque loyalty member.
 
-Every checked item below must be backed by code, tests, a rendered page, a live
-repository setting, or an explicit artifact. No customer, revenue, uptime,
-search-ranking, or production-usage claim may be checked from repository work
-alone.
+## Implemented repository milestones
 
-### 1. Release truth and developer contract
+### Product foundation
 
-- [x] Promote the latest linear `dev` and release-manifest work into the launch
-      branch without rewriting either history.
-- [x] Version all public packages and release surfaces as `0.2.0`.
-- [x] Use the canonical `craveup/opensource-loyalty` repository URL everywhere
-      and add an automated absence check for the retired personal namespace.
-- [x] Standardize the supported local and CI runtime on Node 22, provide a
-      version pin, and test the release runtime separately.
-- [x] Publish a truthful changelog, support policy, version matrix, and release
-      checklist that distinguish protocol, reference, and Cloud maturity.
-- [x] Keep immutable release-manifest generation and validation in the release
-      gate.
+- [x] Add durable customer profiles, explicit consent, idempotent behavioral
+      events, bounded imports, customer analytics, and campaign attribution.
+- [x] Add a versioned, authenticated `/platform/v1` API without changing the
+      normative `/lip/v1` surface.
+- [x] Add dynamic audience rules, preview, campaign scheduling/status,
+      deterministic holdouts, attribution windows, and run reporting.
+- [x] Fail closed for location-scoped credentials on tenant-wide customer data.
+- [x] Add a separate generated OpenAPI document for the product API.
 
-### 2. Zero-install evaluation and activation
+### Marketer and guest experience
 
-- [x] Add a hosted, browser-only lifecycle walkthrough that visibly runs
-      evaluate, reserve, accrue, capture, reverse, and refund-safe adjustment
-      against sample foodservice data without collecting credentials.
-- [x] Show request, response, idempotency key, and ledger effects for every
-      walkthrough step.
-- [x] Add one primary quickstart, one self-host path, and one design-partner path
-      across the landing page and docs.
-- [x] Define privacy-safe activation events and a funnel contract without
-      coupling the project to a specific analytics vendor.
-- [x] Add automated landing checks for canonical links, critical copy, crawl
-      files, and mobile overflow-prone markup.
+- [x] Add an Admin Marketing workspace for audience building, preview,
+      campaigns, activation/pause, runs, and metrics.
+- [x] Add a responsive branded guest wallet reference BFF.
+- [x] Implement OIDC Authorization Code + PKCE, state/nonce verification,
+      server-held access tokens, `HttpOnly` sessions, CSP nonces, origin/CSRF
+      protection, and a visibly synthetic default preview.
 
-### 3. Foodservice integration moat
+### Restaurant onboarding and integration
 
-- [x] Publish `@loyalty-interchange/adapter-kit` with a stable adapter contract,
-      normalized lifecycle result, fixture runner, and certification report.
-- [x] Cover modifiers, combos, split tenders, comps, discounts, taxes, tips,
-      offline accrual, duplicate delivery, void, and partial-refund fixtures.
-- [x] Add a runnable ordering-BFF reference that keeps the merchant key on the
-      server and maps checkout/payment outcomes to the LIP lifecycle.
-- [x] Add vendor-neutral mapping guides for Square, Toast, Olo, PAR Brink, NCR
-      Aloha, and Oracle Simphony; label unverified partner-specific details.
-- [x] Add Punchh/Paytronix-style migration guidance plus a machine-readable
-      member/balance import planner and reconciliation report.
+- [x] Add strict CSV member import: 1 MiB, 1,000 rows, unique allowlisted
+      headers, exact row width, explicit consent, and safe JSON attributes.
+- [x] Add a Square Orders adapter pinned to the documented API version, covering
+      modifiers, split tenders, discounts, tax, tip, statuses, void/refund,
+      deterministic keys, and raw-body webhook signature verification.
+- [x] Omit source customer ids and free-form notes from the normalized order.
+- [x] Require the integrator to resolve loyalty-eligible refund spend from
+      source facts instead of guessing from gross refund value.
+- [ ] Add Toast only after authorized sandbox access and sanitized fixtures can
+      prove the exact source contract. Documentation alone is insufficient.
 
-### 4. Managed-provider readiness
+### Deployment and privacy
 
-- [x] Encrypt local Cloud credential files at rest with authenticated encryption,
-      require an operator-supplied key, and retain an explicit legacy migration
-      path.
-- [x] Add backup, restore, suspend, and resume operations for local provisioned
-      environments with failure-safe atomic writes.
-- [x] Implement the Stripe billing provider boundary and signed webhook
-      verification without adding billing concepts to `/lip/v1`.
-- [x] Expose the existing managed-customer contract through authenticated Cloud
-      HTTP routes suitable for a BFF; never turn LIP into a sign-in provider.
-- [x] Document the threat model, data boundaries, recovery objectives, incident
-      process, service-level objectives, and production-readiness checklist.
+- [x] Make `docker compose up --build` start API/Admin plus the synthetic wallet.
+- [x] Document the production move to Postgres, OIDC, TLS, secret management,
+      backup/restore, conformance, adapter rehearsal, and rollback.
+- [x] Add optional persistent self-host telemetry that is disabled by default,
+      requires an explicit HTTPS endpoint, sends a fixed pseudonymous payload at
+      most daily, times out, never redirects, and never retries.
+- [x] Add a PostHog landing integration that is inert with an empty token and,
+      when configured, is cookieless with no person profiles, autocapture,
+      automatic page views, replay, exceptions, performance, heatmaps, surveys,
+      flags, or free-form properties.
 
-### 5. Open-source community and commercial path
+### Positioning, sales, and distribution
 
-- [x] Add Code of Conduct, support, governance, maintainer, PR, bug, integration,
-      adapter, and protocol-proposal templates.
-- [x] Enable GitHub Discussions and provide Q&A, ideas, integrations, and show-and-
-      tell entry points without mixing support questions into defects.
-- [x] Add design-partner, pricing/packaging, architecture, migration, security,
-      and case-study assets for founder-led sales.
-- [x] Publish a comparison page that states observable tradeoffs and avoids
-      unverified pricing, performance, or customer claims.
-- [x] Add a public roadmap issue set and labels for adapters, integrations,
-      protocol proposals, good first issues, and help wanted.
+- [x] Reposition the landing, README, docs, `llms.txt`, and Mintlify navigation
+      around the complete open-source restaurant loyalty platform.
+- [x] Name the ideal users and the current no-code/turnkey non-fit explicitly.
+- [x] Add platform API, wallet, Square, deployment, privacy/telemetry, and
+      developer distribution guides.
+- [x] Add a public-safe design-partner issue form with a warning against customer
+      data, secrets, private URLs, contracts, and confidential vendor material.
+- [x] Keep founder-led GitHub, LinkedIn, SEO, and GEO work tied to walkthrough,
+      sandbox, refund-safe integration, or design-partner outcomes rather than
+      stars and raw traffic.
 
-### 6. SEO, GEO, and launch distribution
+## Repository verification gates
 
-- [x] Fix titles, metadata, structured data, canonical URLs, mobile layout, and
-      crawl artifacts on the landing surface.
-- [x] Publish original technical pages for open-source loyalty APIs, restaurant
-      checkout/refunds, idempotency, adapters, migration, and provider selection.
-- [x] Keep `llms.txt` and `llms-full.txt` useful for agents while treating them as
-      developer infrastructure, not ranking shortcuts.
-- [x] Add a founder-led launch kit for GitHub releases and evidence-based LinkedIn
-      posts, each with one measurable call to action.
-- [x] Define acquisition, activation, integration, reliability, and commercial
-      metrics with bot/CI traffic excluded from adoption claims.
+- [x] Targeted product/API, marketer workflow, wallet, Square/CSV, and telemetry
+      tests pass under Node 22.
+- [x] Desktop, tablet, and mobile Admin and wallet renders have been inspected
+      with synthetic data; interaction testing covered segment preview and a
+      campaign run with deterministic holdout.
+- [x] Full `npm test` and `npm run verify` pass on the combined implementation.
+- [x] Docker image build and Compose smoke test pass on the combined implementation.
+- [x] Final landing desktop/mobile render and interaction check pass.
+- [x] Public-safety audit passes for tracked files, Git history, dependencies,
+      CI, Docker, auth, webhooks, SSRF, logs, telemetry, docs, and generated files.
+- [x] All logical commits are pushed and remote CI passes on the exact branch.
 
-### 7. Verification and publication
+Verification evidence captured on 2026-08-27:
 
-- [x] Pass generation, type checking, the full test suite, coverage, runnable
-      examples, builds, package-content inspection, spec drift, docs mirror,
-      canonical-link, and launch-surface checks.
-- [x] Exercise the CLI, migration planner, adapter certification, Cloud credential
-      migration, billing webhook, customer routes, and local recovery flow.
-- [x] Render and inspect landing and Admin at desktop and 390px mobile widths.
-- [x] Publish through a protected-main pull request and require the remote verify
-      check before merge.
-- [ ] Tag and publish `0.2.0` only from the verified merge commit, then confirm npm,
-      docs, and landing resolve to that release.
+- Node 22.22.0 `npm run verify`, backed by disposable PostgreSQL, passed 51
+  files / 353 tests with zero skips; statement coverage was 86.27% and line
+  coverage was 87.73%.
+- The digest-pinned Docker build completed with zero npm vulnerabilities. Fresh
+  API and wallet containers became healthy; Admin and wallet returned HTTP 200.
+- Rendered QA passed at 1,440 px and 390 px with no horizontal overflow. The
+  seven-step walkthrough completed through refund adjustment, and Admin
+  authenticated into all six navigation areas.
+- The tracked-file public-safety gate passed 456 files. A redacted gitleaks scan
+  covered 128 commits; all 20 matches were reviewed placeholder/example
+  findings and no implementation commit was flagged. A live production npm
+  audit reported zero vulnerabilities across 182 production dependencies.
+- Generated protocol/product OpenAPI and SDK artifacts showed no drift;
+  Mintlify validation and link/anchor/redirect checks passed; the release
+  manifest digest check passed.
+- GitHub Actions run `33111192245` passed the required `verify` job on pushed
+  commit `f34c89b`, including its independent zero-skipped-tests assertion.
+
+All repository verification gates for this implementation branch have direct
+evidence. The unchecked items below require independent users, production
+operations, provider authority, or permissioned partner work.
 
 ## External validation gates
 
-These are business outcomes, not repository checkboxes. They remain open until
-first-party evidence exists:
+Repository work cannot check these boxes:
 
-- Ten qualified buyer or developer interviews.
-- Three independent sandbox users complete `orders/evaluate`.
-- Two independent users complete evaluate through refund adjustment.
-- Two active design-partner integrations.
-- One referenceable end-to-end restaurant ordering implementation.
-- Measured median time from starting the walkthrough to the first successful
-  evaluation, with a target under 15 minutes.
-- Search Console and ChatGPT-search visibility measured on a verified domain.
-- Production SLO attainment measured from a deployed regional runtime.
+- [ ] Ten qualified problem interviews across the three target user groups.
+- [ ] Three independent evaluators complete a sandbox order evaluation.
+- [ ] Two independent evaluators complete evaluate through refund adjustment.
+- [ ] Two active design-partner integrations with named technical owners.
+- [ ] One permissioned, referenceable end-to-end restaurant implementation.
+- [ ] Measured activation time, with a target median under 15 minutes.
+- [ ] Search Console and AI-search visibility on a verified production domain.
+- [ ] Production SLO attainment from a deployed regional runtime.
+- [ ] A sanitized Toast certification corpus from authorized source access.
 
-## Product constraints
+## Distribution operating plan
 
-- LIP remains a loyalty transaction protocol, not customer authentication.
-- Financial mutations require explicit idempotency and are never silently retried.
-- Cloud, billing, campaigns, and vendor adapters remain outside normative
-  `/lip/v1` routes.
-- Generated clients are not called first-party SDKs without an idiomatic wrapper.
-- Conformance, performance, customer, and compatibility claims require a
-  reproducible report.
-- External distribution must lead to a real walkthrough, sandbox, integration,
-  or design-partner action; stars and raw clone/download counts are not adoption.
+### Weeks 1-2: make evaluation obvious
 
-## Publication record
+- Ship one reviewed release with the landing walkthrough, Admin, wallet,
+  Compose quickstart, product OpenAPI, architecture, security, Square, and
+  migration evidence.
+- Configure the public PostHog project token only after its cookieless project
+  setting and retention policy are verified.
+- Ensure GitHub description/topics point to restaurant loyalty, POS, ordering,
+  TypeScript, self-hosting, and the verified live walkthrough.
 
-- Protected PRs #50, #51, and #52 passed the required remote `verify` check and
-  merged without rewriting the promoted `dev` or release-manifest histories.
-- `v0.2.0` points to verified merge commit
-  `e6050ce17ea73f783fdd45b2db14cec258332ab8`. The GitHub release, five evidence
-  assets, and provenance attestation are public. The GHCR image was built and
-  pushed, but anonymous pulls remain disabled by the organization package
-  policy, so it is not yet a public distribution surface.
-- The production landing resolves at `https://opensource-loyalty.vercel.app/`
-  with the `0.2.0` walkthrough, canonical metadata, robots, and sitemap. All 15
-  new long-form documents resolve from the immutable GitHub tag.
-- npm publication remains open. The repository environment currently has no
-  valid publishing credential: the prior token returned a package-authorization
-  404, and the Infisical value is not a valid modern or legacy npm token shape.
-  Rotate the npm credential or configure trusted publishing, then rerun the
-  release workflow from the existing tag. Never recreate or move the tag.
-- GHCR visibility remains open. Enable public package creation in the Crave Up
-  organization policy, change `opensource-loyalty` to public, and confirm an
-  anonymous manifest inspection before advertising the container quickstart.
+### Weeks 3-4: founder-led discovery
+
+- Publish short LinkedIn posts built around one hard restaurant edge at a time:
+  idempotent retry, failed-payment reversal, partial-refund clawback, modifier
+  mapping, or customer-data portability.
+- Each post links to one executable artifact and asks one target role for a
+  specific integration edge. No generic launch hype or unverified comparison.
+- Recruit ten interviews; record role, current system, pain, authority, timing,
+  and next technical proof privately and securely.
+
+### Weeks 5-8: turn friction into public leverage
+
+- Help three independent evaluators complete the quickstart and first API call.
+- Convert repeated questions into docs, examples, good-first issues, and
+  searchable technical pages.
+- Publish sanitized failure and reconciliation learnings, not customer data.
+
+### Weeks 9-12: prove a wedge
+
+- Select up to two design partners with a real ordering/refund edge and weekly
+  technical owner.
+- Produce a source adapter report, staging lifecycle trace, migration rehearsal,
+  security/operations record, and rollback plan.
+- Publish partner identity, metrics, screenshots, or quotes only with written
+  approval. A stopped pilot is acceptable evidence; fabricated momentum is not.
+
+## Publication gates and known provider work
+
+- Never recreate or move immutable release tag `v0.2.0`.
+- Verify the current npm registry state before claiming a package/version is
+  public. Publishing requires valid npm authority or trusted publishing.
+- Verify anonymous GHCR pulls before advertising the container as public.
+  Changing package visibility can be irreversible and organization-policy
+  controlled, so it requires action-time owner confirmation.
+- Keep the verified Vercel canonical URL until the custom domain is live and
+  independently verified; do not publish an aspirational DNS claim.
+- Do not claim Square or Toast partnership/certification from repository tests.
+
+## Definition of success
+
+The repository is complete for this milestone when every repository verification
+gate above has direct evidence and remote CI is green. The business is working
+when independent teams can self-host, integrate one restaurant source through
+refund, operate marketer and guest workflows, and choose to stay because the
+open platform is more trustworthy and adaptable—not merely because it is free.

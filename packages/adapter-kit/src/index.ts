@@ -292,3 +292,5 @@ export function certifyFoodserviceAdapter<TOrder, TAdjustment = never>(
   }, ...report.cases];
   return { ...report, passed: false, cases };
 }
+
+export * from "./square.js";

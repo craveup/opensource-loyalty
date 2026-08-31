@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "lip": {
-      "command": "npx",
-      "args": ["tsx", "packages/mcp/src/server.ts"],
-      "cwd": "/Users/crave/Documents/GitHub/craveup-loyalty"
-    }
-  }
-}

@@ -17,14 +17,14 @@ export type RotatedTenantCredentials = RotatedEnvironmentCredentials;
  * `POST .../environments`, and the environment list endpoint used to poll
  * provisioning status. It creates nothing the API cannot already create.
  *
- * Authentication boundary (PLA-442): the control plane is called with a
+ * Authentication boundary: the control plane is called with a
  * per-operator API key (`lip_ok_...`, env `LIP_CLOUD_OPERATOR_KEY`) — the
  * acting identity is the verified operator record, so no subject is
  * required. The legacy shared trusted-gateway key (`LIP_CLOUD_API_KEY`) is
  * rejected outright: it authenticates only the first-operator bootstrap
  * route, which onboarding never calls, so passing it here could never
  * succeed. The merchant credential is a tenant-scoped owner API
- * key (PLA-416); retrieve or rotate it with `rotateTenantCredentials`,
+ * key; retrieve or rotate it with `rotateTenantCredentials`,
  * which calls `POST /cloud/v1/environments/{id}/credentials/rotate` — no
  * more reading credentials files off the data-plane host, and the
  * deprecated root runtime key is never handed out.
@@ -49,7 +49,7 @@ const OPERATOR_KEY_PREFIX = "lip_ok_";
 function assertTarget(target: TenantOnboardingTarget): void {
   if (!target.cloudUrl.trim()) throw new Error("A control-plane URL is required");
   if (!target.apiKey.trim()) throw new Error("A control-plane API key is required");
-  // PLA-442: the shared LIP_CLOUD_API_KEY only authenticates the
+  // The shared LIP_CLOUD_API_KEY only authenticates the
   // first-operator bootstrap route, which onboarding never calls, so it can
   // never authorize these requests. Fail here with an actionable message
   // rather than letting the control plane return an opaque 401.
@@ -301,7 +301,7 @@ async function pollEnvironment(
  *
  * The returned `tenant_id` is the row scope every engine table uses for this
  * brand. The merchant API key is not part of the result — see the class-level
- * note on the PLA-416 boundary.
+ * note on the tenant-key rotation boundary.
  */
 export async function provisionTenant(
   target: TenantOnboardingTarget,

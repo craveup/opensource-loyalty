@@ -49,12 +49,21 @@ Admin/API key: lip-dev-key
 
 The same key is used for dashboard sign-in and Bearer API requests. Quickstart creates `.lip/reference.db`, seeds six synthetic members, and preserves all activity across restarts.
 
+<Note>
+`lip-dev-key` is the source-runtime default. The loopback-only Compose evaluation
+profile uses `lip-local-compose-key-change-me` because network-bound server
+processes reject the short development key. Replace either key outside a local
+single-user evaluation.
+</Note>
+
 The local server exposes:
 
 | Surface | URL |
 | --- | --- |
 | Admin dashboard | `http://127.0.0.1:3210/admin/` |
 | Protocol API | `http://127.0.0.1:3210/lip/v1` |
+| Customer engagement API | `http://127.0.0.1:3210/platform/v1` |
+| Synthetic guest wallet | `http://127.0.0.1:3230/` |
 | Health | `http://127.0.0.1:3210/health` |
 | Discovery | `http://127.0.0.1:3210/.well-known/lip` |
 
@@ -71,7 +80,7 @@ All discovery, health, authentication, and capability checks should pass. Docker
 ```bash
 curl http://127.0.0.1:3210/health
 curl http://127.0.0.1:3210/lip/v1/capabilities \
-  -H 'Authorization: Bearer lip-dev-key'
+  -H 'Authorization: Bearer lip-local-compose-key-change-me'
 ```
 
 ## 3. Validate a restaurant order

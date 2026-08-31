@@ -1,4 +1,4 @@
--- PLA-442: per-operator control-plane credentials replacing the shared
+-- per-operator control-plane credentials replacing the shared
 -- LIP_CLOUD_API_KEY + trusted X-LIP-Cloud-Subject header.
 
 CREATE TABLE IF NOT EXISTS lip_cloud_operators (

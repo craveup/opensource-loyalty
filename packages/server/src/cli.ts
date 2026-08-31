@@ -22,8 +22,9 @@ const databasePath = resolve(process.env.LIP_DATABASE_PATH ?? ".lip/reference.db
 const databaseUrl = process.env.LIP_DATABASE_URL;
 const rateLimit = positiveIntegerEnvironment("LIP_RATE_LIMIT_REQUESTS", 120);
 const rateWindowMs = positiveIntegerEnvironment("LIP_RATE_LIMIT_WINDOW_MS", 60_000);
+const allowPrivateWebhookNetworks = process.env.LIP_ALLOW_PRIVATE_WEBHOOK_NETWORKS === "true";
 // Postgres mode means a shared/cloud deployment: refuse to boot with the
-// local development default or a short key (PLA-416 static-key hygiene).
+// local development default or a short key (static-key hygiene).
 if (databaseUrl) {
   assertSessionLeaseCompatibleUrl(databaseUrl, "LIP_DATABASE_URL");
   assertStrongApiKey(apiKey);
@@ -33,9 +34,27 @@ const platform = databaseUrl
       connectionString: databaseUrl,
       ...(process.env.LIP_TENANT_ID ? { tenantId: process.env.LIP_TENANT_ID } : {}),
       seed: process.env.LIP_SEED_DEMO !== "false",
-      reset: process.env.LIP_RESET === "true"
+      reset: process.env.LIP_RESET === "true",
+      ...(allowPrivateWebhookNetworks ? { allowPrivateWebhookNetworks: true } : {}),
+      telemetry: {
+        enabled: process.env.LIP_TELEMETRY_ENABLED === "true",
+        ...(process.env.LIP_TELEMETRY_ENDPOINT
+          ? { endpoint: process.env.LIP_TELEMETRY_ENDPOINT }
+          : {})
+      }
     })
-  : await createDemoPlatform({ databasePath, seed: process.env.LIP_SEED_DEMO !== "false" });
+  : await createDemoPlatform({
+      databasePath,
+      seed: process.env.LIP_SEED_DEMO !== "false",
+      reset: process.env.LIP_RESET === "true",
+      ...(allowPrivateWebhookNetworks ? { allowPrivateWebhookNetworks: true } : {}),
+      telemetry: {
+        enabled: process.env.LIP_TELEMETRY_ENABLED === "true",
+        ...(process.env.LIP_TELEMETRY_ENDPOINT
+          ? { endpoint: process.env.LIP_TELEMETRY_ENDPOINT }
+          : {})
+      }
+    });
 
 const ansi = {
   reset: "\u001B[0m",
@@ -113,6 +132,7 @@ const running = await startReferenceServer(platform.engine, {
       ? {
           programs: platform.programs,
           campaigns: platform.campaigns,
+          customerData: platform.customerData,
           memberships: platform.memberships,
           access: platform.access,
           engagement: platform.engagement,
@@ -133,6 +153,11 @@ console.log(formatRuntimeReady({
   databasePath: databaseUrl ? "Postgres (tenant-scoped normalized tables)" : databasePath,
   bindUrl: running.url
 }));
+
+void platform.telemetry.sendHeartbeat().then((result) => {
+  if (result === "sent") console.log("[lip] Optional self-host telemetry heartbeat sent.");
+  if (result === "failed") console.warn("[lip] Optional self-host telemetry heartbeat failed.");
+});
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {

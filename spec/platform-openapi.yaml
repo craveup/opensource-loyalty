@@ -1,0 +1,322 @@
+openapi: 3.1.2
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: LIP Reference Platform API
+  version: 0.3.0-beta
+  description: Non-normative customer engagement product API. The portable loyalty transaction
+    contract remains at /lip/v1.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://loyalty.example.com/platform/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Discovery
+  - name: Members
+  - name: Events
+  - name: Segments
+  - name: Campaigns
+  - name: Connectors
+  - name: Analytics
+  - name: Imports
+paths:
+  /:
+    get:
+      operationId: getPlatformApi
+      summary: Discover platform resources and protocol boundaries
+      tags:
+        - Discovery
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: &a1
+              schema:
+                type: object
+                additionalProperties: true
+        default: &a2
+          $ref: "#/components/responses/Problem"
+  /members:
+    get:
+      operationId: listCustomerProfiles
+      summary: List customer profiles and consent
+      tags:
+        - Members
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+    put:
+      operationId: upsertCustomerProfile
+      summary: Upsert a customer profile and consent
+      tags:
+        - Members
+      requestBody: &a3
+        required: true
+        content:
+          application/json: *a1
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /events:
+    get:
+      operationId: listCustomerEvents
+      summary: List behavioral events
+      tags:
+        - Events
+      parameters:
+        - name: member_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+        - name: campaign_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+    post:
+      operationId: ingestCustomerEvent
+      summary: Ingest an idempotent behavioral event
+      tags:
+        - Events
+      requestBody: *a3
+      responses:
+        "201":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /segments:
+    get:
+      operationId: listSegments
+      summary: List audience segments
+      tags:
+        - Segments
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+    put:
+      operationId: upsertSegment
+      summary: Upsert a static or dynamic audience segment
+      tags:
+        - Segments
+      requestBody: *a3
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /segments/preview:
+    post:
+      operationId: previewSegment
+      summary: Count and sample a segment
+      tags:
+        - Segments
+      requestBody: *a3
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /campaigns:
+    get:
+      operationId: listCampaigns
+      summary: List campaigns
+      tags:
+        - Campaigns
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+    put:
+      operationId: upsertCampaign
+      summary: Upsert a reward campaign
+      tags:
+        - Campaigns
+      requestBody: *a3
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /campaigns/status:
+    post:
+      operationId: setCampaignStatus
+      summary: Set draft, active, or paused status
+      tags:
+        - Campaigns
+      requestBody: *a3
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /campaigns/run:
+    post:
+      operationId: runCampaign
+      summary: Run an active campaign
+      tags:
+        - Campaigns
+      requestBody: *a3
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /campaigns/report:
+    get:
+      operationId: getCampaignAttribution
+      summary: Get campaign attribution
+      tags:
+        - Campaigns
+      parameters:
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 255
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /connectors:
+    get:
+      operationId: listConnectors
+      summary: List connectors with secrets redacted
+      tags:
+        - Connectors
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+    put:
+      operationId: upsertConnector
+      summary: Upsert a connector
+      tags:
+        - Connectors
+      requestBody: *a3
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /connectors/delete:
+    post:
+      operationId: deleteConnector
+      summary: Delete a connector
+      tags:
+        - Connectors
+      requestBody: *a3
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /analytics:
+    get:
+      operationId: getPlatformAnalytics
+      summary: Get customer and loyalty analytics
+      tags:
+        - Analytics
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+  /imports/members:
+    post:
+      operationId: importMembers
+      summary: Import up to 1,000 members from JSON rows or bounded CSV
+      tags:
+        - Imports
+      requestBody:
+        required: true
+        content:
+          application/json: *a1
+          text/csv:
+            schema:
+              type: string
+              maxLength: 1048576
+      responses:
+        "201":
+          description: Success
+          content:
+            application/json: *a1
+        default: *a2
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    Problem:
+      description: RFC 9457 problem details
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            required:
+              - type
+              - title
+              - status
+            properties:
+              type:
+                type: string
+                format: uri-reference
+              title:
+                type: string
+              status:
+                type: integer
+                minimum: 400
+                maximum: 599
+              detail:
+                type: string
+              code:
+                type: string
+x-lip-non-normative: true

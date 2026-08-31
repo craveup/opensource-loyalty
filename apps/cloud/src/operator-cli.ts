@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Operator directory CLI (PLA-442) — manage per-operator control-plane
+ * Operator directory CLI  — manage per-operator control-plane
  * credentials over the /cloud/v1/operators API.
  *
  * Bootstrap the FIRST platform-admin with the legacy shared key, then throw
@@ -9,7 +9,7 @@
  *
  *   LIP_CLOUD_API_KEY=<shared key> npm run cloud:operator -- create \
  *     --cloud-url https://lip-cloud.example.com \
- *     --subject alvin@craveup.com --email alvin@craveup.com \
+ *     --subject operator@example.com --email operator@example.com \
  *     --role platform-admin
  *
  * Every later call authenticates with an operator key instead:

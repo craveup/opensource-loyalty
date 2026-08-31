@@ -1,4 +1,4 @@
-# Managed Crave Loyalty shared clusters (PLA-798)
+# Managed Crave Loyalty shared clusters
 #
 # Development, sandbox, and production are intentionally separate services
 # with separate disks, secrets, and independently managed Neon databases. Both

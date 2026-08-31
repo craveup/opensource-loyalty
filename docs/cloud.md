@@ -139,7 +139,8 @@ Request body:
 Attach is synchronous — no job is queued. The control plane performs five
 checks against `endpoint_url` before binding it:
 
-1. the URL uses TLS (or is a localhost address for local development);
+1. the URL uses public HTTPS, has no credentials, query, or fragment, and its
+   DNS answers contain no private or reserved addresses;
 2. `GET /health` responds and reports `status: "ok"`;
 3. `GET /.well-known/lip` matches the expected protocol version and profile;
 4. the supplied `api_key` authenticates against `GET /lip/v1/capabilities`,
@@ -152,7 +153,11 @@ and an `api_key_fingerprint` — only a masked fingerprint is stored, never the
 key itself. On failure the environment is marked `failed` with a
 `status_message` describing which check failed, and the request returns
 `422` with a matching error code (for example `auth_rejected` or
-`program_mismatch`).
+`program_mismatch`). Requests have a five-second timeout and never follow
+redirects. A loopback/private endpoint is available only for local development
+when the Cloud process explicitly sets
+`LIP_CLOUD_ALLOW_PRIVATE_ATTACH_NETWORKS=true`; never enable that switch in a
+networked control plane.
 
 Re-attaching is allowed for `pending`, `ready`, or `failed` environments, so
 you can rebind after key rotation or a host migration; a `suspended`
@@ -210,7 +215,7 @@ npm run cloud:dev
 Configuration:
 
 - `LIP_CLOUD_DATABASE_URL` (falls back to `LIP_DATABASE_URL`)
-- `LIP_CLOUD_API_KEY` — **deprecated** shared bootstrap key (PLA-442); see
+- `LIP_CLOUD_API_KEY` — **deprecated** shared bootstrap key; see
   the authentication boundary below
 - `LIP_CLOUD_SHARED_KEY_DISABLED=true` — reject the shared key outright once
   operators exist
@@ -220,6 +225,8 @@ Configuration:
 - `LIP_CLOUD_REGIONS`, comma-separated
 - `LIP_CLOUD_DEFAULT_PLAN`
 - `LIP_CLOUD_ALLOWED_ORIGINS`, comma-separated
+- `LIP_CLOUD_ALLOW_PRIVATE_ATTACH_NETWORKS=true`, development-only opt-in for
+  attaching loopback/private data planes; disabled by default
 - `LIP_CLOUD_CREDENTIAL_KEY`, required 32-byte base64url key when local
   provisioning is enabled
 - `LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION=true`, one-time plaintext v1/v2
@@ -235,7 +242,7 @@ Configuration:
 
 ## Authentication boundary
 
-Since PLA-442 the acting identity on `/cloud/v1` always comes from a
+With the operator credential model, the acting identity on `/cloud/v1` always comes from a
 **verified credential** — never from a caller-chosen header.
 
 **Operator API keys (primary).** Every human or service operating the

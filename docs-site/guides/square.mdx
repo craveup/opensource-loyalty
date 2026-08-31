@@ -1,0 +1,27 @@
+---
+title: "Square Orders adapter"
+description: "Pinned Square order mapping, webhook verification, and refund-safety rules"
+icon: "square"
+---
+
+`SquareFoodserviceAdapter` maps Square Order-shaped objects to the LIP
+foodservice model. Its version is pinned to Square Orders API `2026-08-19` and
+the repository tests only public synthetic fixtures. This is not a claim of
+Square certification or partnership.
+
+It covers modifiers, discounts, taxes, tips, service charges, split tenders,
+channel hints, voids, partial refunds, and deterministic idempotency keys.
+Free-form line notes and Square customer identifiers are not copied into LIP.
+
+<Warning>
+A gross refund cannot prove the loyalty-eligible amount. Integrators must supply
+`resolveEligibleRefundAmount` from item-level source facts; the adapter fails
+closed on invalid values.
+</Warning>
+
+Verify the exact raw webhook body before parsing. Square signs the notification
+URL concatenated with the raw body using HMAC-SHA-256.
+
+- [Square Orders API](https://developer.squareup.com/reference/square/orders)
+- [Validate Square webhook events](https://developer.squareup.com/docs/webhooks/step3validate)
+- [Source guide](https://github.com/craveup/opensource-loyalty/blob/main/docs/square.md)

@@ -12,7 +12,7 @@ import {
 import { TRUSTED_GATEWAY_ISSUER } from "./types.js";
 
 /**
- * Legacy shared trusted-gateway key. Since PLA-442 it authenticates nothing
+ * Legacy shared trusted-gateway key. With the operator credential model, it authenticates nothing
  * but the first-operator bootstrap, so tests use it only to mint the operator
  * key below and to assert the retired-key behavior itself.
  */
@@ -49,7 +49,7 @@ async function fixture() {
   const operators = new CloudOperatorService({ repository });
   const cloud = new CloudControlPlane({ repository, regions: ["us-east-1"] });
   const running = await startCloudServer(cloud, { apiKey: sharedKey, operators, port: 0 });
-  // PLA-442: the shared key spends its single use bootstrapping the first
+  // The shared key spends its single use bootstrapping the first
   // platform-admin; every later request authenticates with that operator key.
   const bootstrap = await operators.createOperator(
     { issuer: TRUSTED_GATEWAY_ISSUER, subject: "bootstrap" },
@@ -152,7 +152,7 @@ describe("provisionTenant", () => {
     })).rejects.toThrow(/HTTP/i);
   });
 
-  it("onboards with an operator API key and no subject flag (PLA-442)", async () => {
+  it("onboards with an operator API key and no subject flag", async () => {
     const { url, operatorKey, drive, close } = await fixture();
     try {
       const [result] = await Promise.all([
@@ -166,7 +166,7 @@ describe("provisionTenant", () => {
     }
   });
 
-  it("rejects the legacy shared key before any request is sent (PLA-442)", async () => {
+  it("rejects the legacy shared key before any request is sent", async () => {
     // The shared key only authenticates the first-operator bootstrap route,
     // which onboarding never calls — so this fails client-side, with or
     // without a subject, and never reaches the network.
@@ -182,7 +182,7 @@ describe("provisionTenant", () => {
     }
   });
 
-  it("retires the shared key server-side once an operator exists (PLA-442)", async () => {
+  it("retires the shared key server-side once an operator exists", async () => {
     const { url, close } = await fixture();
     try {
       const response = await fetch(`${url}/cloud/v1/organizations`, {
@@ -251,7 +251,7 @@ describe("rotateTenantCredentials", () => {
         })
       }
     });
-    // PLA-442: bootstrap the platform-admin whose key drives every rotation
+    // Bootstrap the platform-admin whose key drives every rotation
     // below, and whose subject is the expected attribution subject.
     const admin = await operators.createOperator(
       { issuer: TRUSTED_GATEWAY_ISSUER, subject: "bootstrap" },

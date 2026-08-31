@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS build
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN npm ci \
   && npm run build \
   && npm prune --omit=dev --workspaces --include-workspace-root
 
-FROM node:22-alpine AS runtime
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS runtime
 
 WORKDIR /app
 ENV HOST=0.0.0.0
@@ -23,12 +23,13 @@ ENV LIP_DATABASE_PATH=/data/reference.db
 COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/cloud ./apps/cloud
+COPY --from=build /app/apps/wallet ./apps/wallet
 COPY --from=build /app/packages ./packages
 RUN mkdir -p /data && chown -R node:node /app /data
 
 USER node
 
-EXPOSE 3210
+EXPOSE 3210 3220 3230
 
 HEALTHCHECK --interval=5s --timeout=2s --start-period=5s --retries=5 \
   CMD wget -qO- "http://127.0.0.1:${HEALTH_PORT:-3210}/health" >/dev/null || exit 1

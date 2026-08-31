@@ -4,6 +4,7 @@
     { "path": "./packages/adapter-kit" },
     { "path": "./packages/identity" },
     { "path": "./apps/cloud" },
+    { "path": "./apps/wallet" },
     { "path": "./packages/protocol" },
     { "path": "./packages/reference" },
     { "path": "./packages/storage" },

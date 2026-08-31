@@ -31,6 +31,7 @@ interface CapturedRequest {
   timestamp: string;
   signature: string;
   body: string;
+  redirect?: "follow" | "error" | "manual";
 }
 
 function capturingFetch(captured: CapturedRequest[], statuses: number[] = []): typeof fetch {
@@ -43,7 +44,8 @@ function capturingFetch(captured: CapturedRequest[], statuses: number[] = []): t
       url: String(input),
       timestamp: headers.get("lip-webhook-timestamp") ?? "",
       signature: headers.get("lip-webhook-signature") ?? "",
-      body: String(init?.body)
+      body: String(init?.body),
+      ...(init?.redirect ? { redirect: init.redirect } : {})
     });
     return new Response(null, { status });
   };
@@ -99,6 +101,10 @@ describe("WebhookDispatcher", () => {
       secret: "long-enough-secret"
     })).toThrowError(/credentials/);
     expect(() => dispatcher.upsertSubscription({
+      url: "https://169.254.169.254/latest/meta-data",
+      secret: "long-enough-secret"
+    })).toThrowError(/public network/);
+    expect(() => dispatcher.upsertSubscription({
       url: "https://receiver.example/hooks",
       secret: "short"
     })).toThrowError(/16/);
@@ -149,6 +155,7 @@ describe("WebhookDispatcher", () => {
     await dispatcher.flush();
 
     expect(captured).toHaveLength(1);
+    expect(captured[0]!.redirect).toBe("error");
     expect(captured[0]!.body).toBe(JSON.stringify(event));
     await expect(
       verifyWebhook({
@@ -183,6 +190,20 @@ describe("WebhookDispatcher", () => {
       healthy: true,
       checked_at: "2026-07-17T00:00:00.000Z"
     });
+  });
+
+  it("fails closed when DNS returns a private address", async () => {
+    const captured: CapturedRequest[] = [];
+    const dispatcher = await WebhookDispatcher.create({
+      subscriptions: [{ url: "https://receiver.example/hooks", secret: "hook-secret" }],
+      fetch: capturingFetch(captured),
+      resolve: async () => ["10.0.0.5"],
+      maxAttempts: 1
+    });
+    dispatcher.emit(makeEvent({ id: "evt-private-dns" }));
+    await dispatcher.flush();
+    expect(captured).toEqual([]);
+    expect(dispatcher.pendingDeliveries()[0]?.last_error).toMatch(/private|reserved/);
   });
 
   it("reports unhealthy delivery when recent deliveries failed", async () => {
@@ -653,7 +674,8 @@ describe("platform webhook wiring", () => {
       databasePath: join(directory, "reference.db"),
       reset: true,
       seed: false,
-      webhooks: [{ url: receiverUrl(receiver), secret: "platform-secret" }]
+      webhooks: [{ url: receiverUrl(receiver), secret: "platform-secret" }],
+      allowPrivateWebhookNetworks: true
     });
     try {
       platform.engine.enroll(makeEnroll("platform-webhook-enroll-key"));

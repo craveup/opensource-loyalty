@@ -1,11 +1,18 @@
 import { randomUUID } from "node:crypto";
+import {
+  assertSafeOutboundDestination,
+  assertSafeOutboundUrl,
+  resolveHostAddresses,
+  type OutboundAddressResolver
+} from "@loyalty-interchange/server";
 
 const EXPECTED_PROTOCOL = "1.0";
 const EXPECTED_PROFILE = "foodservice/1.0";
 
 export type AttachFailureCode =
   | "not_tls" | "health_unreachable" | "discovery_invalid"
-  | "auth_rejected" | "auth_not_enforced" | "program_mismatch";
+  | "auth_rejected" | "auth_not_enforced" | "program_mismatch"
+  | "unsafe_destination";
 
 export interface AttachBinding {
   api_url: string;
@@ -18,6 +25,9 @@ export type AttachResult =
 
 export interface RemoteEnvironmentAttacherOptions {
   fetch?: typeof globalThis.fetch;
+  resolve?: OutboundAddressResolver;
+  /** Development-only escape hatch for loopback/private data-plane hosts. */
+  allowPrivateNetworks?: boolean;
 }
 
 export function apiKeyFingerprint(key: string): string {
@@ -33,8 +43,12 @@ function isLocalHost(hostname: string): boolean {
 
 export class RemoteEnvironmentAttacher {
   private readonly fetchImpl: typeof globalThis.fetch;
+  private readonly resolve: OutboundAddressResolver | false;
+  private readonly allowPrivateNetworks: boolean;
   public constructor(options: RemoteEnvironmentAttacherOptions = {}) {
     this.fetchImpl = options.fetch ?? globalThis.fetch;
+    this.resolve = options.resolve ?? (options.fetch ? false : resolveHostAddresses);
+    this.allowPrivateNetworks = options.allowPrivateNetworks === true;
   }
 
   public async validate(input: {
@@ -51,11 +65,27 @@ export class RemoteEnvironmentAttacher {
     if (base.protocol !== "https:" && !isLocalHost(base.hostname)) {
       return { ok: false, code: "not_tls", message: "endpoint_url must use https for a non-localhost host" };
     }
+    if (base.search || base.hash) {
+      return { ok: false, code: "unsafe_destination", message: "endpoint_url must not contain a query or fragment" };
+    }
+    try {
+      assertSafeOutboundUrl(base, { allowPrivateNetworks: this.allowPrivateNetworks });
+      await assertSafeOutboundDestination(base, {
+        allowPrivateNetworks: this.allowPrivateNetworks,
+        resolver: this.resolve
+      });
+    } catch {
+      return {
+        ok: false,
+        code: "unsafe_destination",
+        message: "endpoint_url must resolve to a public destination"
+      };
+    }
     const apiUrl = input.endpoint_url.replace(/\/+$/, "");
     const at = (p: string) => `${apiUrl}${p}`;
 
     // 1. health
-    const health = await this.safe(() => this.fetchImpl(at("/health")));
+    const health = await this.safe(at("/health"));
     if (!health || !health.ok) return { ok: false, code: "health_unreachable", message: "GET /health did not return ok" };
     const healthBody = await this.json(health);
     if (!healthBody || (healthBody as { status?: unknown }).status !== "ok") {
@@ -63,7 +93,7 @@ export class RemoteEnvironmentAttacher {
     }
 
     // 2. discovery
-    const disc = await this.safe(() => this.fetchImpl(at("/.well-known/lip")));
+    const disc = await this.safe(at("/.well-known/lip"));
     const discBody = disc && disc.ok ? await this.json(disc) : undefined;
     const d = discBody as { protocol_version?: unknown; profiles?: unknown } | undefined;
     if (
@@ -76,20 +106,20 @@ export class RemoteEnvironmentAttacher {
     }
 
     // 3. auth positive
-    const authed = await this.safe(() => this.fetchImpl(at("/lip/v1/capabilities"), {
+    const authed = await this.safe(at("/lip/v1/capabilities"), {
       headers: { authorization: `Bearer ${input.api_key}` }
-    }));
+    });
     if (!authed || authed.status !== 200) return { ok: false, code: "auth_rejected", message: "api_key did not authenticate" };
 
     // 4. auth negative
     const bogus = `lip_sk_bogus_${Math.abs(hashString(input.api_key + apiUrl)).toString(36)}`;
-    const denied = await this.safe(() => this.fetchImpl(at("/lip/v1/capabilities"), {
+    const denied = await this.safe(at("/lip/v1/capabilities"), {
       headers: { authorization: `Bearer ${bogus}` }
-    }));
+    });
     if (!denied || denied.status !== 401) return { ok: false, code: "auth_not_enforced", message: "host accepted an unknown key" };
 
     // 5. program match
-    const prog = await this.safe(() => this.fetchImpl(at("/lip/v1/programs/get"), {
+    const prog = await this.safe(at("/lip/v1/programs/get"), {
       method: "POST",
       headers: { authorization: `Bearer ${input.api_key}`, "content-type": "application/json" },
       body: JSON.stringify({
@@ -103,7 +133,7 @@ export class RemoteEnvironmentAttacher {
         },
         program_id: input.program_id
       })
-    }));
+    });
     const progBody = prog && prog.ok ? await this.json(prog) : undefined;
     const servedId = (progBody as { program?: { program_id?: unknown } } | undefined)?.program?.program_id;
     if (servedId !== input.program_id) return { ok: false, code: "program_mismatch", message: "host serves a different program" };
@@ -114,8 +144,20 @@ export class RemoteEnvironmentAttacher {
     };
   }
 
-  private async safe(run: () => Promise<Response>): Promise<Response | undefined> {
-    try { return await run(); } catch { return undefined; }
+  private async safe(url: string, init: RequestInit = {}): Promise<Response | undefined> {
+    try {
+      await assertSafeOutboundDestination(url, {
+        allowPrivateNetworks: this.allowPrivateNetworks,
+        resolver: this.resolve
+      });
+      return await this.fetchImpl(url, {
+        ...init,
+        redirect: "error",
+        signal: AbortSignal.timeout(5_000)
+      });
+    } catch {
+      return undefined;
+    }
   }
   private async json(res: Response): Promise<unknown> {
     try { return await res.json(); } catch { return undefined; }

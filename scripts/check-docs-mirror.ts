@@ -5,8 +5,8 @@
  * site. Seven pages exist in both trees and are kept in sync by hand, so they
  * drift silently — by 2026-07-28 the published `postgres` and
  * `reference-platform` pages had fallen far enough behind to state things that
- * were no longer true (Postgres mode described as lacking the admin service
- * suite that PLA-415 shipped; the Admin described as read-only).
+ * were no longer true (Postgres mode described as lacking the complete admin
+ * service suite; the Admin was described as read-only).
  *
  * The generated mirror `docs-site/api-reference/openapi.yaml` cannot rot,
  * because `npm run spec:check` diffs it. This applies the same idea to the

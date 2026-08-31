@@ -1,0 +1,26 @@
+---
+title: "Self-hosted deployment"
+description: "Move from the Docker evaluation profile to an operated deployment"
+icon: "server"
+---
+
+```bash
+docker compose up --build
+```
+
+This starts API/Admin on `3210`, the synthetic wallet on `3230`, and SQLite in
+the `lip-data` volume. Before customer traffic, replace the development key,
+disable demo seeding and wallet demo mode, configure OIDC, terminate TLS, move
+multi-instance workloads to Postgres, and rehearse backup/restore and rollback.
+Published ports bind to host loopback by default; the known Compose evaluation
+key must never be exposed on a network.
+
+<Warning>
+Keep API, webhook, OIDC, database, and encryption credentials in a secret
+manager. Never commit them, pass them as Docker build arguments, or include them
+in fixtures, screenshots, logs, or support issues.
+</Warning>
+
+Run `npm run verify`, black-box conformance, adapter certification, and the exact
+source's refund/void rehearsal before cutover. See [Postgres](/guides/postgres),
+[Reference wallet](/guides/wallet), and [Security operations](/about/security-operations).

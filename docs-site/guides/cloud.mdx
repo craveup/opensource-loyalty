@@ -120,13 +120,17 @@ boundary.
 
 Attach is synchronous — no job is queued. The control plane runs five checks before binding:
 
-1. The URL uses TLS (or is a localhost address for local development)
+1. The URL uses public HTTPS, has no credentials, query, or fragment, and its DNS answers contain no private or reserved address
 2. `GET /health` responds and reports `status: "ok"`
 3. `GET /.well-known/lip` matches the expected protocol version and profile
 4. The supplied `api_key` authenticates against `GET /lip/v1/capabilities`, and an unknown key is correctly rejected
 5. `POST /lip/v1/programs/get` confirms the host serves the environment's `program_id`
 
-On success the environment moves to `ready` with its `api_url`, `admin_url`, and an `api_key_fingerprint` — only a masked fingerprint is stored, never the key. On failure it is marked `failed` with a `status_message` naming the failed check, and the request returns `422` with a matching code such as `auth_rejected` or `program_mismatch`.
+On success the environment moves to `ready` with its `api_url`, `admin_url`, and an `api_key_fingerprint` — only a masked fingerprint is stored, never the key. On failure it is marked `failed` with a `status_message` naming the failed check, and the request returns `422` with a matching code such as `auth_rejected` or `program_mismatch`. Requests have a five-second timeout and never follow redirects.
+
+<Warning>
+Set `LIP_CLOUD_ALLOW_PRIVATE_ATTACH_NETWORKS=true` only while attaching a loopback or private data plane in local development. The default public-destination policy is required for every networked control plane.
+</Warning>
 
 Re-attaching is allowed for `pending`, `ready`, or `failed` environments, so you can rebind after key rotation or a host migration. A `suspended` environment rejects attach with `409 environment_suspended`.
 
@@ -178,6 +182,7 @@ npm run cloud:dev
 | `LIP_CLOUD_REGIONS` | Comma-separated region list |
 | `LIP_CLOUD_DEFAULT_PLAN` | Plan assigned to new organizations |
 | `LIP_CLOUD_ALLOWED_ORIGINS` | Comma-separated CORS origins |
+| `LIP_CLOUD_ALLOW_PRIVATE_ATTACH_NETWORKS` | Development-only private/loopback attach opt-in; disabled by default |
 
 ## Authentication boundary
 

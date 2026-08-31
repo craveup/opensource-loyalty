@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 
 const landingUrl = process.env.LIP_VISUAL_LANDING_URL ?? "http://127.0.0.1:4187/";
 const adminUrl = process.env.LIP_VISUAL_ADMIN_URL ?? "http://127.0.0.1:4188/admin/";
+const adminApiKey = process.env.LIP_VISUAL_ADMIN_API_KEY ?? "lip-dev-key";
 const outputDirectory = resolve(process.env.LIP_VISUAL_OUTPUT_DIR ?? ".lip/visual-verification");
 const chromeCandidates = [
   process.env.CHROME_BIN,
@@ -233,6 +234,7 @@ try {
   await viewport(admin, 1_440, 900);
   await navigate(admin, adminUrl);
   await wait(250);
+  const expectsLocalKeyPrefill = adminApiKey === "lip-dev-key";
   report.admin_login_desktop = await evaluate(admin, `({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
@@ -240,7 +242,16 @@ try {
     keyPrefilled: document.querySelector('#api-key')?.value === 'lip-dev-key'
   })`);
   assertNoOverflow("Admin desktop login", report.admin_login_desktop);
-  assertEqual("Admin local key prefill", report.admin_login_desktop.keyPrefilled, true);
+  assertEqual("Admin local key prefill", report.admin_login_desktop.keyPrefilled, expectsLocalKeyPrefill);
+  if (!expectsLocalKeyPrefill) {
+    await evaluate(admin, `(() => {
+      const input = document.querySelector('#api-key');
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setValue.call(input, ${JSON.stringify(adminApiKey)});
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+  }
   await screenshot(admin, "admin-login-desktop.png");
 
   await evaluate(admin, "document.querySelector('form').requestSubmit(); true");

@@ -6,7 +6,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormatsImport, { type FormatsPlugin } from "ajv-formats";
 
 /**
- * Validates a managed-environment release evidence record (PLA-417).
+ * Validates a managed-environment release evidence record.
  *
  * The runbook lists the evidence activation is gated on but names no
  * destination or format, so "recorded" has never been checkable. This makes the

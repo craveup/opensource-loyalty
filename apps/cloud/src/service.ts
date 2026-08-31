@@ -731,7 +731,7 @@ export class CloudControlPlane {
   }
 
   /**
-   * PLA-416 rotation surface: authorizes the caller as an owner/admin of the
+   * tenant credential rotation surface: authorizes the caller as an owner/admin of the
    * environment's organization, delegates minting to the wired data-plane
    * provisioner, audits the rotation, and returns the fresh merchant
    * credential. The operator subject is threaded down so tenant-side audit
@@ -986,7 +986,7 @@ export class CloudControlPlane {
   }
 
   /**
-   * Resolves the acting membership for an organization. Operators (PLA-442)
+   * Resolves the acting membership for an organization. Operators
    * synthesize a virtual membership from their verified credential: a
    * platform-admin acts as owner everywhere; an org-scoped operator acts as
    * admin inside its scope and sees 404 elsewhere. Everyone else falls back
@@ -1010,8 +1010,8 @@ export class CloudControlPlane {
     );
     if (membership?.active) {
       // An org-scoped operator always gets at least virtual admin inside its
-      // scope — a stored lower-role membership must never shadow it (PLA-442
-      // fix 9). Take the higher of the stored role and admin.
+      // scope. A stored lower-role membership must never shadow it; take the
+      // higher of the stored role and admin.
       if (inScope && membership.role !== "owner") {
         return { ...membership, role: "admin" };
       }

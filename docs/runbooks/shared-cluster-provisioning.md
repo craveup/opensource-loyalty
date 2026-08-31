@@ -1,4 +1,4 @@
-# Shared LIP cluster: tenant provisioning runbook (PLA-417)
+# Shared LIP cluster: tenant provisioning runbook
 
 > Managed development/sandbox/production release, restore rehearsal, and rollback authority lives in
 > [`managed-environment-release.md`](managed-environment-release.md). This runbook describes tenant
@@ -23,11 +23,11 @@ scope inside the shared database — never a per-brand deployment.
   Neon database. Development, sandbox, and production never share a Neon project/database/role, and
   none uses a Crave platform database.
 - **One service instance — a hard constraint.** `docs/postgres.md`: run at
-  most one platform instance per tenant until PLA-428/429 land (Admin
+  most one platform instance per tenant until multi-instance coordination lands (Admin
   extension stores cache per-process revisions; webhook journals assume a
   single dispatcher). `render.yaml` pins `numInstances: 1` and the attached
   disk prevents scale-out. Do not raise the instance count.
-- **Auth model (PLA-416 + PLA-442).** Two kinds of keys are in play:
+- **Auth model.** Two kinds of keys are in play:
   - Per-operator **control-plane keys** (`lip_ok_...`) — every human or
     service gets its own operator record (`platform-admin`, or `org-scoped`
     to specific organizations) and key (hashed at rest, expiring,
@@ -276,7 +276,7 @@ LIP_DATABASE_URL='<shared postgres url>' LIP_TENANT_ID='<tenant_id>' \
 npm run lip -- state import --program ./demo-rewards.json --input ./archive.json
 ```
 
-## 4½. Operator cutover: retire the shared control-plane key (PLA-442)
+## 4½. Operator cutover: retire the shared control-plane key
 
 Run once per cluster, right after the first deploy (and on existing
 clusters as a migration):
@@ -406,8 +406,8 @@ failure + health-check alerts to the engineering Slack. Stream logs (Render
 
 | Constraint | Tracking |
 | --- | --- |
-| One platform instance per tenant → `numInstances: 1`, no horizontal scaling of the shared host | PLA-428 / PLA-429 |
-| **Per-operator control-plane auth (PLA-442, shipped):** management calls authenticate as individual operators (`lip_ok_` keys or OIDC subjects mapped to operator records); the subject header no longer grants identity. The shared `LIP_CLOUD_API_KEY` is bootstrap-only and is retired the moment the first operator exists — every other route returns `401 shared_key_retired`, with or without the `LIP_CLOUD_SHARED_KEY_DISABLED=true` flag (the flag additionally refuses the bootstrap route itself). Run the section 4½ cutover to set it | done: PLA-442; residual action = section 4½ cutover per cluster |
+| One platform instance per tenant → `numInstances: 1`, no horizontal scaling of the shared host | multi-instance coordination |
+| **Per-operator control-plane auth (shipped):** management calls authenticate as individual operators (`lip_ok_` keys or OIDC subjects mapped to operator records); the subject header no longer grants identity. The shared `LIP_CLOUD_API_KEY` is bootstrap-only and is retired the moment the first operator exists — every other route returns `401 shared_key_retired`, with or without the `LIP_CLOUD_SHARED_KEY_DISABLED=true` flag (the flag additionally refuses the bootstrap route itself). Run the section 4½ cutover to set it | done; residual action = section 4½ cutover per cluster |
 | Tenant runtimes are private-network only (one public port per Render service) | follow-up: per-tenant public hostnames or gateway routing |
 | Credentials files retain tenant access material on the environment disk | encrypted v3 files (`0600`, atomic writes); preserve the environment encryption key through restore and rotation |
 

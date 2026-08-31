@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://craveup.com/loyalty/managed-environment-evidence.schema.json",
   "title": "Managed loyalty environment release evidence",
-  "description": "The operator-supplied record that PLA-417 activation is gated on. It holds identifiers and outcomes only: never a connection string, role, password, API key or encryption key.",
+  "description": "The operator-supplied record that managed activation is gated on. It holds identifiers and outcomes only: never a connection string, role, password, API key or encryption key.",
   "type": "object",
   "additionalProperties": false,
   "required": ["recordedAt", "recordedBy", "environments", "rollback", "signOff"],

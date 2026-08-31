@@ -18,12 +18,14 @@ import {
 } from "@loyalty-interchange/storage-postgres";
 import { createDemoProgram, seedDemoData, seedDemoLocations } from "./demo.js";
 import { CampaignService, type CampaignState } from "./campaigns.js";
+import { CustomerDataService, type CustomerDataState } from "./customer-data.js";
 import { MembershipService, type MembershipAuditState } from "./memberships.js";
 import { AccessControlService, type AccessControlState } from "./access-control.js";
 import { EventedLoyaltyEngine } from "./evented-engine.js";
 import { EngagementService, type EngagementState } from "./engagement.js";
 import { LocationDirectoryService, type LocationDirectoryState } from "./locations.js";
 import { ProgramManagementService, type ProgramManagementState } from "./program-management.js";
+import { TelemetryService, type TelemetryState } from "./telemetry.js";
 import { WebhookOutboxJournal, type WebhookOutboxState } from "./webhook-outbox.js";
 import { WebhookHistoryJournal, type WebhookHistoryState } from "./webhook-history.js";
 import { WebhookSubscriptionJournal, type WebhookSubscriptionState } from "./webhook-subscriptions.js";
@@ -46,6 +48,13 @@ export interface DemoPlatformOptions {
    * optionally LIP_WEBHOOK_EVENTS, a comma-separated event-type allowlist).
    */
   webhooks?: WebhookSubscription[];
+  /** Development-only opt-in for loopback/private webhook receivers. */
+  allowPrivateWebhookNetworks?: boolean;
+  telemetry?: {
+    enabled?: boolean;
+    endpoint?: string;
+    fetchImpl?: typeof fetch;
+  };
 }
 
 export interface DemoPlatform {
@@ -55,10 +64,12 @@ export interface DemoPlatform {
   webhooks: WebhookDispatcher;
   programs: ProgramManagementService;
   campaigns: CampaignService;
+  customerData: CustomerDataService;
   memberships: MembershipService;
   access: AccessControlService;
   engagement: EngagementService;
   locations: LocationDirectoryService;
+  telemetry: TelemetryService;
   close(): Promise<void>;
 }
 
@@ -69,10 +80,12 @@ export interface PostgresProtocolPlatform {
   webhooks: WebhookDispatcher;
   programs: ProgramManagementService;
   campaigns: CampaignService;
+  customerData: CustomerDataService;
   memberships: MembershipService;
   access: AccessControlService;
   engagement: EngagementService;
   locations: LocationDirectoryService;
+  telemetry: TelemetryService;
   executeEngineOperation<T>(operation: () => T | Promise<T>): Promise<T>;
   /**
    * Runs a read-only computation against a scratch engine hydrated from the
@@ -93,6 +106,13 @@ export interface PostgresProtocolPlatformOptions {
   adminAssetRoot?: string;
   program?: ProgramDefinition;
   webhooks?: WebhookSubscription[];
+  /** Development-only opt-in for loopback/private webhook receivers. */
+  allowPrivateWebhookNetworks?: boolean;
+  telemetry?: {
+    enabled?: boolean;
+    endpoint?: string;
+    fetchImpl?: typeof fetch;
+  };
 }
 
 export function webhookSubscriptionsFromEnv(
@@ -142,10 +162,12 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
   let webhookHistory: WebhookHistoryJournal | undefined;
   let webhookSubscriptionStore: WebhookSubscriptionJournal | undefined;
   let campaigns: CampaignService | undefined;
+  let customerData: CustomerDataService | undefined;
   let memberships: MembershipService | undefined;
   let access: AccessControlService | undefined;
   let engagement: EngagementService | undefined;
   let locations: LocationDirectoryService | undefined;
+  let telemetry: TelemetryService | undefined;
   try {
     if (options.reset) store.clear();
     let state = store.load();
@@ -183,6 +205,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
     if (options.reset) await webhookHistory.clear();
     const dispatcher = await WebhookDispatcher.create({
       subscriptions,
+      ...(options.allowPrivateWebhookNetworks ? { allowPrivateNetworks: true } : {}),
       outbox: webhookOutbox,
       historyStore: webhookHistory,
       onSubscriptionsChanged: (next) => webhookSubscriptionStore!.save(next),
@@ -198,6 +221,18 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
     });
     if (!state && options.seed !== false && !options.program) seedDemoData(engine);
     armed = true;
+    customerData = await CustomerDataService.create({
+      store: new AsyncSqliteStateStore<CustomerDataState>({
+        path: options.databasePath,
+        key: `${program.program_id}:customer-data`
+      }),
+      engine,
+      persistEngine: (nextState) => store.save(nextState),
+      ...(options.reset ? { reset: true } : {})
+    });
+    if (options.seed !== false && !options.program) {
+      await customerData.seedProfilesFromEngine();
+    }
     campaigns = await CampaignService.create({
       store: new AsyncSqliteStateStore<CampaignState>({
         path: options.databasePath,
@@ -205,6 +240,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
       }),
       engine,
       persistEngine: (nextState) => store.save(nextState),
+      customerFacts: (memberId) => customerData!.factsForMember(memberId),
       schedulerIntervalMs: 30_000,
       ...(options.reset ? { reset: true } : {})
     });
@@ -244,6 +280,16 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
       }),
       ...(options.reset ? { reset: true } : {})
     });
+    telemetry = await TelemetryService.create({
+      store: new AsyncSqliteStateStore<TelemetryState>({
+        path: options.databasePath,
+        key: `${program.program_id}:telemetry`
+      }),
+      storageDriver: "sqlite",
+      features: ["admin", "campaigns", "customer-data", "platform-api", "wallet-bff"],
+      ...options.telemetry,
+      ...(options.reset ? { reset: true } : {})
+    });
     if (options.seed !== false && !options.program) await seedDemoLocations(locations);
     programs.bindPublisher((nextProgram) => {
       const previousProgram = engine.getProgramDefinition();
@@ -269,16 +315,20 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
       webhooks: dispatcher,
       programs,
       campaigns,
+      customerData,
       memberships,
       access,
       engagement,
       locations,
+      telemetry,
       close: async () => {
         await campaigns?.close();
+        await customerData?.close();
         await memberships?.close();
         await access?.close();
         await engagement?.close();
         await locations?.close();
+        await telemetry?.close();
         await programs.close();
         store.close();
         await webhookSubscriptionStore?.close();
@@ -299,10 +349,12 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
     await webhookHistory?.close();
     await webhookSubscriptionStore?.close();
     await campaigns?.close();
+    await customerData?.close();
     await memberships?.close();
     await access?.close();
     await engagement?.close();
     await locations?.close();
+    await telemetry?.close();
     await programs.close();
     store.close();
     throw error;
@@ -325,10 +377,12 @@ export async function createPostgresProtocolPlatform(
   let outboxJournal: WebhookOutboxJournal | undefined;
   let historyJournal: WebhookHistoryJournal | undefined;
   let campaigns: CampaignService | undefined;
+  let customerData: CustomerDataService | undefined;
   let memberships: MembershipService | undefined;
   let access: AccessControlService | undefined;
   let engagement: EngagementService | undefined;
   let locations: LocationDirectoryService | undefined;
+  let telemetry: TelemetryService | undefined;
   let bootDispatcher: WebhookDispatcher | undefined;
   try {
     const migrator = new PostgresJsonStateStore({ pool, tenantId, key: "migration-probe" });
@@ -381,6 +435,7 @@ export async function createPostgresProtocolPlatform(
     const journal = subscriptionJournal;
     const dispatcher = await WebhookDispatcher.create({
       subscriptions,
+      ...(options.allowPrivateWebhookNetworks ? { allowPrivateNetworks: true } : {}),
       outbox: outboxJournal,
       historyStore: historyJournal,
       onSubscriptionsChanged: (next) => journal.save(next),
@@ -420,7 +475,7 @@ export async function createPostgresProtocolPlatform(
     // executeEngineOperation, so the services' direct persist hook is a no-op.
     const persistEngine = (): void => undefined;
 
-    // True read path (PLA-434): load the latest committed state without the
+    // True read path (lock-free reporting): load the latest committed state without the
     // per-tenant advisory lock or the mutation queue, hydrate a throwaway
     // engine, and run the read against it. Nothing is saved, so side effects
     // computed during the read (e.g. reservation expiry inside
@@ -457,11 +512,22 @@ export async function createPostgresProtocolPlatform(
       return read(scratch);
     };
 
+    customerData = await CustomerDataService.create({
+      store: stateStore<CustomerDataState>("customer-data"),
+      engine,
+      persistEngine,
+      executeEngineOperation,
+      ...(options.reset ? { reset: true } : {})
+    });
+    if (options.seed !== false && !options.program) {
+      await customerData.seedProfilesFromEngine();
+    }
     campaigns = await CampaignService.create({
       store: stateStore<CampaignState>("campaigns"),
       engine,
       persistEngine,
       executeEngineOperation,
+      customerFacts: (memberId) => customerData!.factsForMember(memberId),
       schedulerIntervalMs: 30_000,
       ...(options.reset ? { reset: true } : {})
     });
@@ -488,6 +554,13 @@ export async function createPostgresProtocolPlatform(
     });
     locations = await LocationDirectoryService.create({
       store: stateStore<LocationDirectoryState>("locations"),
+      ...(options.reset ? { reset: true } : {})
+    });
+    telemetry = await TelemetryService.create({
+      store: stateStore<TelemetryState>("telemetry"),
+      storageDriver: "postgres",
+      features: ["admin", "campaigns", "customer-data", "platform-api", "wallet-bff"],
+      ...options.telemetry,
       ...(options.reset ? { reset: true } : {})
     });
     if (options.seed !== false && !options.program) await seedDemoLocations(locations);
@@ -518,18 +591,22 @@ export async function createPostgresProtocolPlatform(
       webhooks: dispatcher,
       programs,
       campaigns,
+      customerData,
       memberships,
       access,
       engagement,
       locations,
+      telemetry,
       executeEngineOperation,
       readEngineSnapshot,
       close: async () => {
         await campaigns?.close();
+        await customerData?.close();
         await memberships?.close();
         await access?.close();
         await engagement?.close();
         await locations?.close();
+        await telemetry?.close();
         await programs?.close();
         await dispatcher.flush();
         await subscriptionJournal?.close();
@@ -541,10 +618,12 @@ export async function createPostgresProtocolPlatform(
     };
   } catch (error) {
     await campaigns?.close();
+    await customerData?.close();
     await memberships?.close();
     await access?.close();
     await engagement?.close();
     await locations?.close();
+    await telemetry?.close();
     await programs?.close();
     await bootDispatcher?.flush();
     await subscriptionJournal?.close();

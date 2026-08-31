@@ -792,6 +792,7 @@ export class LocalDataPlaneProvisioner implements CloudProvisioner {
           storage: platform.store.status,
           programs: platform.programs,
           campaigns: platform.campaigns,
+          customerData: platform.customerData,
           memberships: platform.memberships,
           access: platform.access,
           engagement: platform.engagement,

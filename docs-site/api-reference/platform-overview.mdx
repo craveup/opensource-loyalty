@@ -1,0 +1,17 @@
+---
+title: "Platform API overview"
+description: "Reference product endpoints outside the normative LIP protocol"
+icon: "rectangle-terminal"
+---
+
+The Platform API is served at `/platform/v1` and uses the same Bearer
+authentication, rate limiting, write-freeze, audit, and problem response
+mechanisms as the reference server. It is a product API, not part of the
+vendor-neutral `/lip/v1` conformance contract.
+
+Use it for customer profiles and consent, behavioral events, member imports,
+segments, campaigns, connectors, analytics, and attribution. Use `/lip/v1` for
+portable checkout, accrual, redemption, rewards, balances, and ledger behavior.
+
+The endpoint reference below is generated from the checked-in
+`spec/platform-openapi.yaml` document.

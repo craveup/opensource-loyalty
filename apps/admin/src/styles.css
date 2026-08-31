@@ -236,6 +236,7 @@ input:focus, select:focus { border-color: var(--border-strong); box-shadow: 0 0 
 .page-heading h2 { font-size: 24px; line-height: 1.2; margin: 0; }
 .record-count, .program-id { color: var(--muted); font-size: 12px; }
 .error-banner { background: var(--red-soft); border-bottom: 1px solid #fecaca; color: var(--red); font-size: 12px; padding: 10px 24px; }
+.notice-banner { background: var(--green-soft); border: 1px solid #bbf7d0; border-radius: 8px; color: var(--green); font-size: 12px; margin-bottom: 14px; padding: 10px 14px; }
 
 .stats-grid { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
 .stat-card, .reward-card {
@@ -476,10 +477,26 @@ td code { display: block; margin-top: 3px; max-width: 260px; overflow: hidden; t
 .campaign-forms { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 16px; }
 .campaign-forms > div { align-items: stretch; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 10px; display: grid; gap: 9px; padding: 14px; }
 .campaign-forms h4 { margin: 0 0 2px; }
-.campaign-forms input, .campaign-forms select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: inherit; font: inherit; min-height: 40px; padding: 0 11px; }
+.campaign-forms input, .campaign-forms select, .campaign-forms textarea { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: inherit; font: inherit; min-height: 40px; padding: 9px 11px; }
+.campaign-forms textarea { resize: vertical; }
+.campaign-forms label { color: var(--text-secondary); display: grid; font-size: 11px; gap: 6px; }
+.compact-fields { display: grid; gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.audience-list { align-content: start; }
+.audience-list article { border-bottom: 1px solid var(--border); display: grid; gap: 7px; grid-template-columns: 1fr auto; padding: 10px 0; }
+.audience-list article:last-child { border-bottom: 0; }
+.audience-list article div { display: grid; gap: 3px; }
+.audience-list article p { color: var(--text-secondary); font-size: 10px; grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; }
 .campaign-list { border-top: 1px solid var(--border); padding: 8px 16px; }
 .campaign-list > div:not(.empty-state) { align-items: center; display: flex; gap: 12px; justify-content: space-between; min-height: 54px; }
 .campaign-list span { display: grid; font-size: 11px; gap: 3px; }
+.campaign-operations { display: grid; gap: 1px; padding: 0; }
+.campaign-operations > article { background: var(--surface-subtle); display: grid; gap: 10px; padding: 16px; }
+.campaign-operations p { color: var(--text-secondary); font-size: 11px; margin: 0; }
+.campaign-title { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
+.campaign-metrics { display: flex; flex-wrap: wrap; gap: 16px; }
+.campaign-metrics span { color: var(--text-secondary); display: inline; }
+.campaign-metrics strong { color: var(--text); font-size: 14px; }
+.marketing-summary small { color: var(--text-secondary); font-size: 9px; }
 .reward-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .membership-form { align-items: center; display: grid; gap: 10px; grid-template-columns: minmax(180px, 1fr) minmax(160px, .6fr) auto; padding: 16px; }
 .membership-form input, .membership-form select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: inherit; font: inherit; min-height: 40px; padding: 0 11px; }

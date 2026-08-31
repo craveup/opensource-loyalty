@@ -235,6 +235,24 @@ export interface CampaignPlatform {
     name: string;
     mode: "static" | "dynamic";
     member_ids: string[];
+    rules?: {
+      statuses?: Array<"active" | "suspended" | "closed">;
+      tier_ids?: string[];
+      minimum_available_balance?: number;
+      attributes?: Record<string, unknown>;
+      profile?: {
+        has_email?: boolean;
+        has_phone?: boolean;
+        marketing_consent?: boolean;
+        attributes?: Record<string, unknown>;
+      };
+      event?: {
+        type: string;
+        minimum_count?: number;
+        within_days?: number;
+        minimum_value_minor_units?: number;
+      };
+    };
     updated_at: string;
   }>;
   campaigns: Array<{
@@ -242,7 +260,11 @@ export interface CampaignPlatform {
     name: string;
     reward_id: string;
     segment_id: string;
-    status: "draft" | "scheduled" | "completed" | "expired";
+    status: "draft" | "active" | "paused" | "scheduled" | "completed" | "expired";
+    holdout_percent?: number;
+    attribution_window_days?: number;
+    starts_at?: string;
+    ends_at?: string;
     updated_at: string;
     last_run_at?: string;
   }>;
@@ -253,6 +275,41 @@ export interface CampaignPlatform {
     issued: number;
     skipped: number;
     failed: number;
+    holdout: number;
+    outcomes: Array<{
+      member_id: string;
+      status: "issued" | "skipped" | "failed";
+      cohort?: "targeted" | "holdout";
+    }>;
+  }>;
+}
+
+export interface CustomerDataPlatform {
+  profiles: Array<{
+    member_id: string;
+    display_name?: string;
+    email?: string;
+    phone?: string;
+    consent: { marketing: boolean; source: string; updated_at: string };
+    updated_at: string;
+  }>;
+  events: Array<{
+    event_id: string;
+    member_id: string;
+    type: string;
+    occurred_at: string;
+    campaign_id?: string;
+    value_minor_units?: number;
+    currency?: string;
+  }>;
+  imports: Array<{
+    import_id: string;
+    status: "completed" | "partial" | "failed";
+    submitted: number;
+    created: number;
+    updated: number;
+    failed: number;
+    completed_at: string;
   }>;
 }
 
@@ -358,6 +415,7 @@ export interface AdminSnapshot {
   program_configuration: ProgramConfiguration;
   program_management?: ProgramManagement;
   campaigns: CampaignPlatform;
+  customer_data: CustomerDataPlatform;
   access_control?: AccessControl;
   engagement: EngagementPlatform;
   analytics?: EngagementAnalytics;

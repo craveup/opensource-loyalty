@@ -1,0 +1,7 @@
+# Public maintainer review for all repository changes.
+* @alvinjchoi
+
+# Release and security policy changes must stay routed to the named maintainer.
+/.github/workflows/ @alvinjchoi
+/SECURITY.md @alvinjchoi
+/CODE_OF_CONDUCT.md @alvinjchoi

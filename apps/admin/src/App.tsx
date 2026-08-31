@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LogIn,
   LogOut,
+  Megaphone,
   RefreshCw,
   Search,
   Settings2,
@@ -45,13 +46,14 @@ import type {
   TenantRole
 } from "./types.js";
 
-type View = "overview" | "members" | "ledger" | "program" | "developer";
+type View = "overview" | "members" | "ledger" | "program" | "marketing" | "developer";
 
 const navigation: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "members", label: "Members", icon: Users },
   { id: "ledger", label: "Ledger", icon: BookOpenCheck },
   { id: "program", label: "Configure", icon: Settings2 },
+  { id: "marketing", label: "Marketing", icon: Megaphone },
   { id: "developer", label: "API", icon: Database }
 ];
 
@@ -448,13 +450,6 @@ function Program({ snapshot, onChanged }: {
   const [busy, setBusy] = useState(false);
   const [writeError, setWriteError] = useState("");
   const [writeNotice, setWriteNotice] = useState("");
-  const [segmentName, setSegmentName] = useState("");
-  const [segmentMembers, setSegmentMembers] = useState("");
-  const [campaignName, setCampaignName] = useState("");
-  const [campaignSegment, setCampaignSegment] = useState(
-    snapshot.campaigns.segments[0]?.segment_id ?? ""
-  );
-  const [campaignReward, setCampaignReward] = useState(program.rewards[0]?.reward_id ?? "");
   const [membershipMember, setMembershipMember] = useState("");
   const [membershipPlan, setMembershipPlan] = useState("");
   useEffect(() => {
@@ -468,11 +463,6 @@ function Program({ snapshot, onChanged }: {
     ));
     setDirty(false);
   }, [management?.active_revision, management?.draft?.version]);
-  useEffect(() => {
-    if (!campaignSegment && snapshot.campaigns.segments[0]) {
-      setCampaignSegment(snapshot.campaigns.segments[0].segment_id);
-    }
-  }, [campaignSegment, snapshot.campaigns.segments]);
   useEffect(() => {
     const value = program.metadata?.membership;
     const plans = value && typeof value === "object" && !Array.isArray(value)
@@ -535,32 +525,6 @@ function Program({ snapshot, onChanged }: {
     await runWrite(async () => {
       await adminWrite("/admin/api/v1/program/rollback", "POST", { revision });
     }, `Program rolled back from revision ${revision}.`);
-  }
-
-  async function createSegment() {
-    await runWrite(async () => {
-      await adminWrite("/admin/api/v1/segments", "PUT", {
-        name: segmentName,
-        member_ids: segmentMembers.split(",").map((value) => value.trim()).filter(Boolean)
-      });
-    }, "Static segment saved.");
-  }
-
-  async function createCampaign() {
-    await runWrite(async () => {
-      await adminWrite("/admin/api/v1/campaigns", "PUT", {
-        name: campaignName,
-        segment_id: campaignSegment,
-        reward_id: campaignReward
-      });
-    }, "Campaign saved.");
-  }
-
-  async function runCampaign(campaignId: string) {
-    if (!window.confirm("Issue this reward to every member in the segment?")) return;
-    await runWrite(async () => {
-      await adminWrite("/admin/api/v1/campaigns/run", "POST", { campaign_id: campaignId });
-    }, "Campaign run completed.");
   }
 
   async function editReward(reward?: RewardDefinition) {
@@ -845,63 +809,6 @@ function Program({ snapshot, onChanged }: {
           ))}
         </div>
       </Section>
-      <Section
-        heading="Reward campaigns"
-        description="Create a static member segment, target a catalog reward, and issue it through the portable reward wallet."
-      >
-        <div className="campaign-forms">
-          <div>
-            <h4>1. Static segment</h4>
-            <input onChange={(event) => setSegmentName(event.target.value)} placeholder="Segment name" value={segmentName} />
-            <input onChange={(event) => setSegmentMembers(event.target.value)} placeholder="member-001, member-002" value={segmentMembers} />
-            <CommandButton disabled={busy || !segmentName || !segmentMembers} onClick={() => void createSegment()}>
-              Save segment
-            </CommandButton>
-          </div>
-          <div>
-            <h4>2. Campaign</h4>
-            <input onChange={(event) => setCampaignName(event.target.value)} placeholder="Campaign name" value={campaignName} />
-            <select onChange={(event) => setCampaignSegment(event.target.value)} value={campaignSegment}>
-              <option value="">Choose segment</option>
-              {snapshot.campaigns.segments.map((segment) => (
-                <option key={segment.segment_id} value={segment.segment_id}>{segment.name}</option>
-              ))}
-            </select>
-            <select onChange={(event) => setCampaignReward(event.target.value)} value={campaignReward}>
-              {program.rewards.map((reward) => (
-                <option key={reward.reward_id} value={reward.reward_id}>{reward.name}</option>
-              ))}
-            </select>
-            <CommandButton disabled={busy || !campaignName || !campaignSegment || !campaignReward} onClick={() => void createCampaign()}>
-              Save campaign
-            </CommandButton>
-          </div>
-        </div>
-        <div className="campaign-list">
-          {snapshot.campaigns.campaigns.map((campaign) => {
-            const segment = snapshot.campaigns.segments.find((candidate) =>
-              candidate.segment_id === campaign.segment_id
-            );
-            return (
-              <div key={campaign.campaign_id}>
-                <span>
-                  <strong>{campaign.name}</strong>
-                  {campaign.reward_id} · {segment?.mode === "dynamic"
-                    ? "dynamic segment"
-                    : `${segment?.member_ids.length ?? 0} members`} · {campaign.status}
-                </span>
-                <CommandButton disabled={busy} onClick={() => void runCampaign(campaign.campaign_id)}>
-                  Run campaign
-                </CommandButton>
-              </div>
-            );
-          })}
-          {snapshot.campaigns.campaigns.length === 0 ? <EmptyState>No reward campaigns yet.</EmptyState> : null}
-        </div>
-        <p className="record-count">
-          {snapshot.issued_rewards.length} issued rewards · {snapshot.campaigns.runs.length} campaign runs
-        </p>
-      </Section>
       {membershipPlans.length > 0 ? (
         <Section
           heading="Paid memberships"
@@ -944,6 +851,237 @@ function Program({ snapshot, onChanged }: {
           </div>
         </Section>
       ) : null}
+    </>
+  );
+}
+
+function Marketing({ snapshot, onChanged }: {
+  snapshot: AdminSnapshot;
+  onChanged: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [segmentMode, setSegmentMode] = useState<"static" | "dynamic">("dynamic");
+  const [segmentName, setSegmentName] = useState("");
+  const [segmentMembers, setSegmentMembers] = useState("");
+  const [segmentConsent, setSegmentConsent] = useState<"any" | "yes" | "no">("yes");
+  const [segmentEvent, setSegmentEvent] = useState("visit.completed");
+  const [segmentEventCount, setSegmentEventCount] = useState(1);
+  const [segmentEventDays, setSegmentEventDays] = useState(30);
+  const [previews, setPreviews] = useState<Record<string, {
+    estimated_size: number;
+    sample_member_ids: string[];
+  }>>({});
+  const [campaignName, setCampaignName] = useState("");
+  const [campaignSegment, setCampaignSegment] = useState(
+    snapshot.campaigns.segments[0]?.segment_id ?? ""
+  );
+  const [campaignReward, setCampaignReward] = useState(
+    snapshot.program.rewards[0]?.reward_id ?? ""
+  );
+  const [campaignHoldout, setCampaignHoldout] = useState(0);
+  const [campaignWindow, setCampaignWindow] = useState(7);
+  const [campaignStartsAt, setCampaignStartsAt] = useState("");
+
+  useEffect(() => {
+    if (!campaignSegment && snapshot.campaigns.segments[0]) {
+      setCampaignSegment(snapshot.campaigns.segments[0].segment_id);
+    }
+  }, [campaignSegment, snapshot.campaigns.segments]);
+
+  async function runWrite(action: () => Promise<unknown>, success: string) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await action();
+      setNotice(success);
+      await onChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Marketing update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createSegment() {
+    const staticIds = segmentMembers.split(/[\n,]/).map((value) => value.trim()).filter(Boolean);
+    const profile = segmentConsent === "any"
+      ? undefined
+      : { marketing_consent: segmentConsent === "yes" };
+    const event = segmentEvent.trim()
+      ? {
+          type: segmentEvent.trim(),
+          minimum_count: Math.max(1, segmentEventCount),
+          within_days: Math.max(1, segmentEventDays)
+        }
+      : undefined;
+    await runWrite(() => adminWrite("/admin/api/v1/segments", "PUT", {
+      name: segmentName,
+      ...(segmentMode === "static"
+        ? { member_ids: staticIds }
+        : { rules: { ...(profile ? { profile } : {}), ...(event ? { event } : {}) } })
+    }), "Segment saved. Preview it before launching a campaign.");
+    setSegmentName("");
+    setSegmentMembers("");
+  }
+
+  async function previewSegment(segmentId: string) {
+    setBusy(true);
+    setError("");
+    try {
+      const preview = await adminWrite(
+        "/admin/api/v1/segments/preview",
+        "POST",
+        { segment_id: segmentId, sample_size: 8 }
+      ) as { estimated_size: number; sample_member_ids: string[] };
+      setPreviews((current) => ({ ...current, [segmentId]: preview }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Segment preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createCampaign() {
+    await runWrite(() => adminWrite("/admin/api/v1/campaigns", "PUT", {
+      name: campaignName,
+      segment_id: campaignSegment,
+      reward_id: campaignReward,
+      holdout_percent: campaignHoldout,
+      attribution_window_days: campaignWindow,
+      ...(campaignStartsAt
+        ? { starts_at: new Date(campaignStartsAt).toISOString() }
+        : {})
+    }), "Campaign draft saved. Activate it when the audience and reward are ready.");
+    setCampaignName("");
+  }
+
+  async function setCampaignStatus(campaignId: string, status: "active" | "paused") {
+    await runWrite(
+      () => adminWrite("/admin/api/v1/campaigns/status", "POST", {
+        campaign_id: campaignId,
+        status
+      }),
+      status === "active" ? "Campaign activated." : "Campaign paused."
+    );
+  }
+
+  async function runCampaign(campaignId: string, audience: number | undefined) {
+    const size = audience === undefined ? "the resolved audience" : `${audience} resolved members`;
+    if (!window.confirm(`Issue this campaign reward to ${size}? Holdout members will be skipped.`)) return;
+    await runWrite(
+      () => adminWrite("/admin/api/v1/campaigns/run", "POST", { campaign_id: campaignId }),
+      "Campaign run completed."
+    );
+  }
+
+  const campaignEvents = snapshot.customer_data.events.filter(({ campaign_id }) => Boolean(campaign_id));
+  const attributedValue = campaignEvents.reduce(
+    (total, event) => total + (event.value_minor_units ?? 0),
+    0
+  );
+
+  return (
+    <>
+      <div className="page-heading">
+        <div><p className="eyebrow">Audience and activation</p><h2>Marketing</h2></div>
+        <span className="record-count">{formatNumber(snapshot.campaigns.campaigns.length)} campaigns</span>
+      </div>
+      <Section description="Customer profiles and events live in /platform/v1; checkout transactions remain in /lip/v1.">
+        <div className="analytics-grid marketing-summary">
+          <div><span>Profiles</span><strong>{formatNumber(snapshot.customer_data.profiles.length)}</strong></div>
+          <div><span>Consented</span><strong>{formatNumber(snapshot.customer_data.profiles.filter(({ consent }) => consent.marketing).length)}</strong></div>
+          <div><span>Events</span><strong>{formatNumber(snapshot.customer_data.events.length)}</strong></div>
+          <div><span>Attributed value</span><strong>{formatNumber(attributedValue)}</strong><small>minor currency units</small></div>
+        </div>
+      </Section>
+      {error ? <div className="error-banner" role="alert">{error}</div> : null}
+      {notice ? <div className="notice-banner" role="status">{notice}</div> : null}
+      <Section
+        heading="1. Build an audience"
+        description="Use a fixed member list or rules based on consent and first-party events."
+      >
+        <div className="campaign-forms marketing-builder">
+          <div>
+            <label>Segment name<input value={segmentName} onChange={(event) => setSegmentName(event.target.value)} placeholder="Recent opted-in guests" /></label>
+            <label>Audience type<select value={segmentMode} onChange={(event) => setSegmentMode(event.target.value as "static" | "dynamic")}><option value="dynamic">Rules</option><option value="static">Member list</option></select></label>
+            {segmentMode === "static" ? (
+              <label>Member ids<textarea rows={4} value={segmentMembers} onChange={(event) => setSegmentMembers(event.target.value)} placeholder={"member-001\nmember-002"} /></label>
+            ) : (
+              <>
+                <label>Marketing consent<select value={segmentConsent} onChange={(event) => setSegmentConsent(event.target.value as "any" | "yes" | "no")}><option value="yes">Opted in</option><option value="no">Opted out</option><option value="any">Any status</option></select></label>
+                <label>Event type<input value={segmentEvent} onChange={(event) => setSegmentEvent(event.target.value)} placeholder="purchase.completed" /></label>
+                <div className="compact-fields">
+                  <label>At least<input min={1} type="number" value={segmentEventCount} onChange={(event) => setSegmentEventCount(Number(event.target.value))} /></label>
+                  <label>Within days<input min={1} type="number" value={segmentEventDays} onChange={(event) => setSegmentEventDays(Number(event.target.value))} /></label>
+                </div>
+              </>
+            )}
+            <CommandButton
+              disabled={busy || !segmentName || (segmentMode === "static" ? !segmentMembers.trim() : !segmentEvent.trim() && segmentConsent === "any")}
+              onClick={() => void createSegment()}
+            >Save audience</CommandButton>
+          </div>
+          <div className="audience-list">
+            <h4>Saved audiences</h4>
+            {snapshot.campaigns.segments.map((segment) => (
+              <article key={segment.segment_id}>
+                <div><strong>{segment.name}</strong><small>{segment.mode === "dynamic" ? "Rule-based" : `${segment.member_ids.length} fixed members`}</small></div>
+                <CommandButton disabled={busy} variant="text" onClick={() => void previewSegment(segment.segment_id)}>Preview</CommandButton>
+                {previews[segment.segment_id] ? <p><strong>{previews[segment.segment_id]!.estimated_size}</strong> matches · {previews[segment.segment_id]!.sample_member_ids.join(", ") || "No sample"}</p> : null}
+              </article>
+            ))}
+            {snapshot.campaigns.segments.length === 0 ? <EmptyState>No audiences yet.</EmptyState> : null}
+          </div>
+        </div>
+      </Section>
+      <Section
+        heading="2. Configure a campaign"
+        description="Choose an audience and reward, set an optional holdout, then schedule or activate."
+      >
+        <div className="campaign-forms campaign-builder">
+          <div>
+            <label>Campaign name<input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} placeholder="Return visit reward" /></label>
+            <label>Audience<select value={campaignSegment} onChange={(event) => setCampaignSegment(event.target.value)}><option value="">Choose audience</option>{snapshot.campaigns.segments.map((segment) => <option key={segment.segment_id} value={segment.segment_id}>{segment.name}</option>)}</select></label>
+            <label>Reward<select value={campaignReward} onChange={(event) => setCampaignReward(event.target.value)}>{snapshot.program.rewards.map((reward) => <option key={reward.reward_id} value={reward.reward_id}>{reward.name}</option>)}</select></label>
+          </div>
+          <div>
+            <div className="compact-fields">
+              <label>Holdout %<input max={90} min={0} type="number" value={campaignHoldout} onChange={(event) => setCampaignHoldout(Number(event.target.value))} /></label>
+              <label>Attribution days<input max={90} min={1} type="number" value={campaignWindow} onChange={(event) => setCampaignWindow(Number(event.target.value))} /></label>
+            </div>
+            <label>Schedule start<input type="datetime-local" value={campaignStartsAt} onChange={(event) => setCampaignStartsAt(event.target.value)} /></label>
+            <CommandButton disabled={busy || !campaignName || !campaignSegment || !campaignReward} onClick={() => void createCampaign()}>Save campaign draft</CommandButton>
+          </div>
+        </div>
+      </Section>
+      <Section heading="3. Launch and measure" description="Run history and first-party conversion events stay attached to each campaign.">
+        <div className="campaign-list campaign-operations">
+          {snapshot.campaigns.campaigns.map((campaign) => {
+            const segment = snapshot.campaigns.segments.find(({ segment_id }) => segment_id === campaign.segment_id);
+            const preview = previews[campaign.segment_id];
+            const runs = snapshot.campaigns.runs.filter(({ campaign_id }) => campaign_id === campaign.campaign_id);
+            const issued = runs.reduce((total, run) => total + run.issued, 0);
+            const holdout = runs.reduce((total, run) => total + (run.holdout ?? 0), 0);
+            const conversions = campaignEvents.filter(({ campaign_id }) => campaign_id === campaign.campaign_id);
+            return (
+              <article key={campaign.campaign_id}>
+                <div className="campaign-title"><strong>{campaign.name}</strong><Badge>{campaign.status}</Badge></div>
+                <p>{segment?.name ?? campaign.segment_id} · {campaign.reward_id} · {campaign.holdout_percent ?? 0}% holdout · {campaign.attribution_window_days ?? 7}-day attribution</p>
+                <div className="campaign-metrics"><span><strong>{issued}</strong> issued</span><span><strong>{holdout}</strong> holdout</span><span><strong>{conversions.length}</strong> conversions</span></div>
+                <div className="reward-actions">
+                  {campaign.status === "active" || campaign.status === "scheduled" ? <CommandButton disabled={busy} variant="text" onClick={() => void setCampaignStatus(campaign.campaign_id, "paused")}>Pause</CommandButton> : null}
+                  {campaign.status === "draft" || campaign.status === "paused" ? <CommandButton disabled={busy} variant="text" onClick={() => void setCampaignStatus(campaign.campaign_id, "active")}>Activate</CommandButton> : null}
+                  {["active", "scheduled"].includes(campaign.status) ? <CommandButton disabled={busy} onClick={() => void runCampaign(campaign.campaign_id, preview?.estimated_size)}>Run now</CommandButton> : null}
+                </div>
+              </article>
+            );
+          })}
+          {snapshot.campaigns.campaigns.length === 0 ? <EmptyState>No campaigns yet.</EmptyState> : null}
+        </div>
+      </Section>
     </>
   );
 }
@@ -1545,6 +1683,7 @@ export function App() {
           {view === "members" ? <Members members={snapshot.members} unit={snapshot.program.earning.rate.unit} /> : null}
           {view === "ledger" ? <Ledger snapshot={snapshot} /> : null}
           {view === "program" ? <Program snapshot={snapshot} onChanged={refresh} /> : null}
+          {view === "marketing" ? <Marketing snapshot={snapshot} onChanged={refresh} /> : null}
           {view === "developer" ? <Developer snapshot={snapshot} onChanged={refresh} /> : null}
         </main>
       </div>

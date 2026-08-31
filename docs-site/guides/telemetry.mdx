@@ -1,0 +1,22 @@
+---
+title: "Privacy and optional telemetry"
+description: "Disabled-by-default self-host telemetry and cookieless landing analytics"
+icon: "shield-check"
+---
+
+The self-hosted runtime sends no telemetry by default. Enabling it requires
+both `LIP_TELEMETRY_ENABLED=true` and an explicit HTTPS
+`LIP_TELEMETRY_ENDPOINT`.
+
+At most once per 24 hours, it sends a pseudonymous installation UUID, timestamp,
+Node major, storage driver, and a fixed feature list. It sends no customer,
+member, order, location, host, URL, credential, request, error, or free-form
+field. Delivery times out after three seconds and never retries or redirects.
+
+The landing page also has an empty PostHog project token by default. If a public
+token is configured, it forces cookieless mode, creates no person profiles,
+disables autocapture, page views, replay, exceptions, performance, heatmaps,
+surveys, and remote flags, and strips all properties except an allowlisted
+walkthrough step.
+
+See the [exact payload and configuration](https://github.com/craveup/opensource-loyalty/blob/main/docs/telemetry.md).
