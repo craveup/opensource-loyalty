@@ -8,7 +8,8 @@
 # There is no disk. Every durable byte -- programs, members, balances, ledgers,
 # webhook state, access-control key hashes, credential handoffs -- is a row in
 # that environment's Neon database, so a container is disposable and the service
-# runs on Render Free. `LIP_CLOUD_PUBLIC_BASE_URL` is what selects this mode;
+# can run on Render Free after development certification. `LIP_CLOUD_PUBLIC_BASE_URL`
+# is what selects this mode;
 # the file-backed provisioner (`LIP_CLOUD_PROGRAM_DIR`) is for standalone Docker
 # and local development only, and setting both is refused at boot.
 #

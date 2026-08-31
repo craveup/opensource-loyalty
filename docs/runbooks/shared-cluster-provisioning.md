@@ -43,14 +43,13 @@ scope inside the shared database — never a per-brand deployment.
     section 4½.
   - Per-environment **merchant keys** (`lip_sk_...`) — owner-role,
     tenant-scoped access-control keys bootstrapped at provision time
-    (audited, only valid on their own tenant's runtime; the runtime stores
-    only a hash, but the control-plane host keeps a **plaintext copy in the
-    environment's credentials file** — see the constraints table).
-    Retrieved and rotated through the control plane (step 4c); the replaced
-    key stays valid for a bounded overlap window (default 24 h) so BFFs swap
-    without downtime. Each runtime also holds a root key in its credentials
-    file — deprecated, never handed out, kept only for backward
-    compatibility with pre-v2 consumers.
+    (audited, only valid on their own tenant's runtime, and stored there only
+    as a hash). The control plane returns the plaintext once through an
+    encrypted, expiring credential handoff; there is no credential file or
+    durable readable copy. Retrieved and rotated through the control plane
+    (step 4c); the replaced key stays valid for a bounded overlap window
+    (default 24 h) so BFFs swap without downtime. Each restored runtime gets
+    an in-memory root key that is never persisted, logged, or returned.
 
 ## 1. Create the environment's independent Neon Postgres
 
@@ -67,8 +66,10 @@ scope inside the shared database — never a per-brand deployment.
    autosuspend until continuous internal testing requires otherwise.
 4. Project → **Settings → Storage**: set history retention to at least 7
    days — this is your point-in-time-recovery window.
-5. Set both database variables on only the matching Render service. Keep connection strings in
-   Render secrets; release evidence records project/branch/role identifiers, never values.
+5. Set `LIP_CLOUD_DATABASE_URL` only on the matching Render service. Keep connection strings in
+   Render secrets; release evidence records project/branch/role identifiers, never values. The
+   managed shared-database topology leaves `LIP_CLOUD_DATA_PLANE_DATABASE_URL` absent so it defaults
+   to the same URL.
 
 ## 2. Deploy the service from the blueprint
 
@@ -78,8 +79,12 @@ scope inside the shared database — never a per-brand deployment.
    `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` in Oregon,
    all intentionally manual.
 2. Fill every required `sync: false` value independently on each service when prompted:
-   - `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL`: use the same direct,
-     unpooled URL from that service's matching Neon project. Never reuse a URL across environments.
+   - `LIP_CLOUD_DATABASE_URL`: use the direct, unpooled URL from that service's matching Neon
+     project. Never reuse a URL across environments. Leave
+     `LIP_CLOUD_DATA_PLANE_DATABASE_URL` absent for the shared managed deployment; it defaults to
+     the same URL and exists only for a self-hosted split-database topology.
+   - `LIP_CLOUD_PUBLIC_BASE_URL`: the service's exact public HTTPS origin. It selects the diskless
+     managed runtime and becomes the prefix of every tenant runtime URL.
    - `LIP_CLOUD_API_KEY`: at least 16 random characters (for example,
      `openssl rand -base64 24`). This is only the **bootstrap** credential; after section 4½ it is
      disabled and can be deleted. Store it in the team password manager until then.
@@ -100,10 +105,12 @@ scope inside the shared database — never a per-brand deployment.
 
    Do not partially populate a group. If a capability is enabled, satisfy the whole group's startup
    contract before applying the Blueprint.
-4. Apply. The deploy runs `preDeployCommand: node apps/cloud/dist/migrate-cli.js`
-   before going live; confirm the deploy log contains
-   `{"event":"shared_cluster_migrations_applied","shared_database":true,...}`.
-   The command is advisory-locked and idempotent — reruns are no-ops.
+
+4. Apply. Migrations run at startup under advisory locks on every plan. Paid services repeat them in
+   `preDeployCommand: node apps/cloud/dist/migrate-cli.js`; when that step exists, confirm the log
+   contains `{"event":"shared_cluster_migrations_applied","shared_database":true,...}`. On Render
+   Free there is no pre-deploy step, so require `/ready` to report `migrations_applied: true` after
+   startup. Both paths are advisory-locked and idempotent.
 5. Verify health:
 
    ```bash
@@ -167,7 +174,7 @@ audit annotation. The legacy `LIP_CLOUD_API_KEY` is rejected by this command
 operator first with `npm run cloud:operator`.)
 
 Prints `{"event":"tenant_provisioned", "tenant_id":"tenant_...", "status":"ready",
-"api_url":"http://<environment-service>:13210...", ...}` and exits non-zero on
+"api_url":"https://<service>.onrender.com/runtime/v1/environments/<environment_id>", ...}` and exits non-zero on
 failure or timeout. Re-running with the same slugs is idempotent (reuses the
 org/project/environment); reusing an environment slug with a different
 `--program-id` is rejected. `--region` must be listed in the service's
@@ -192,8 +199,8 @@ curl "${H[@]}" $BASE/cloud/v1/projects/<project_id>/environments
 ```
 
 The environment response carries the generated `tenant_id` and, once ready,
-`api_url`/`admin_url` on the private-network host
-(`<environment-service>:<port>`).
+path-scoped `api_url`/`admin_url` values under the service's exact public HTTPS
+base URL. There is no per-tenant port.
 
 ### 4c. Retrieve or rotate the merchant API key (via the control plane)
 
@@ -209,21 +216,22 @@ LIP_CLOUD_OPERATOR_KEY=lip_ok_... npm run cloud:provision -- rotate-credentials 
 ```
 
 (Equivalent raw call: `POST $BASE/cloud/v1/environments/<environment_id>/credentials/rotate`
-with the same auth headers as 4b; optional JSON body
+with the same auth headers as 4b plus a caller-owned durable `Idempotency-Key`; optional JSON body
 `{"overlap_seconds": <0..604800>}`. Requires a platform-admin operator, an
 org-scoped operator covering that org, or an org owner/admin; audited
 cloud-side as `cloud.environment.credentials_rotated` (metadata carries the
 verified `operator_id`) and tenant-side as actor `cloud:<verified subject>`.)
 
-Copy `merchant_api_key` into the consuming BFF's secrets (`LIP_URL` +
-`LIP_API_KEY` on the Express API's Render service) and into the password
-manager. **Every run expires the previously issued merchant key** after the
+The Crave provisioning worker stores the returned URL and credential encrypted
+against that organization. A standalone consumer stores them in its approved
+secret manager; never use one global credential for multiple organizations.
+**Every new rotation expires the previously issued merchant key** after the
 overlap window (default 24 h; the response's `replaced_api_key_expires_at`
 tells you exactly when) — so treat re-runs as real rotations, not free
 retrievals, and swap the BFF before the window closes. For an emergency
 cutover (leaked key), pass `--overlap-seconds 0` (or `{"overlap_seconds": 0}`
-on the raw call): the replaced key dies immediately. Never hand out the root
-`api_key` from the credentials file — it is deprecated and no API returns it.
+on the raw call): the replaced key dies immediately. The runtime root key is
+in-memory only and no API returns it.
 
 Tenants can also self-serve rotation of any key they created on their own
 runtime: `POST /admin/api/v1/access/api-keys/rotate` with
@@ -255,13 +263,12 @@ nothing is ever delivered. Two ways to wire the first one:
   update rather than duplicate. The output's `credentials.merchant_api_key`
   is the credential for the BFF — store it as in 4c. Note the minting side
   effect: any previously issued merchant key enters its overlap window. Run
-  it from a machine that can reach the tenant runtime (private network, like
-  4e).
+  it from an approved operator environment that can reach the managed service.
 
 - **Manually via the runtime admin API** (with the merchant key from 4c):
 
   ```bash
-  curl -X PUT http://<environment-service>:<port>/admin/api/v1/webhooks/subscription \
+  curl -X PUT "$LIP_URL/admin/api/v1/webhooks/subscription" \
     -H "Authorization: Bearer $LIP_API_KEY" -H "Content-Type: application/json" \
     -d '{"url":"https://bff.example.com/hooks/loyalty","secret":"<>=16 chars>"}'
   ```
@@ -271,13 +278,13 @@ Confirm with `GET /admin/api/v1/webhooks/health` (`subscription_count` >= 1).
 ### 4e. Verify before routing traffic
 
 ```bash
-npm run lip -- doctor http://<environment-service>:<port> --api-key "$LIP_API_KEY"
-npm run lip -- cloud-verify http://<environment-service>:<port> \
+npm run lip -- doctor "$LIP_URL" --api-key "$LIP_API_KEY"
+npm run lip -- cloud-verify "$LIP_URL" \
   --api-key "$LIP_API_KEY" --program-id demo-rewards
 ```
 
-(Run from a machine on the private network, e.g. a Render job or the BFF
-host; the tenant ports are not public.)
+`LIP_URL` is the environment's returned path-scoped public HTTPS URL. Run this
+from an approved operator environment and never print the key.
 
 ### 4f. Migrating an existing brand's state in
 
@@ -307,6 +314,7 @@ clusters as a migration):
    The printed `secret` (`lip_ok_...`) is shown exactly once — store it in
    the password manager. A second bootstrap attempt with the shared key
    returns `403 operator_bootstrap_exhausted`.
+
 2. **Create one operator per human/service** with the platform-admin key.
    Give automation the narrowest scope that works, e.g. the
    Business-Manager provisioning worker:
@@ -345,35 +353,26 @@ clusters as a migration):
 
 - **Neon:** restore = create a branch at a timestamp (**Restore** tab or
   `neon branches create --parent-timestamp ...`) inside the history-retention
-  window. While writes remain frozen, run `npm run cloud:restore-verify` with
-  the direct source and restored-branch URLs. Repoint both service database
-  variables only after schema versions, row counts, and content fingerprints match.
+  window. While writes remain frozen, first run `npm run cloud:restore-source-stability` with
+  `LIP_BACKUP_SOURCE_DATABASE_URL` set to the direct source URL. Create the branch only after that
+  two-sample check passes. Then run `npm run cloud:restore-verify` with the direct source and
+  restored-branch URLs. Repoint both service database variables only after schema versions, row
+  counts, and content fingerprints match.
 - **There is no service disk on a managed deployment.** Programs, credentials
   and every other durable byte are rows in the same Neon database, so the
   branch/PITR path above is the whole story. Preserve
   `LIP_CLOUD_CREDENTIAL_KEY` across a restore: handoffs encrypted under a
   retired key answer `410 credential_handoff_expired` and must be reissued.
-  Keep merchant keys in the password manager as before.
-- **Lost or corrupted credentials file — the real recovery path:**
-  1. If the runtime is still running (file lost while the service stayed
-     up), `rotate-credentials` (4c) recovers on its own: the control plane
-     rotates the tenant's live `cloud-merchant` lineage (or mints a fresh
-     owner key if none survives) and rewrites the file.
-  2. If the service restarted without the file, `restore()` skips that
-     environment (there is nothing to restore from) — the runtime is down,
-     not just the credential. Re-run provisioning for the same slugs (4a is
-     idempotent); the provisioner reuses the persisted port and tenant
-     database, re-adopts the existing merchant lineage from the tenant's
-     access state instead of minting a parallel key, and writes a fresh
-     credentials file. Then run `rotate-credentials` (4c) to hand the new
-     merchant key to the BFF.
-  3. If the data plane itself is unrecoverable, fall back to the
-     re-provision (4a) or external-host attach path
-     (`POST /cloud/v1/environments/{id}/attach`, `docs/cloud.md`) and
-     migrate state per 4f.
-  A weak, tampered, or unreadable credentials file no longer aborts startup
-  for the other tenants: `restore()` logs
-  `cloud_environment_restore_failed` for that environment and continues.
+  Keep manually managed consumer keys in the approved secret manager; Crave-managed organization
+  credentials remain encrypted in Crave's organization-scoped integration storage.
+- **Runtime recovery:** a new process reads every ready environment from
+  Postgres and reconstructs its path-scoped runtime. Programs, members,
+  balances, access-key hashes, webhook state, and URLs survive without a disk.
+  If one tenant cannot restore, startup records
+  `cloud_environment_restore_failed` for that environment and continues with
+  the others. Re-run idempotent provisioning for the same slugs only when the
+  control-plane row itself is not ready; rotate credentials through 4c rather
+  than trying to recover a plaintext secret.
 - **Restore drill:** after any restore, run step 4e verification plus a
   known-member balance spot check (`cloud-verify --expect-member ...`)
   before unfreezing.
@@ -389,7 +388,7 @@ a stable `503 {"code":"write_frozen"}` + `Retry-After` while reads and
 - **Per-tenant, at runtime (the path that works on the shared cluster):**
 
   ```bash
-  curl -X POST http://<environment-service>:<port>/admin/api/v1/maintenance \
+  curl -X POST "$LIP_URL/admin/api/v1/maintenance" \
     -H "Authorization: Bearer $LIP_API_KEY" -H "Content-Type: application/json" \
     -d '{"write_frozen": true}'   # false to unfreeze
   ```
@@ -404,14 +403,15 @@ a stable `503 {"code":"write_frozen"}` + `Retry-After` while reads and
 
 Monitor per layer:
 
-| Signal | Where | Alert on |
-| --- | --- | --- |
-| Control-plane liveness | `GET /health` on the public URL (Render health check uses it) | non-200; Render "server failed health check" notification |
-| Tenant runtime liveness + freeze state | `GET http://<environment-service>:<port>/health` per tenant (reports `status`, `write_frozen`) | non-200, or `write_frozen: true` outside a planned window |
-| Webhook delivery health | `GET /admin/api/v1/webhooks/health` per tenant (merchant key; returns delivery counts, `success_rate`, `healthy`) | `healthy: false` or falling `success_rate` |
-| Request metrics | `GET /metrics` per tenant runtime (authenticated, Prometheus text) | error-rate/latency regressions |
-| Provisioning | service logs: `cloud_environment_provisioned` / `cloud_environment_restored` / `cloud_environment_restore_failed` events; environments stuck `pending`/`failed` in `/cloud/v1/projects/{id}/environments` | any `cloud_environment_restore_failed` (that tenant is down until fixed); job `attempts >= 5` (worker gives up) |
-| Database | Render/Neon dashboard: storage, connections, CPU | > 80% storage, connection saturation |
+| Signal                                 | Where                                                                                                                                                                                                     | Alert on                                                                                                        |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Control-plane readiness                | `GET /ready` on the public URL (Render health check uses it)                                                                                                                                              | non-200; Render "server failed health check" notification                                                       |
+| Control-plane identity                 | `GET /health` on the public URL                                                                                                                                                                           | wrong service, environment, release, instance policy, or database fingerprint                                   |
+| Tenant runtime liveness + freeze state | `GET $LIP_URL/health` per tenant (reports `status`, `write_frozen`)                                                                                                                                       | non-200, or `write_frozen: true` outside a planned window                                                       |
+| Webhook delivery health                | `GET /admin/api/v1/webhooks/health` per tenant (merchant key; returns delivery counts, `success_rate`, `healthy`)                                                                                         | `healthy: false` or falling `success_rate`                                                                      |
+| Request metrics                        | `GET /metrics` per tenant runtime (authenticated, Prometheus text)                                                                                                                                        | error-rate/latency regressions                                                                                  |
+| Provisioning                           | service logs: `cloud_environment_provisioned` / `cloud_environment_restored` / `cloud_environment_restore_failed` events; environments stuck `pending`/`failed` in `/cloud/v1/projects/{id}/environments` | any `cloud_environment_restore_failed` (that tenant is down until fixed); job `attempts >= 5` (worker gives up) |
+| Database                               | Render/Neon dashboard: storage, connections, CPU                                                                                                                                                          | > 80% storage, connection saturation                                                                            |
 
 Render dashboard → service → **Settings → Notifications**: enable deploy
 failure + health-check alerts to the engineering Slack. Stream logs (Render
@@ -419,30 +419,31 @@ failure + health-check alerts to the engineering Slack. Stream logs (Render
 
 ## 7. Constraints and follow-ups
 
-| Constraint | Tracking |
-| --- | --- |
-| One platform instance per tenant → `numInstances: 1`, no horizontal scaling of the shared host | multi-instance coordination |
-| **Per-operator control-plane auth (shipped):** management calls authenticate as individual operators (`lip_ok_` keys or OIDC subjects mapped to operator records); the subject header no longer grants identity. The shared `LIP_CLOUD_API_KEY` is bootstrap-only and is retired the moment the first operator exists — every other route returns `401 shared_key_retired`, with or without the `LIP_CLOUD_SHARED_KEY_DISABLED=true` flag (the flag additionally refuses the bootstrap route itself). Run the section 4½ cutover to set it | done; residual action = section 4½ cutover per cluster |
-| Tenant runtimes are private-network only (one public port per Render service) | follow-up: per-tenant public hostnames or gateway routing |
-| Credentials files retain tenant access material on the environment disk | encrypted v3 files (`0600`, atomic writes); preserve the environment encryption key through restore and rotation |
+| Constraint                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Tracking                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| One shared service instance → `numInstances: 1`, no horizontal scaling of the managed host                                                                                                                                                                                                                                                                                                                                                                                                                                                 | multi-instance coordination                                                                      |
+| **Per-operator control-plane auth (shipped):** management calls authenticate as individual operators (`lip_ok_` keys or OIDC subjects mapped to operator records); the subject header no longer grants identity. The shared `LIP_CLOUD_API_KEY` is bootstrap-only and is retired the moment the first operator exists — every other route returns `401 shared_key_retired`, with or without the `LIP_CLOUD_SHARED_KEY_DISABLED=true` flag (the flag additionally refuses the bootstrap route itself). Run the section 4½ cutover to set it | done; residual action = section 4½ cutover per cluster                                           |
+| Tenant runtimes share one public HTTPS service and are isolated by path, credential, and Postgres tenant scope                                                                                                                                                                                                                                                                                                                                                                                                                             | certify gateway rate limits, tenant refusal, and webhook behavior before external sandbox access |
 
 ## Owner actions checklist (dashboard-only steps)
 
-1. Render: **New → Blueprint** on this repo/branch; approve the plan.
-2. Render: set `LIP_CLOUD_API_KEY` (bootstrap-only) and
+1. Render: **New → Blueprint** on this repo/branch; approve the plan only when creating the services.
+   For existing services, edit them in place; keep all six Crave API and Loyalty services in Oregon.
+2. Render: set `LIP_CLOUD_API_KEY` (bootstrap-only), `LIP_CLOUD_PUBLIC_BASE_URL`, and
    `LIP_CLOUD_ALLOWED_ORIGINS` when prompted; save the key to the password
    manager until the section 4½ cutover retires it.
-2½. Run the section 4½ operator cutover: bootstrap the platform-admin
+   2½. Run the section 4½ operator cutover: bootstrap the platform-admin
    operator, create per-human/service operators, swap callers to
    `LIP_CLOUD_OPERATOR_KEY`, then set `LIP_CLOUD_SHARED_KEY_DISABLED=true`.
 3. Create independent development, sandbox, and production Neon projects/roles in AWS US West 2
    (Oregon), disable sandbox/production autosuspend, set history retention, and paste each direct
    URL only into its matching service.
 4. Render: enable failure/health notifications; optionally add a log stream.
-5. Seed `/data/programs/<program_id>.json` via `render ssh` per brand.
+5. Per onboarded brand: provision the environment and publish its real program; no filesystem seed
+   or disk is used.
 6. Per onboarded brand: run `rotate-credentials` (step 4c) to mint the
-   merchant key, set `LIP_URL` + `LIP_API_KEY` on the BFF service, store the
-   key in the password manager.
+   merchant key, then let the Crave provisioning worker store its organization-scoped URL and
+   credential encrypted. Manual consumers use their approved secret manager.
 7. Per onboarded brand: create the first webhook subscription (step 4d) —
    without it the tenant delivers no webhooks.
 8. Follow `managed-environment-release.md` to record exact deploy, migration, health/metrics,
