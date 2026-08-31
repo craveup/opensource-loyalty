@@ -10,6 +10,7 @@ interface BlueprintVariable {
 
 interface BlueprintService {
   autoDeploy?: boolean;
+  branch?: string;
   disk?: {
     mountPath?: string;
     name?: string;
@@ -34,6 +35,18 @@ const expectedServices = new Map([
   ["development", "crave-loyalty-development"],
   ["sandbox", "crave-loyalty-sandbox"],
   ["production", "crave-loyalty-production"],
+]);
+
+/**
+ * Each environment tracks its own branch, and promotion is a merge along
+ * dev -> sandbox -> main. That is what keeps the deployed commit identical
+ * across environments; a direct push to sandbox or main would break the
+ * release evidence's exact-commit claim, so those branches are protected.
+ */
+const expectedBranches = new Map([
+  ["development", "dev"],
+  ["sandbox", "sandbox"],
+  ["production", "main"],
 ]);
 
 const secretVariables = [
@@ -87,6 +100,7 @@ describe("managed Render blueprint", () => {
 
       expect(service).toMatchObject({
         autoDeploy: false,
+        branch: expectedBranches.get(environment),
         healthCheckPath: "/health",
         name,
         numInstances: 1,
