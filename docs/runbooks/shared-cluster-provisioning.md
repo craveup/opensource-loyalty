@@ -49,7 +49,7 @@ scope inside the shared database — never a per-brand deployment.
 
 ## 1. Create the environment's independent Neon Postgres
 
-1. Create the matching PostgreSQL 17 Neon project in AWS US East 1 (N. Virginia):
+1. Create the matching PostgreSQL 18 Neon project in AWS US West 2 (Oregon):
    `crave-loyalty-development`, `crave-loyalty-sandbox`, or `crave-loyalty-production`. Create
    database `loyalty` and an environment-specific role. Never reuse another LIP environment or any
    Crave platform project/database/role.
@@ -70,7 +70,7 @@ scope inside the shared database — never a per-brand deployment.
 1. Render dashboard → **New → Blueprint** → select this repo and exact reviewed branch/commit. Set
    **Blueprint Auto Sync to No** before linking or applying it; `autoDeploy: false` controls service
    deploys but does not disable Blueprint Auto Sync. The blueprint creates
-   `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` in Virginia,
+   `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` in Oregon,
    all intentionally manual.
 2. Fill every required `sync: false` value independently on each service when prompted:
    - `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL`: use the same direct,
@@ -143,7 +143,7 @@ LIP_CLOUD_OPERATOR_KEY=lip_ok_... npm run cloud:provision -- \
   --org-slug demo-restaurants --org-name "Demo Restaurants" \
   --project-slug loyalty --project-name "Loyalty" \
   --env-slug production --env-name "Production" \
-  --kind production --region render-virginia \
+  --kind production --region render-oregon \
   --program-id demo-rewards
 ```
 
@@ -173,7 +173,7 @@ curl "${H[@]}" -X POST $BASE/cloud/v1/organizations/<organization_id>/projects \
   -d '{"name":"Loyalty","slug":"loyalty"}'
 curl "${H[@]}" -X POST $BASE/cloud/v1/projects/<project_id>/environments \
   -d '{"name":"Production","slug":"production","kind":"production",
-       "region":"render-virginia","program_id":"demo-rewards"}'
+       "region":"render-oregon","program_id":"demo-rewards"}'
 # poll until status == "ready" (worker polls every 5s):
 curl "${H[@]}" $BASE/cloud/v1/projects/<project_id>/environments
 ```
@@ -420,8 +420,8 @@ failure + health-check alerts to the engineering Slack. Stream logs (Render
 2½. Run the section 4½ operator cutover: bootstrap the platform-admin
    operator, create per-human/service operators, swap callers to
    `LIP_CLOUD_OPERATOR_KEY`, then set `LIP_CLOUD_SHARED_KEY_DISABLED=true`.
-3. Create independent development, sandbox, and production Neon projects/roles in AWS US East 1
-   (N. Virginia), disable sandbox/production autosuspend, set history retention, and paste each direct
+3. Create independent development, sandbox, and production Neon projects/roles in AWS US West 2
+   (Oregon), disable sandbox/production autosuspend, set history retention, and paste each direct
    URL only into its matching service.
 4. Render: enable failure/health notifications; optionally add a log stream.
 5. Seed `/data/programs/<program_id>.json` via `render ssh` per brand.

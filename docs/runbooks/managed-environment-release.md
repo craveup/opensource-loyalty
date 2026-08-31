@@ -18,7 +18,7 @@ As of 2026-08-28, activation remains blocked until release evidence records all 
 - All three environments have their own direct Neon URLs and independently generated API and encryption
   keys in Render. Credential values must never be copied into this repository or release evidence.
 - `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` exist on paid
-  Starter plans in Virginia with one independent 1 GB disk each.
+  Starter plans in Oregon with one independent 1 GB disk each.
 - Development verification passes before sandbox receives a candidate. Sandbox deployment, restore
   rehearsal, rollback rehearsal, and the required lifecycle smoke tests below pass before production
   promotion.
@@ -29,7 +29,11 @@ does not by itself prove end-to-end order settlement.
 ## Fixed topology and safety rules
 
 - `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` are separate
-  Render services in Virginia.
+  Render services in Oregon.
+- Oregon is a correctness constraint, not a latency preference. Tenant runtimes are private-network
+  only, and Render's private network reaches a service only from the same region, so the consuming
+  Crave API must share it. `cravejs-apis-production` and `cravejs-apis-dev` run in Oregon. Each
+  environment's Neon project lives in `aws-us-west-2` for the same reason.
 - Each service has its own disk, bootstrap/operator credentials, encryption key, and independently
   managed Neon project/database/role. No environment uses a Crave platform database.
 - Both `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL` use the environment's direct
@@ -48,7 +52,7 @@ does not by itself prove end-to-end order settlement.
 ## Candidate promotion
 
 1. Record the exact Git commit and immutable image digest from the candidate build.
-2. Validate `render.yaml`; confirm exactly three services, `autoDeploy: false`, `region: virginia`,
+2. Validate `render.yaml`; confirm exactly three services, `autoDeploy: false`, `region: oregon`,
    and `numInstances: 1` for all three.
 3. Deploy development first. The pre-deploy log must contain
    `shared_cluster_migrations_applied`; a pooled URL must stop here with a safe direct-endpoint error.
