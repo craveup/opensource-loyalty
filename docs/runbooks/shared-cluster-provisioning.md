@@ -25,8 +25,13 @@ scope inside the shared database — never a per-brand deployment.
 - **One service instance — a hard constraint.** `docs/postgres.md`: run at
   most one platform instance per tenant until multi-instance coordination lands (Admin
   extension stores cache per-process revisions; webhook journals assume a
-  single dispatcher). `render.yaml` pins `numInstances: 1` and the attached
-  disk prevents scale-out. Do not raise the instance count.
+  single dispatcher). The managed runtime adds two more single-process
+  assumptions: schedulers run inside restored runtimes, and credential issuance
+  is de-duplicated by an in-process single-flight whose absence would let
+  concurrent retries each mint a live merchant key. `render.yaml` pins
+  `numInstances: 1`. There is no longer a disk to prevent scale-out, so the
+  constraint rests on this line and on the blueprint — do not raise the
+  instance count before distributed leasing lands.
 - **Auth model.** Two kinds of keys are in play:
   - Per-operator **control-plane keys** (`lip_ok_...`) — every human or
     service gets its own operator record (`platform-admin`, or `org-scoped`
@@ -112,10 +117,18 @@ scope inside the shared database — never a per-brand deployment.
 
 ## 3. Seed program definitions
 
-Provisioning a tenant fails unless `<program_id>.json` exists in
-`LIP_CLOUD_PROGRAM_DIR` (`/data/programs`). Per brand, author the program
-JSON (see `deploy/acme-sandbox/acme-program.json` for a template) and place
-it on the disk:
+> **Managed deployments: nothing to seed.** The Crave-hosted services run the
+> diskless runtime, which creates a valid, inert bootstrap program in Postgres
+> at provisioning time — USD, zero earn rate, no rewards, no members, no seeded
+> activity — and the merchant publishes their real program through the Admin
+> API. See [diskless-managed-runtime.md](./diskless-managed-runtime.md). Skip
+> to step 4.
+
+The instructions below apply only to a **standalone** deployment that has opted
+into the file-backed provisioner with `LIP_CLOUD_PROGRAM_DIR`. There,
+provisioning a tenant fails unless `<program_id>.json` exists in that directory.
+Per brand, author the program JSON (see `deploy/acme-sandbox/acme-program.json`
+for a template) and place it on the disk:
 
 ```bash
 render ssh <crave-loyalty-environment-service-id>
@@ -335,10 +348,12 @@ clusters as a migration):
   window. While writes remain frozen, run `npm run cloud:restore-verify` with
   the direct source and restored-branch URLs. Repoint both service database
   variables only after schema versions, row counts, and content fingerprints match.
-- **The service disk is state too.** `/data` holds program JSONs and the
-  per-environment credentials files. Render disks take daily snapshots;
-  restore from the disk's **Snapshots** tab. Additionally keep programs in
-  git and merchant keys in the password manager.
+- **There is no service disk on a managed deployment.** Programs, credentials
+  and every other durable byte are rows in the same Neon database, so the
+  branch/PITR path above is the whole story. Preserve
+  `LIP_CLOUD_CREDENTIAL_KEY` across a restore: handoffs encrypted under a
+  retired key answer `410 credential_handoff_expired` and must be reissued.
+  Keep merchant keys in the password manager as before.
 - **Lost or corrupted credentials file — the real recovery path:**
   1. If the runtime is still running (file lost while the service stayed
      up), `rotate-credentials` (4c) recovers on its own: the control plane

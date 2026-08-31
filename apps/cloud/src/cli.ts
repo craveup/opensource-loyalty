@@ -5,6 +5,8 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { OidcAuthenticator } from "./auth.js";
 import { StripeBillingProvider } from "./billing.js";
+import type { Pool } from "pg";
+import { PostgresMigrator, createPostgresPool } from "@loyalty-interchange/storage-postgres";
 import { LipClient } from "@loyalty-interchange/sdk";
 import { PostgresCustomerRepository } from "./customer-postgres-repository.js";
 import { OidcCustomerIdentityProvider } from "./customer-provider.js";
@@ -14,6 +16,9 @@ import {
   managedDatabaseConfiguration
 } from "./database-configuration.js";
 import { LocalDataPlaneProvisioner } from "./data-plane-provisioner.js";
+import { PostgresCredentialOperationStore } from "./credential-operation-store.js";
+import { ManagedCredentialService } from "./credential-operations.js";
+import { ManagedPostgresDataPlaneManager } from "./managed-data-plane.js";
 import { RemoteEnvironmentAttacher } from "./remote-attach.js";
 import {
   CloudOperatorService,
@@ -120,10 +125,56 @@ assertOperatorManagementReachable({
 });
 
 const programDirectory = process.env["LIP_CLOUD_PROGRAM_DIR"];
+const publicBaseUrl = process.env["LIP_CLOUD_PUBLIC_BASE_URL"];
+const credentialEncryptionKey = process.env["LIP_CLOUD_CREDENTIAL_KEY"];
+
+// The two provisioning modes are mutually exclusive, and the ambiguity is
+// refused rather than resolved by precedence. A managed deployment that
+// silently fell back to the file-backed provisioner would write tenant
+// credentials to a container filesystem that does not survive a redeploy.
+if (publicBaseUrl && programDirectory) {
+  throw new Error(
+    "Set LIP_CLOUD_PUBLIC_BASE_URL for the managed diskless runtime or " +
+    "LIP_CLOUD_PROGRAM_DIR for the standalone file-backed provisioner, not both"
+  );
+}
+
+let managed: ManagedPostgresDataPlaneManager | undefined;
+let credentials: ManagedCredentialService | undefined;
+let managedPool: Pool | undefined;
+let restoredRuntimes = 0;
+if (publicBaseUrl) {
+  if (!credentialEncryptionKey) {
+    throw new Error("LIP_CLOUD_CREDENTIAL_KEY is required for managed provisioning");
+  }
+  // Every tenant runtime in this process shares one pool against one database.
+  // Per-tenant pools would exhaust Neon's connection budget long before the
+  // process ran out of anything else.
+  managedPool = createPostgresPool({ connectionString: dataPlaneConnectionString });
+  await new PostgresMigrator(managedPool).migrate();
+  managed = new ManagedPostgresDataPlaneManager({
+    connectionString: dataPlaneConnectionString,
+    publicBaseUrl,
+    pool: managedPool,
+    environmentById: (environmentId) => repository.environmentById(environmentId),
+    readyEnvironments: () => repository.readyEnvironments()
+  });
+  credentials = new ManagedCredentialService({
+    store: new PostgresCredentialOperationStore({ connectionString }),
+    issuer: managed,
+    encryptionKey: credentialEncryptionKey
+  });
+  const restored = await managed.restore();
+  restoredRuntimes = restored.length;
+  console.log(JSON.stringify({
+    event: "cloud_runtimes_restored",
+    restored: restoredRuntimes
+  }));
+}
+
 let provisioner: LocalDataPlaneProvisioner | undefined;
 let worker: CloudProvisioningWorker | undefined;
 if (programDirectory) {
-  const credentialEncryptionKey = process.env["LIP_CLOUD_CREDENTIAL_KEY"];
   if (!credentialEncryptionKey) {
     throw new Error(
       "LIP_CLOUD_CREDENTIAL_KEY is required when LIP_CLOUD_PROGRAM_DIR enables local provisioning"
@@ -171,6 +222,15 @@ if (programDirectory) {
     repository,
     provisioner,
     workerId: `local-${hostname()}-${process.pid}`
+  });
+  worker.start();
+}
+
+if (managed) {
+  worker = new CloudProvisioningWorker({
+    repository,
+    provisioner: managed,
+    workerId: `managed-${hostname()}-${process.pid}`
   });
   worker.start();
 }
@@ -252,6 +312,46 @@ const running = await startCloudServer(controlPlane, {
     dataPlane: databaseIdentityFingerprint(dataPlaneConnectionString)
   },
   healthCheck: () => repository.healthCheck(),
+  storagePolicy: {
+    instance_policy: "single",
+    storage_policy: managed ? "postgres_only" : "filesystem",
+    shared_database: managed
+      ? databaseIdentityFingerprint(connectionString) ===
+        databaseIdentityFingerprint(dataPlaneConnectionString)
+      : false,
+    disk_required: !managed
+  },
+  ...(managed
+    ? {
+        runtimeRequestHandler: (request, response) =>
+          managed!.handleRuntimeRequest(request, response),
+        readiness: async () => {
+          // Readiness is four separate claims, reported separately, because an
+          // operator diagnosing a stuck deploy needs to know which one failed.
+          let databaseReachable = true;
+          let detail: string | undefined;
+          try {
+            await repository.healthCheck();
+          } catch (error) {
+            databaseReachable = false;
+            detail = error instanceof Error ? error.message : String(error);
+          }
+          const expected = databaseReachable
+            ? (await repository.readyEnvironments()).length
+            : restoredRuntimes;
+          const running = managed!.runtimeDescriptors().length;
+          return {
+            ready: databaseReachable && Boolean(worker) && running >= expected,
+            migrations_applied: true,
+            database_reachable: databaseReachable,
+            provisioning_worker_running: Boolean(worker),
+            expected_runtimes: expected,
+            restored_runtimes: running,
+            ...(detail ? { detail } : {})
+          };
+        }
+      }
+    : {}),
   ...(process.env["LIP_CLOUD_DEPLOYMENT_ENVIRONMENT"]
     ? {
         deployment: {
@@ -263,12 +363,61 @@ const running = await startCloudServer(controlPlane, {
   ...(customers ? { customers } : {}),
   ...(sharedKeyDisabled ? { sharedKeyDisabled: true } : {}),
   ...(bootstrapSubjects.length > 0 ? { bootstrapSubjects } : {}),
-  ...(provisioner
+  ...(credentials
     ? {
-        rotateEnvironmentCredentials: (
+        rotateEnvironmentCredentials: async (
           environmentId: string,
           rotateOptions: EnvironmentCredentialRotationOptions
-        ) => provisioner!.rotateCredentials(environmentId, rotateOptions)
+        ) => credentials!.issue({
+          environmentId,
+          idempotencyKey: rotateOptions.idempotency_key ?? "",
+          operation: "rotate",
+          subject: rotateOptions.subject,
+          ...(rotateOptions.overlap_seconds === undefined
+            ? {}
+            : { overlapSeconds: rotateOptions.overlap_seconds })
+        })
+      }
+    : provisioner
+      ? {
+          rotateEnvironmentCredentials: (
+            environmentId: string,
+            rotateOptions: EnvironmentCredentialRotationOptions
+          ) => provisioner!.rotateCredentials(environmentId, rotateOptions)
+        }
+      : {}),
+  ...(managed
+    ? {
+        operateLocalEnvironment: async (environmentId, operation) => {
+          // Suspension stops the runtime; every other lifecycle operation a
+          // disk-backed deployment offered is now Neon's. Backup and restore
+          // are branch/PITR operations against the database, not file copies
+          // this process could honestly perform.
+          if (operation === "suspend") {
+            await managed!.suspend(environmentId);
+            return {};
+          }
+          if (operation === "resume") {
+            const runtime = await managed!.provision({
+              environment: (await repository.environmentById(environmentId))!,
+              job: {
+                provisioning_job_id: "resume",
+                environment_id: environmentId,
+                operation: "create",
+                status: "running",
+                attempts: 1,
+                available_at: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }
+            });
+            return { api_url: runtime.api_url, ...(runtime.admin_url ? { admin_url: runtime.admin_url } : {}) };
+          }
+          throw new Error(
+            `${operation} is a Neon backup/restore operation for a managed deployment; ` +
+            "use a database branch or point-in-time restore"
+          );
+        }
       }
     : {}),
   ...(provisioner
@@ -323,16 +472,22 @@ console.log(JSON.stringify({
   event: "cloud_control_plane_ready",
   url: running.url,
   regions,
-  local_provisioner: Boolean(provisioner)
+  managed_runtime: Boolean(managed),
+  local_provisioner: Boolean(provisioner),
+  restored_runtimes: restoredRuntimes
 }));
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     worker?.close();
-    void (provisioner?.close() ?? Promise.resolve())
+    // Runtimes close before the listener so in-flight tenant writes finish
+    // against a live pool rather than a closing one.
+    void (managed?.close() ?? Promise.resolve())
+      .then(() => provisioner?.close())
       .then(() => running.close())
       .then(() => customers?.close())
       .then(() => controlPlane.close())
+      .then(() => managedPool?.end())
       .then(() => process.exit(0));
   });
 }
