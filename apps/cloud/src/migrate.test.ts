@@ -11,7 +11,7 @@ describe("runSharedClusterMigrations input validation", () => {
 
   it("rejects non-postgres connection strings", async () => {
     await expect(runSharedClusterMigrations({ controlPlaneUrl: "mysql://nope" }))
-      .rejects.toThrow("postgres://");
+      .rejects.toThrow(/PostgreSQL/);
     await expect(runSharedClusterMigrations({
       controlPlaneUrl: "postgres://ok@localhost/db",
       dataPlaneUrl: "file:///tmp/nope"
@@ -59,5 +59,5 @@ describe.skipIf(!postgresUrl)("runSharedClusterMigrations against Postgres", () 
     } finally {
       await client.end();
     }
-  });
+  }, 90_000);
 });

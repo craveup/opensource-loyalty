@@ -13,6 +13,7 @@ import { AsyncSqliteStateStore, SqliteStateStore } from "@loyalty-interchange/st
 import {
   PostgresEngineRepository,
   PostgresJsonStateStore,
+  assertSessionLeaseCompatibleUrl,
   createPostgresPool
 } from "@loyalty-interchange/storage-postgres";
 import { createDemoProgram, seedDemoData, seedDemoLocations } from "./demo.js";
@@ -363,6 +364,7 @@ export async function createDemoPlatform(options: DemoPlatformOptions): Promise<
 export async function createPostgresProtocolPlatform(
   options: PostgresProtocolPlatformOptions
 ): Promise<PostgresProtocolPlatform> {
+  assertSessionLeaseCompatibleUrl(options.connectionString, "LIP_DATABASE_URL");
   const configuredProgram = options.program ?? createDemoProgram();
   const tenantId = options.tenantId ?? configuredProgram.program_id;
   const pool = createPostgresPool({ connectionString: options.connectionString });

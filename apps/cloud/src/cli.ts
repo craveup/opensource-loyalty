@@ -9,6 +9,10 @@ import { LipClient } from "@loyalty-interchange/sdk";
 import { PostgresCustomerRepository } from "./customer-postgres-repository.js";
 import { OidcCustomerIdentityProvider } from "./customer-provider.js";
 import { CustomerPlatform } from "./customer-service.js";
+import {
+  databaseIdentityFingerprint,
+  managedDatabaseConfiguration
+} from "./database-configuration.js";
 import { LocalDataPlaneProvisioner } from "./data-plane-provisioner.js";
 import { RemoteEnvironmentAttacher } from "./remote-attach.js";
 import {
@@ -21,12 +25,10 @@ import { CloudControlPlane } from "./service.js";
 import { startCloudServer } from "./server.js";
 import type { EnvironmentCredentialRotationOptions } from "./types.js";
 
-const connectionString =
-  process.env["LIP_CLOUD_DATABASE_URL"] ??
-  process.env["LIP_DATABASE_URL"];
-if (!connectionString) {
-  throw new Error("LIP_CLOUD_DATABASE_URL or LIP_DATABASE_URL is required");
-}
+const {
+  controlPlaneUrl: connectionString,
+  dataPlaneUrl: dataPlaneConnectionString
+} = managedDatabaseConfiguration(process.env);
 const apiKey = process.env["LIP_CLOUD_API_KEY"];
 const sharedKeyDisabled = ["true", "1"].includes(
   (process.env["LIP_CLOUD_SHARED_KEY_DISABLED"] ?? "").toLowerCase()
@@ -134,9 +136,7 @@ if (programDirectory) {
     ...(process.env["LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION"] === "true"
       ? { allowLegacyPlaintextCredentials: true }
       : {}),
-    ...(process.env["LIP_CLOUD_DATA_PLANE_DATABASE_URL"]
-      ? { connectionString: process.env["LIP_CLOUD_DATA_PLANE_DATABASE_URL"] }
-      : {}),
+    connectionString: dataPlaneConnectionString,
     ...(process.env["LIP_CLOUD_DATA_PLANE_HOST"]
       ? { host: process.env["LIP_CLOUD_DATA_PLANE_HOST"] }
       : {}),
@@ -247,6 +247,19 @@ const running = await startCloudServer(controlPlane, {
     ? { authenticator }
     : apiKey ? { apiKey } : {}),
   operators,
+  databaseFingerprints: {
+    controlPlane: databaseIdentityFingerprint(connectionString),
+    dataPlane: databaseIdentityFingerprint(dataPlaneConnectionString)
+  },
+  healthCheck: () => repository.healthCheck(),
+  ...(process.env["LIP_CLOUD_DEPLOYMENT_ENVIRONMENT"]
+    ? {
+        deployment: {
+          environment: process.env["LIP_CLOUD_DEPLOYMENT_ENVIRONMENT"],
+          release: process.env["RENDER_GIT_COMMIT"] ?? "unknown"
+        }
+      }
+    : {}),
   ...(customers ? { customers } : {}),
   ...(sharedKeyDisabled ? { sharedKeyDisabled: true } : {}),
   ...(bootstrapSubjects.length > 0 ? { bootstrapSubjects } : {}),

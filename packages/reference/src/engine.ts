@@ -76,6 +76,11 @@ export interface ReferencePointLotConsumption {
   amount: number;
 }
 
+export interface MemberErasureResult {
+  erased: boolean;
+  member: Member;
+}
+
 interface AccrualRecord {
   entryId: string;
   entryIds?: string[];
@@ -237,6 +242,28 @@ function identityKey(programId: string, identity: IdentityReference): string {
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+function scrubCachedMemberSnapshot(value: unknown, member: Member): unknown {
+  if (Array.isArray(value)) {
+    return value.map((nested) => scrubCachedMemberSnapshot(nested, member));
+  }
+  if (!value || typeof value !== "object") return value;
+  const object = value as Record<string, unknown>;
+  if (
+    object["member_id"] === member.member_id &&
+    object["program_id"] === member.program_id &&
+    typeof object["joined_at"] === "string" &&
+    Array.isArray(object["identities"])
+  ) {
+    return clone(member);
+  }
+  return Object.fromEntries(
+    Object.entries(object).map(([key, nested]) => [
+      key,
+      scrubCachedMemberSnapshot(nested, member)
+    ])
+  );
 }
 
 export function programDefinitionFingerprint(program: ProgramDefinition): string {
@@ -447,6 +474,49 @@ export class LoyaltyEngine {
       member.status = "closed";
     }
     return this.memberSnapshot(member);
+  }
+
+  public inspectMemberErasure(memberId: string): MemberErasureResult {
+    const member = this.members.get(memberId);
+    if (!member) {
+      throw new EngineError("member_not_found", `Member ${memberId} was not found`, 404);
+    }
+    const snapshot = this.memberSnapshot(member);
+    return {
+      erased:
+        snapshot.status === "closed" &&
+        snapshot.attributes === undefined &&
+        snapshot.identities.length === 1 &&
+        snapshot.identities[0]?.type === "loyalty_id" &&
+        snapshot.identities[0].value === memberId &&
+        snapshot.identities[0].issuer === "lip-erasure",
+      member: snapshot
+    };
+  }
+
+  /**
+   * Removes external identity and member attributes while retaining the
+   * pseudonymous member id, balances, and immutable ledger history.
+   */
+  public eraseMember(memberId: string): MemberErasureResult {
+    const member = this.members.get(memberId);
+    if (!member) {
+      throw new EngineError("member_not_found", `Member ${memberId} was not found`, 404);
+    }
+    for (const identity of member.identities) {
+      this.identityIndex.delete(identityKey(member.program_id, identity));
+    }
+    member.status = "closed";
+    member.identities = [{
+      issuer: "lip-erasure",
+      type: "loyalty_id",
+      value: member.member_id
+    }];
+    delete member.attributes;
+    for (const record of this.idempotency.values()) {
+      record.response = scrubCachedMemberSnapshot(record.response, member);
+    }
+    return this.inspectMemberErasure(memberId);
   }
 
   public setMemberMembership(memberId: string, membership?: ReferenceMembership): Member {

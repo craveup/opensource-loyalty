@@ -8,7 +8,7 @@ import {
   exportJWK,
   generateKeyPair
 } from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDemoPlatform, startReferenceServer } from "@loyalty-interchange/server";
 import { OidcAuthenticator } from "./auth.js";
 import { MemoryCloudRepository } from "./memory-repository.js";
@@ -336,8 +336,11 @@ describe("Cloud control plane", () => {
       now: () => new Date(fixedNow)
     });
     const { authenticator, tokenFor } = await oidcHarness();
+    const healthCheck = vi.fn(async () => undefined);
     const running = await startCloudServer(cloud, {
       authenticator,
+      deployment: { environment: "sandbox", release: "candidate-commit" },
+      healthCheck,
       port: 0
     });
     const headers = {
@@ -345,8 +348,26 @@ describe("Cloud control plane", () => {
       "content-type": "application/json"
     };
     try {
-      expect(await fetch(`${running.url}/health`).then((response) => response.status))
-        .toBe(200);
+      const health = await fetch(`${running.url}/health`);
+      expect(health.status).toBe(200);
+      expect(await health.json()).toEqual({
+        environment: "sandbox",
+        instance_policy: "single",
+        release: "candidate-commit",
+        service: "lip-cloud-control-plane",
+        status: "ok"
+      });
+      expect(healthCheck).toHaveBeenCalledOnce();
+      // Metrics series name tenants and environments, so an unauthenticated
+      // scrape of a public URL would disclose the tenant topology.
+      const anonymousMetrics = await fetch(`${running.url}/metrics`);
+      expect(anonymousMetrics.status).toBe(401);
+      const metrics = await fetch(`${running.url}/metrics`, {
+        headers: { authorization: headers.authorization }
+      });
+      expect(metrics.status).toBe(200);
+      expect(metrics.headers.get("content-type")).toContain("text/plain");
+      expect(await metrics.text()).toContain("lip_cloud_http_requests_total");
       const unauthorized = await fetch(`${running.url}/cloud/v1/organizations`);
       expect(unauthorized.status).toBe(401);
       const createdResponse = await fetch(`${running.url}/cloud/v1/organizations`, {

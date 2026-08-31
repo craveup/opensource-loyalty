@@ -1,4 +1,8 @@
-import { PostgresMigrator, createPostgresPool } from "@loyalty-interchange/storage-postgres";
+import {
+  PostgresMigrator,
+  assertSessionLeaseCompatibleUrl,
+  createPostgresPool
+} from "@loyalty-interchange/storage-postgres";
 import { PostgresCloudRepository } from "./postgres-repository.js";
 
 export interface SharedClusterMigrationOptions {
@@ -22,12 +26,6 @@ export interface SharedClusterMigrationResult {
   control_plane_schema: "applied";
 }
 
-function assertPostgresUrl(value: string, label: string): void {
-  if (!/^postgres(ql)?:\/\//.test(value.trim())) {
-    throw new Error(`${label} must be a postgres:// connection string`);
-  }
-}
-
 /**
  * Applies every schema the shared LIP cluster needs, in dependency order:
  *
@@ -45,9 +43,9 @@ export async function runSharedClusterMigrations(
 ): Promise<SharedClusterMigrationResult> {
   const controlPlaneUrl = options.controlPlaneUrl.trim();
   if (!controlPlaneUrl) throw new Error("A control-plane connection string is required");
-  assertPostgresUrl(controlPlaneUrl, "controlPlaneUrl");
+  assertSessionLeaseCompatibleUrl(controlPlaneUrl, "controlPlaneUrl");
   const dataPlaneUrl = options.dataPlaneUrl?.trim() || controlPlaneUrl;
-  assertPostgresUrl(dataPlaneUrl, "dataPlaneUrl");
+  assertSessionLeaseCompatibleUrl(dataPlaneUrl, "dataPlaneUrl");
 
   const enginePool = createPostgresPool({ connectionString: dataPlaneUrl });
   try {

@@ -9,30 +9,21 @@
  *   node apps/cloud/dist/migrate-cli.js
  *
  * Environment:
- * - `LIP_CLOUD_DATABASE_URL` (falls back to `LIP_DATABASE_URL`) — required.
- * - `LIP_CLOUD_DATA_PLANE_DATABASE_URL` — optional; defaults to the
- *   control-plane database (the shared-cluster topology).
+ * - `LIP_CLOUD_DATABASE_URL` — required direct control-plane URL.
+ * - `LIP_CLOUD_DATA_PLANE_DATABASE_URL` — required direct data-plane URL.
+ *
+ * The two values may identify the same database inside one environment, but
+ * sandbox and production use independent Neon databases/roles.
  */
 
+import { managedDatabaseConfiguration } from "./database-configuration.js";
 import { runSharedClusterMigrations } from "./migrate.js";
 
-const controlPlaneUrl =
-  process.env["LIP_CLOUD_DATABASE_URL"] ??
-  process.env["LIP_DATABASE_URL"];
-if (!controlPlaneUrl) {
-  console.error(JSON.stringify({
-    event: "shared_cluster_migrations_failed",
-    message: "LIP_CLOUD_DATABASE_URL or LIP_DATABASE_URL is required"
-  }));
-  process.exit(1);
-}
-
 try {
+  const database = managedDatabaseConfiguration(process.env);
   const result = await runSharedClusterMigrations({
-    controlPlaneUrl,
-    ...(process.env["LIP_CLOUD_DATA_PLANE_DATABASE_URL"]
-      ? { dataPlaneUrl: process.env["LIP_CLOUD_DATA_PLANE_DATABASE_URL"] }
-      : {})
+    controlPlaneUrl: database.controlPlaneUrl,
+    dataPlaneUrl: database.dataPlaneUrl
   });
   console.log(JSON.stringify({ event: "shared_cluster_migrations_applied", ...result }));
 } catch (error) {

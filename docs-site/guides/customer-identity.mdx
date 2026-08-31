@@ -122,6 +122,14 @@ Provider subjects, raw JWTs, email addresses, and phone numbers do not cross the
 
 `deleteCustomer` / `markCustomerDeleted` creates a tombstone and prevents the external identity from silently creating a new loyalty account. When the resolver is constructed with `cancelMember` (or `cancelLipMember` against the reference Admin API), each linked LIP member is closed so accruals and redemptions fail while the immutable ledger remains.
 
+Application privacy workflows should use authenticated
+`POST /admin/api/v1/members/erase` and reconcile through
+`POST /admin/api/v1/members/inspect`. Erasure closes the member, removes every
+external identity and member attribute, and retains only a pseudonymous
+`loyalty_id` reference so balances and immutable ledger history remain
+auditable. The operation is idempotent, and `inspect` reports `erased: true`
+only when that exact minimized state is present.
+
 The application remains responsible for:
 
 - deleting or disabling the account at Clerk/Auth0;

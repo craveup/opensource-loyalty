@@ -96,8 +96,10 @@ Enable MCP: [`mcp.json`](../mcp.json) · Skills: [`skills/README.md`](../skills/
 - [Cloud control plane](cloud.md): organizations, projects, environments,
   plans, subscriptions, provisioning jobs, and usage metering.
 - [Shared-cluster provisioning runbook](runbooks/shared-cluster-provisioning.md):
-  deploy one Postgres-backed multi-tenant cluster from `render.yaml`, onboard
-  brands as tenants, and operate backups, write-freeze, and monitoring.
+  onboard brands as tenants inside one environment and operate write-freeze and monitoring.
+- [Managed environment release runbook](runbooks/managed-environment-release.md): deploy and
+  verify separate development/sandbox/production Render services and Neon databases, rehearse
+  restore, and roll back exact artifacts.
 - [Customer identity integration](customer-identity.md)
 - [Customer engagement platform API](platform-api.md): profiles, consent,
   events, imports, segments, campaigns, connectors, analytics, and attribution.
