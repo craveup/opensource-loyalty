@@ -264,6 +264,13 @@ export interface EnvironmentCredentialRotationOptions {
   subject: string;
   /** Replaced-key validity after rotation, 0..604800 s. Defaults to 24 h. */
   overlap_seconds?: number;
+  /**
+   * The caller's `Idempotency-Key`. A merchant secret is returned once and
+   * stored nowhere recoverable, so a retry that mints again leaves a live
+   * credential nobody holds. The managed hook uses this to replay the original
+   * answer instead; a hook without durable issuance ignores it.
+   */
+  idempotency_key?: string;
 }
 
 export interface CloudDashboard {

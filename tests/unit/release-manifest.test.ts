@@ -235,6 +235,7 @@ describe("LIP release manifest", () => {
       "apps/cloud/migrations/003_customer_identity.sql",
       "apps/cloud/migrations/004_environment_key_fingerprint.sql",
       "apps/cloud/migrations/005_operators.sql",
+      "apps/cloud/migrations/006_credential_operations.sql",
       "packages/storage-postgres/migrations/001_normalized_engine.sql",
       "packages/storage-postgres/migrations/002_tenant_isolation.sql"
     ]);

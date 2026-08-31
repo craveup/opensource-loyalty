@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   CloudEnvironment,
   CloudOrganization,
@@ -160,12 +161,13 @@ async function call<T>(
   target: TenantOnboardingTarget,
   method: "GET" | "POST",
   path: string,
-  body?: unknown
+  body?: unknown,
+  extraHeaders: Record<string, string> = {}
 ): Promise<T> {
   const base = target.cloudUrl.replace(/\/+$/, "");
   const response = await fetch(`${base}${path}`, {
     method,
-    headers: headers(target),
+    headers: { ...headers(target), ...extraHeaders },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(10_000)
   });
@@ -424,16 +426,23 @@ async function ensureWebhookSubscription(
 export async function rotateTenantCredentials(
   target: TenantOnboardingTarget,
   environmentId: string,
-  options: { overlapSeconds?: number } = {}
+  options: { overlapSeconds?: number; idempotencyKey?: string } = {}
 ): Promise<RotatedTenantCredentials> {
   assertTarget(target);
   if (!environmentId.trim()) throw new Error("An environment id is required");
+  // A caller that owns a durable identifier for this attempt should pass it, so
+  // a retry after a lost response returns the same credential instead of
+  // minting a second live key. A caller with no such identifier gets a fresh
+  // one per call, which is the honest default: it makes each call a distinct
+  // intent rather than pretending an unrelated retry is the same request.
+  const idempotencyKey = options.idempotencyKey?.trim() || randomUUID();
   return call<RotatedTenantCredentials>(
     target,
     "POST",
     `/cloud/v1/environments/${encodeURIComponent(environmentId)}/credentials/rotate`,
     options.overlapSeconds !== undefined
       ? { overlap_seconds: options.overlapSeconds }
-      : undefined
+      : undefined,
+    { "idempotency-key": idempotencyKey }
   );
 }
