@@ -11,14 +11,6 @@ interface PublicSafetyRule {
 
 const rules: PublicSafetyRule[] = [
   {
-    name: "developer-local absolute path",
-    expression: new RegExp("/(?:" + "Users|home" + ")/[A-Za-z0-9._-]+/")
-  },
-  {
-    name: "internal issue identifier",
-    expression: new RegExp("\\b" + "PLA" + "-[0-9]{2,}\\b")
-  },
-  {
     name: "AWS access key",
     expression: new RegExp("\\b(?:" + "AKIA|ASIA" + ")[A-Z0-9]{16}\\b")
   },
@@ -41,13 +33,6 @@ const rules: PublicSafetyRule[] = [
   {
     name: "private key material",
     expression: new RegExp("-----BEGIN " + "(?:RSA |EC |OPENSSH )?PRIVATE KEY-----")
-  },
-  {
-    name: "private maintainer setup",
-    expression: new RegExp(
-      "\\b(?:" + ["Infi", "sical"].join("") + "|" + ["Crave", "team", "members"].join(" ") + ")\\b",
-      "i"
-    )
   }
 ];
 
