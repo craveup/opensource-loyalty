@@ -10,25 +10,25 @@ environment's runtime, and serves the same URLs it served before.
 
 ## What changed, and why it matters operationally
 
-| Previously | Now |
-| --- | --- |
-| One TCP port per environment, remembered in `/data/lip-cloud/ports.json` | One listener; `/runtime/v1/environments/<environment_id>` is the address |
-| `<program_id>.json` seeded onto the disk before provisioning | A valid, inert bootstrap program created in Postgres at provisioning |
-| `<environment_id>.credentials.json` on the disk | Access-control key hashes in tenant rows; a short-lived encrypted handoff in the control plane |
-| Per-tenant SQLite database files | Tenant-scoped rows in the shared Neon database, under forced row-level security |
-| Encrypted local disk backups | Neon backup / PITR and isolated restore branches |
+| Previously                                                               | Now                                                                                            |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| One TCP port per environment, remembered in `/data/lip-cloud/ports.json` | One listener; `/runtime/v1/environments/<environment_id>` is the address                       |
+| `<program_id>.json` seeded onto the disk before provisioning             | A valid, inert bootstrap program created in Postgres at provisioning                           |
+| `<environment_id>.credentials.json` on the disk                          | Access-control key hashes in tenant rows; a short-lived encrypted handoff in the control plane |
+| Per-tenant SQLite database files                                         | Tenant-scoped rows in the shared Neon database, under forced row-level security                |
+| Encrypted local disk backups                                             | Neon backup / PITR and isolated restore branches                                               |
 
 The practical consequence: **there is nothing to seed and nothing to copy before
 a brand can be provisioned.** Onboarding is entirely API-driven.
 
 ## Required configuration
 
-| Variable | Purpose |
-| --- | --- |
-| `LIP_CLOUD_DATABASE_URL` | The environment's **direct** (never `-pooler`) Neon URL. The single required database URL. |
-| `LIP_CLOUD_PUBLIC_BASE_URL` | This service's exact public origin. **Selects the managed runtime.** Merchant URLs are built from it. |
-| `LIP_CLOUD_CREDENTIAL_KEY` | 32-byte unpadded base64url AES-256-GCM key for credential handoffs. |
-| `LIP_CLOUD_DEPLOYMENT_ENVIRONMENT` | `development` \| `sandbox` \| `production`, published on `/health`. |
+| Variable                           | Purpose                                                                                               |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `LIP_CLOUD_DATABASE_URL`           | The environment's **direct** (never `-pooler`) Neon URL. The single required database URL.            |
+| `LIP_CLOUD_PUBLIC_BASE_URL`        | This service's exact public origin. **Selects the managed runtime.** Merchant URLs are built from it. |
+| `LIP_CLOUD_CREDENTIAL_KEY`         | 32-byte unpadded base64url AES-256-GCM key for credential handoffs.                                   |
+| `LIP_CLOUD_DEPLOYMENT_ENVIRONMENT` | `development` \| `sandbox` \| `production`, published on `/health`.                                   |
 
 `LIP_CLOUD_DATA_PLANE_DATABASE_URL` is now optional and defaults to
 `LIP_CLOUD_DATABASE_URL`. Set it only for a self-hosted deployment that
@@ -119,7 +119,7 @@ a transaction-local `lip.tenant_id`. A transaction that never declares a tenant
 compares against NULL and sees an empty database.
 
 **Enabling and forcing RLS is not sufficient on Neon.** PostgreSQL checks
-`BYPASSRLS` on the *current* role before it evaluates any policy, and Neon
+`BYPASSRLS` on the _current_ role before it evaluates any policy, and Neon
 grants that attribute to its default owner role. Verified on a real Neon
 Postgres 18 branch: with the policies applied, forced, and the tenant setting
 correct, an unscoped connection still read every tenant's rows and could write
@@ -133,7 +133,7 @@ apply; the connecting role keeps the ownership it needs to run migrations.
 
 > Since PostgreSQL 16, the implicit membership a `CREATEROLE` role receives over
 > a role it creates carries `SET FALSE`. Plain membership therefore leaves
-> `SET ROLE` failing with *permission denied to set role* while
+> `SET ROLE` failing with _permission denied to set role_ while
 > `pg_has_role(..., 'MEMBER')` reports true. Migration 003 grants
 > `WITH SET TRUE` explicitly for this reason.
 
@@ -147,7 +147,7 @@ not an application bypass, since no application path queries without assuming
 the runtime role; it means whoever holds the connection string holds
 administrator access to the database, as with any owner credential.
 
-Two environments with the *same* `program_id` are still separated, because the
+Two environments with the _same_ `program_id` are still separated, because the
 boundary is the tenant, not the program. A credential minted for environment A
 answers 401/403 against environment B.
 
@@ -169,7 +169,7 @@ is correct but means those credentials must be reissued.
 engagement schedulers, webhook dispatch, and the credential single-flight all
 assume one process. The single-flight is also what makes crash recovery sound:
 a `pending` credential operation observed by a fresh call can only be a dead
-process's residue *because* no concurrent caller in this process reaches the
+process's residue _because_ no concurrent caller in this process reaches the
 store. Distributed leasing has to land before the instance count moves.
 
 ## Development certification checklist
@@ -183,9 +183,13 @@ store. Distributed leasing has to land before the instance count moves.
    reward, rotate credentials, deliver a signed webhook.
 5. Restart and redeploy; confirm URLs, programs, credentials, members, balances
    and webhook state all survive.
-6. Exercise a Neon branch restore and record the evidence.
+6. Suspend/freeze the development runtime, prove its database fingerprint is stable twice at least
+   five seconds apart, then exercise an isolated Neon branch restore and record the evidence. Resume
+   the service only after the comparison passes.
 7. Confirm `/health` and `/ready`.
-8. Return the development service to Free.
+8. Optionally return the development service to Free. Because Free has no pre-deploy step, redeploy
+   once and repeat `/health`, `/ready`, runtime restoration, and authenticated/anonymous metrics
+   probes before accepting the lower plan.
 
 Sandbox and production stay undeployed until a separate promotion decision.
 Before external sandbox access or production activation, move the service to a
