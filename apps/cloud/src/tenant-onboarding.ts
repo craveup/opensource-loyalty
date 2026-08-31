@@ -31,7 +31,7 @@ export type RotatedTenantCredentials = RotatedEnvironmentCredentials;
  * deprecated root runtime key is never handed out.
  */
 export interface TenantOnboardingTarget {
-  /** Base URL of the control plane, e.g. https://lip-cloud.internal:3220 */
+  /** Base URL of the control plane, e.g. https://crave-loyalty-development.onrender.com */
   cloudUrl: string;
   /** Per-operator API key (`lip_ok_...`). The shared key is not accepted. */
   apiKey: string;
@@ -78,7 +78,7 @@ export interface TenantOnboardingRequest {
    * tenant starts with zero subscriptions and delivers nothing; providing it
    * here creates the subscription through the runtime's admin API as soon as
    * the environment is ready. Requires network reach to the tenant's
-   * `api_url` (run from the private network, like step 4d verification), and
+   * path-scoped public `api_url` from an approved operator environment, and
    * mints the merchant credential via the control-plane rotation surface —
    * returned in `TenantOnboardingResult.credentials`.
    */
