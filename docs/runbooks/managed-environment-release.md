@@ -38,6 +38,11 @@ does not by itself prove end-to-end order settlement.
   managed Neon project/database/role. No environment uses a Crave platform database.
 - Both `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL` use the environment's direct
   Neon hostname. A `-pooler` hostname or `pgbouncer=true` fails before migrations or startup.
+- Each service tracks its own branch — development `dev`, sandbox `sandbox`, production `main` —
+  and `autoDeploy: false` keeps every deploy deliberate. Promotion is a **merge along
+  dev -> sandbox -> main**, never a direct push: that is what keeps the deployed commit identical
+  across environments, which is exactly what the release evidence claims. `sandbox` and `main` are
+  protected so a direct push cannot quietly break that.
 - `numInstances: 1` is a correctness limit, not a sizing preference. Do not scale out until Admin
   state and webhook dispatch no longer depend on one process.
 - `LIP_CLOUD_SHARED_KEY_DISABLED` is operator-managed (`sync: false`) so a Blueprint sync cannot
