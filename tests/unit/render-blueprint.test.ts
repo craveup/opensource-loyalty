@@ -151,16 +151,14 @@ describe("managed Render blueprint", () => {
     }
   });
 
-  it("runs development on Free, which is only possible without a disk", async () => {
+  it("keeps every service on a paid plan until certification lowers one", async () => {
     const blueprint = parse(await readFile("render.yaml", "utf8")) as Blueprint;
-    const byName = new Map(
-      (blueprint.services ?? []).map((service) => [service.name, service]),
-    );
-    expect(byName.get("crave-loyalty-development")?.plan).toBe("free");
-    // Sandbox and production stay on a paid plan: external access and
-    // production activation require load, alerting and restore certification
-    // that Free cannot support.
-    expect(byName.get("crave-loyalty-sandbox")?.plan).toBe("starter");
-    expect(byName.get("crave-loyalty-production")?.plan).toBe("starter");
+    // Removing the disks is what makes Render Free viable for development, but
+    // the plan change is a deliberate post-certification step, not something
+    // this blueprint should make on the operator's behalf while the runtime is
+    // still unproven.
+    for (const service of blueprint.services ?? []) {
+      expect(service.plan, `${service.name} plan`).toBe("starter");
+    }
   });
 });

@@ -17,8 +17,10 @@
 # Do not scale out before distributed leasing lands.
 #
 # Migrations run at startup under advisory locks. `preDeployCommand` repeats
-# them as defence in depth on paid plans; the service does not depend on it,
-# which is what lets development run on Free where preDeploy is unavailable.
+# them as defence in depth; the service does not depend on it. That is what
+# makes Render Free viable for development once no disk is attached -- Free has
+# no pre-deploy step. Development stays on `starter` until its certification
+# passes, then the plan is lowered deliberately rather than by blueprint.
 
 previews:
   generation: off
@@ -29,9 +31,7 @@ services:
     runtime: docker
     branch: dev
     region: oregon
-    # Free is sufficient now that no disk is attached. preDeployCommand is
-    # ignored on Free; startup migrations are the real path.
-    plan: free
+    plan: starter
     numInstances: 1
     autoDeploy: false
     dockerfilePath: ./Dockerfile

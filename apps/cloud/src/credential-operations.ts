@@ -274,7 +274,17 @@ export class ManagedCredentialService {
     overlapSeconds?: number;
   }): Promise<MerchantCredentialHandoff> {
     const idempotencyKey = assertIdempotencyKey(input.idempotencyKey);
-    const flightKey = `${input.environmentId}:${idempotencyKey}`;
+    // The fingerprint belongs in the key. Sharing a flight on the idempotency
+    // key alone would hand a caller whose payload *differs* the other request's
+    // credential, silently, instead of the 409 the store would have raised --
+    // the conflict check lives behind the claim, so a joined flight never
+    // reaches it. Including the fingerprint means identical requests still
+    // share one mint while a conflicting one goes to the store and is refused.
+    const flightKey = `${input.environmentId}:${idempotencyKey}:${requestFingerprint({
+      environmentId: input.environmentId,
+      operation: input.operation,
+      ...(input.overlapSeconds === undefined ? {} : { overlapSeconds: input.overlapSeconds })
+    })}`;
     const existing = this.inFlight.get(flightKey);
     if (existing) return existing;
     const flight = this.issueExclusive({ ...input, idempotencyKey }).finally(() => {

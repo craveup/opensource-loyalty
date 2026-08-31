@@ -366,6 +366,24 @@ describe("concurrent issuance", () => {
     expect(fulfilled.length).toBeGreaterThan(0);
   });
 
+  it("still refuses a conflicting payload that arrives while the first is in flight", async () => {
+    const harness = service();
+    // The conflict check lives behind the store claim. A single-flight keyed
+    // only on the idempotency key would hand this caller the *other* request's
+    // credential instead of refusing it.
+    const [first, second] = await Promise.allSettled([
+      harness.service.issue(request),
+      harness.service.issue({ ...request, overlapSeconds: 3_600 }),
+    ]);
+    expect(first.status).toBe("fulfilled");
+    expect(second.status).toBe("rejected");
+    expect((second as PromiseRejectedResult).reason).toMatchObject({
+      code: "idempotency_conflict",
+      status: 409
+    });
+    expect(harness.issuer.minted).toEqual(["key-1"]);
+  });
+
   it("keeps distinct intents distinct", async () => {
     const harness = service();
     await Promise.all([
