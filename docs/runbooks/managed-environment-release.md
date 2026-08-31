@@ -18,7 +18,7 @@ As of 2026-08-28, activation remains blocked until release evidence records all 
 - All three environments have their own direct Neon URLs and independently generated API and encryption
   keys in Render. Credential values must never be copied into this repository or release evidence.
 - `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` exist on paid
-  Starter plans in Oregon with one independent 1 GB disk each.
+  Oregon services with no disk: development on Free, sandbox and production on a paid plan.
 - Development verification passes before sandbox receives a candidate. Sandbox deployment, restore
   rehearsal, rollback rehearsal, and the required lifecycle smoke tests below pass before production
   promotion.
@@ -34,7 +34,7 @@ does not by itself prove end-to-end order settlement.
   only, and Render's private network reaches a service only from the same region, so the consuming
   Crave API must share it. `cravejs-apis-production` and `cravejs-apis-dev` run in Oregon. Each
   environment's Neon project lives in `aws-us-west-2` for the same reason.
-- Each service has its own disk, bootstrap/operator credentials, encryption key, and independently
+- Each service has its own bootstrap/operator credentials, encryption key, and independently
   managed Neon project/database/role. No environment uses a Crave platform database.
 - Both `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL` use the environment's direct
   Neon hostname. A `-pooler` hostname or `pgbouncer=true` fails before migrations or startup.
@@ -99,7 +99,7 @@ does not by itself prove end-to-end order settlement.
 
 ## Backup and restore rehearsal
 
-Neon history retention/PITR is the database backup authority. The encrypted service disk backup is
+Neon history retention/PITR is the only backup authority; there is no disk to snapshot. The former encrypted service disk backup is
 separate and covers program definitions and local environment credential material.
 
 1. Freeze writes on every tenant runtime and record the freeze timestamp, source database branch,

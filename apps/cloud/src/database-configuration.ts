@@ -10,13 +10,17 @@ export function managedDatabaseConfiguration(
   environment: NodeJS.ProcessEnv
 ): ManagedDatabaseConfiguration {
   const controlPlaneUrl = environment["LIP_CLOUD_DATABASE_URL"]?.trim() ?? "";
-  const dataPlaneUrl = environment["LIP_CLOUD_DATA_PLANE_DATABASE_URL"]?.trim() ?? "";
   assertSessionLeaseCompatibleUrl(controlPlaneUrl, "LIP_CLOUD_DATABASE_URL");
+  // One managed environment, one database. The separate data-plane variable
+  // survives only for a self-hosted deployment that genuinely splits them;
+  // requiring an operator to set the same Neon URL twice was a way to get it
+  // wrong, not a safeguard.
+  const dataPlaneUrl = environment["LIP_CLOUD_DATA_PLANE_DATABASE_URL"]?.trim() || controlPlaneUrl;
   assertSessionLeaseCompatibleUrl(dataPlaneUrl, "LIP_CLOUD_DATA_PLANE_DATABASE_URL");
-  // Both variables intentionally address one environment's direct endpoint
-  // (render.yaml), so they are NOT asserted to differ. The independence this
-  // deployment has to prove is sandbox against production, and no single
-  // process can see both — see databaseIdentityFingerprint.
+  // The two URLs are NOT asserted to differ: sharing one endpoint is the
+  // intended topology. The independence this deployment has to prove is
+  // sandbox against production, and no single process can see both — see
+  // databaseIdentityFingerprint.
   return { controlPlaneUrl, dataPlaneUrl };
 }
 
