@@ -163,6 +163,12 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
+/** A listener-independent protocol/Admin handler (see createReferenceRequestHandler). */
+export type ReferenceRequestHandler = (
+  request: IncomingMessage,
+  response: ServerResponse
+) => void;
+
 interface AdminStorageDescriptor {
   driver: string;
   location: string;
@@ -781,7 +787,19 @@ function routeTable(engine: LoyaltyEngine): Map<string, Route> {
   ]);
 }
 
-export function createReferenceServer(engine: LoyaltyEngine, options: ServerOptions): Server {
+/**
+ * The protocol/Admin request handler, detached from any listener.
+ *
+ * A standalone deployment wraps one of these in its own `http.Server`
+ * (`createReferenceServer`). A managed deployment mounts many of them behind a
+ * single listener, one per tenant environment, and dispatches by path — which
+ * is only possible because the handler owns no socket. Both callers get
+ * byte-identical request handling; the difference is purely who listens.
+ */
+export function createReferenceRequestHandler(
+  engine: LoyaltyEngine,
+  options: ServerOptions
+): ReferenceRequestHandler {
   if (options.apiKey.length < 8) {
     throw new Error("Reference server API key must contain at least 8 characters");
   }
@@ -873,7 +891,7 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
     }
   }
 
-  return createServer((request, response) => {
+  return (request: IncomingMessage, response: ServerResponse) => {
     const startedAt = performance.now();
     const method = request.method ?? "GET";
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
@@ -2551,7 +2569,11 @@ export function createReferenceServer(engine: LoyaltyEngine, options: ServerOpti
         "application/problem+json"
       );
     });
-  });
+  };
+}
+
+export function createReferenceServer(engine: LoyaltyEngine, options: ServerOptions): Server {
+  return createServer(createReferenceRequestHandler(engine, options));
 }
 
 export async function startReferenceServer(

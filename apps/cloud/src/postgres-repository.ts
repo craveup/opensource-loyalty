@@ -714,6 +714,16 @@ export class PostgresCloudRepository implements CloudRepository {
     return result.rows.map(environment);
   }
 
+  public async readyEnvironments(): Promise<CloudEnvironment[]> {
+    const result = await this.pool.query(`
+      SELECT *
+      FROM lip_cloud_environments
+      WHERE status = 'ready'
+      ORDER BY created_at
+    `);
+    return result.rows.map(environment);
+  }
+
   public async attachEnvironment(
     environmentId: string,
     binding: {

@@ -336,6 +336,13 @@ export interface CloudRepository {
     slug: string
   ): Promise<CloudEnvironment | undefined>;
   environmentsForProject(projectId: string): Promise<CloudEnvironment[]>;
+  /**
+   * Every environment a managed process must have running, across all
+   * organizations. This is the diskless replacement for scanning a data
+   * directory for credential files: the database is the only record of what
+   * exists, so a cold start reads it to rebuild its runtimes.
+   */
+  readyEnvironments(): Promise<CloudEnvironment[]>;
   attachEnvironment(
     environmentId: string,
     binding: {
