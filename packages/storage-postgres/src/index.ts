@@ -15,7 +15,18 @@ import { assertSessionLeaseCompatibleUrl } from "./connection-policy.js";
 
 export { assertSessionLeaseCompatibleUrl } from "./connection-policy.js";
 
-const migrationUrl = new URL("../migrations/001_normalized_engine.sql", import.meta.url);
+const migrations = [
+  {
+    version: 1,
+    name: "normalized_engine",
+    url: new URL("../migrations/001_normalized_engine.sql", import.meta.url)
+  },
+  {
+    version: 2,
+    name: "tenant_isolation",
+    url: new URL("../migrations/002_tenant_isolation.sql", import.meta.url)
+  }
+] as const;
 const engineTables = [
   "lip_engine_identities",
   "lip_engine_balance_lots",
@@ -115,6 +126,28 @@ async function lockTransaction(client: PoolClient, key: string): Promise<void> {
   await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
 }
 
+/**
+ * Runs `run` in one transaction whose tenant scope is set for that transaction
+ * only, so row-level security can enforce the isolation the query predicates
+ * merely assert (see migrations/002_tenant_isolation.sql).
+ *
+ * The `true` third argument to set_config is what makes this safe on a pooled
+ * connection: the setting is reverted on COMMIT or ROLLBACK, so the next
+ * transaction on the same socket starts with no tenant and can read nothing
+ * until it declares its own.
+ */
+export async function withTenantTransaction<T>(
+  pool: Pool,
+  tenantId: string,
+  run: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  if (!tenantId.trim()) throw new Error("A tenant id is required to open a tenant transaction");
+  return inTransaction(pool, async (client) => {
+    await client.query("SELECT set_config('lip.tenant_id', $1, true)", [tenantId]);
+    return run(client);
+  });
+}
+
 export class PostgresMigrator {
   private readonly pool: Pool;
 
@@ -123,7 +156,12 @@ export class PostgresMigrator {
   }
 
   public async migrate(): Promise<void> {
-    const sql = await readFile(fileURLToPath(migrationUrl), "utf8");
+    const pending = await Promise.all(
+      migrations.map(async (migration) => ({
+        ...migration,
+        sql: await readFile(fileURLToPath(migration.url), "utf8")
+      }))
+    );
     await inTransaction(this.pool, async (client) => {
       await client.query(`
         CREATE TABLE IF NOT EXISTS lip_schema_migrations (
@@ -133,16 +171,18 @@ export class PostgresMigrator {
         )
       `);
       await lockTransaction(client, "lip:schema-migrations");
-      const existing = await client.query(
-        "SELECT version FROM lip_schema_migrations WHERE version = $1",
-        [1]
+      const existing = await client.query<{ version: number }>(
+        "SELECT version FROM lip_schema_migrations"
       );
-      if (existing.rowCount) return;
-      await client.query(sql);
-      await client.query(
-        "INSERT INTO lip_schema_migrations (version, name) VALUES ($1, $2)",
-        [1, "normalized_engine"]
-      );
+      const applied = new Set(existing.rows.map((row) => row.version));
+      for (const migration of pending) {
+        if (applied.has(migration.version)) continue;
+        await client.query(migration.sql);
+        await client.query(
+          "INSERT INTO lip_schema_migrations (version, name) VALUES ($1, $2)",
+          [migration.version, migration.name]
+        );
+      }
     });
   }
 }
@@ -175,19 +215,21 @@ export class PostgresJsonStateStore<T> implements AsyncStateStore<T> {
   }
 
   public async load(): Promise<VersionedState<T> | null> {
-    const result = await this.pool.query<RevisionRow & { value: T }>(`
-      SELECT value, revision
-      FROM lip_platform_state
-      WHERE tenant_id = $1 AND state_key = $2
-    `, [this.tenantId, this.key]);
-    const row = result.rows[0];
+    const row = await this.inTenantTransaction(async (client) => {
+      const result = await client.query<RevisionRow & { value: T }>(`
+        SELECT value, revision
+        FROM lip_platform_state
+        WHERE tenant_id = $1 AND state_key = $2
+      `, [this.tenantId, this.key]);
+      return result.rows[0];
+    });
     return row
       ? { state: structuredClone(row.value), revision: safeInteger(row.revision, "State revision") }
       : null;
   }
 
   public async save(state: T, expectedRevision?: number): Promise<number> {
-    return inTransaction(this.pool, async (client) => {
+    return this.inTenantTransaction(async (client) => {
       await lockTransaction(client, `lip:state:${this.tenantId}:${this.key}`);
       const current = await client.query<RevisionRow>(`
         SELECT revision
@@ -212,14 +254,20 @@ export class PostgresJsonStateStore<T> implements AsyncStateStore<T> {
   }
 
   public async clear(): Promise<void> {
-    await this.pool.query(
-      "DELETE FROM lip_platform_state WHERE tenant_id = $1 AND state_key = $2",
-      [this.tenantId, this.key]
-    );
+    await this.inTenantTransaction(async (client) => {
+      await client.query(
+        "DELETE FROM lip_platform_state WHERE tenant_id = $1 AND state_key = $2",
+        [this.tenantId, this.key]
+      );
+    });
   }
 
   public async close(): Promise<void> {
     if (this.ownsPool) await this.pool.end();
+  }
+
+  private async inTenantTransaction<R>(run: (client: PoolClient) => Promise<R>): Promise<R> {
+    return withTenantTransaction(this.pool, this.tenantId, run);
   }
 }
 
@@ -252,16 +300,11 @@ export class PostgresEngineRepository {
   }
 
   public async load(): Promise<VersionedState<LoyaltyEngineState> | null> {
-    const client = await this.pool.connect();
-    try {
-      return await this.loadWithClient(client);
-    } finally {
-      client.release();
-    }
+    return this.inTenantTransaction((client) => this.loadWithClient(client));
   }
 
   public async save(state: LoyaltyEngineState, expectedRevision?: number): Promise<number> {
-    return inTransaction(this.pool, async (client) => {
+    return this.inTenantTransaction(async (client) => {
       await this.lockEngine(client);
       return this.saveWithClient(client, state, expectedRevision);
     });
@@ -271,7 +314,7 @@ export class PostgresEngineRepository {
     engine: LoyaltyEngine,
     operation: () => T | Promise<T>
   ): Promise<T> {
-    return this.serialized(async () => inTransaction(this.pool, async (client) => {
+    return this.serialized(async () => this.inTenantTransaction(async (client) => {
       await this.lockEngine(client);
       const current = await this.loadWithClient(client);
       if (current) engine.replaceState(current.state);
@@ -314,7 +357,7 @@ export class PostgresEngineRepository {
   }
 
   public async clear(): Promise<void> {
-    await inTransaction(this.pool, async (client) => {
+    await this.inTenantTransaction(async (client) => {
       await this.lockEngine(client);
       await client.query(
         "DELETE FROM lip_engine_states WHERE tenant_id = $1 AND program_id = $2",
@@ -326,6 +369,10 @@ export class PostgresEngineRepository {
   public async close(): Promise<void> {
     await Promise.allSettled(this.queues.values());
     if (this.ownsPool) await this.pool.end();
+  }
+
+  private async inTenantTransaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
+    return withTenantTransaction(this.pool, this.tenantId, run);
   }
 
   private async lockEngine(client: PoolClient): Promise<void> {
