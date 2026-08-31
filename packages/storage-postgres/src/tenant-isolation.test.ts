@@ -86,13 +86,39 @@ function expectEveryStatementScoped(queries: RecordedQuery[], tenantId: string):
   const opened = transactions(queries);
   expect(opened.length).toBeGreaterThan(0);
   for (const statements of opened) {
-    const first = statements[0];
+    // Order matters. Assuming the non-bypassing role has to happen before the
+    // scope is set, and both have to happen before any tenant data is touched.
+    expect(statements[0]?.text).toBe("SET LOCAL ROLE lip_tenant_runtime");
     // The literal `true` is the transaction-local flag; it is inline SQL rather
     // than a parameter, so both halves have to be checked.
-    expect(first?.text).toContain("set_config('lip.tenant_id', $1, true)");
-    expect(first?.values).toEqual([tenantId]);
+    expect(statements[1]?.text).toContain("set_config('lip.tenant_id', $1, true)");
+    expect(statements[1]?.values).toEqual([tenantId]);
   }
 }
+
+describe("tenant runtime role migration", () => {
+  const sql = readFileSync(
+    new URL("../migrations/003_tenant_runtime_role.sql", import.meta.url),
+    "utf8"
+  );
+
+  it("defines a role that cannot bypass row-level security and cannot log in", () => {
+    expect(sql).toContain("CREATE ROLE lip_tenant_runtime NOLOGIN NOBYPASSRLS");
+  });
+
+  it("grants the connecting role the ability to assume it, not just membership", () => {
+    // Since PostgreSQL 16 the implicit membership a CREATEROLE role gets over a
+    // role it created carries SET FALSE, so plain membership leaves SET ROLE
+    // failing with "permission denied to set role".
+    expect(sql).toContain("WITH SET TRUE");
+    expect(sql).toContain("EXCEPTION WHEN syntax_error OR feature_not_supported");
+  });
+
+  it("grants the role the data access every tenant transaction needs", () => {
+    expect(sql).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO lip_tenant_runtime");
+    for (const table of SCOPED_TABLES) expect(sql).toContain(`'${table}'`);
+  });
+});
 
 describe("tenant isolation migration", () => {
   const sql = readFileSync(
@@ -130,11 +156,15 @@ describe("withTenantTransaction", () => {
     });
     expect(queries.map((query) => query.text)).toEqual([
       "BEGIN",
+      // Without this, the policies in migration 002 are present, forced, and
+      // completely inert: PostgreSQL checks BYPASSRLS on the current role, and
+      // a managed provider's owner role has it.
+      "SET LOCAL ROLE lip_tenant_runtime",
       "SELECT set_config('lip.tenant_id', $1, true)",
       "SELECT 1",
       "COMMIT"
     ]);
-    expect(queries[1]?.values).toEqual(["tenant-alpha"]);
+    expect(queries[2]?.values).toEqual(["tenant-alpha"]);
   });
 
   it("rolls back rather than leaving the scope set on a pooled connection", async () => {

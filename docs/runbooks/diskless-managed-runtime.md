@@ -115,9 +115,37 @@ boot, never persisted, never logged, never returned.
 ## Tenant isolation
 
 `lip_engine_*` and `lip_platform_state` carry forced row-level security keyed on
-a transaction-local `lip.tenant_id`. `FORCE` matters: the service connects as
-the table owner, which would otherwise bypass every policy. A query that never
-declares a tenant compares against NULL and sees an empty database.
+a transaction-local `lip.tenant_id`. A transaction that never declares a tenant
+compares against NULL and sees an empty database.
+
+**Enabling and forcing RLS is not sufficient on Neon.** PostgreSQL checks
+`BYPASSRLS` on the *current* role before it evaluates any policy, and Neon
+grants that attribute to its default owner role. Verified on a real Neon
+Postgres 18 branch: with the policies applied, forced, and the tenant setting
+correct, an unscoped connection still read every tenant's rows and could write
+rows belonging to any of them.
+
+The fix needs no second credential. Migration 003 defines `lip_tenant_runtime`
+— `NOLOGIN`, `NOBYPASSRLS`, existing only to be assumed — and grants the
+connecting role the ability to `SET ROLE` to it. Every tenant transaction issues
+`SET LOCAL ROLE lip_tenant_runtime` before it touches a row, so the policies
+apply; the connecting role keeps the ownership it needs to run migrations.
+
+> Since PostgreSQL 16, the implicit membership a `CREATEROLE` role receives over
+> a role it creates carries `SET FALSE`. Plain membership therefore leaves
+> `SET ROLE` failing with *permission denied to set role* while
+> `pg_has_role(..., 'MEMBER')` reports true. Migration 003 grants
+> `WITH SET TRUE` explicitly for this reason.
+
+Startup **proves** this rather than assuming it: it writes a row under one
+scope, then reads it back with no tenant and again as a different tenant, and
+refuses to boot unless both come back empty. A database that cannot demonstrate
+the boundary does not get tenant traffic. The boot log records
+`cloud_tenant_isolation_verified`, including
+`owner_bypasses_row_level_security` — expected to be `true` on Neon. That is
+not an application bypass, since no application path queries without assuming
+the runtime role; it means whoever holds the connection string holds
+administrator access to the database, as with any owner credential.
 
 Two environments with the *same* `program_id` are still separated, because the
 boundary is the tenant, not the program. A credential minted for environment A

@@ -6,7 +6,11 @@ import { join, resolve } from "node:path";
 import { OidcAuthenticator } from "./auth.js";
 import { StripeBillingProvider } from "./billing.js";
 import type { Pool } from "pg";
-import { PostgresMigrator, createPostgresPool } from "@loyalty-interchange/storage-postgres";
+import {
+  PostgresMigrator,
+  assertTenantIsolationEnforced,
+  createPostgresPool
+} from "@loyalty-interchange/storage-postgres";
 import { LipClient } from "@loyalty-interchange/sdk";
 import { PostgresCustomerRepository } from "./customer-postgres-repository.js";
 import { OidcCustomerIdentityProvider } from "./customer-provider.js";
@@ -152,6 +156,23 @@ if (publicBaseUrl) {
   // process ran out of anything else.
   managedPool = createPostgresPool({ connectionString: dataPlaneConnectionString });
   await new PostgresMigrator(managedPool).migrate();
+  // Prove isolation is in force before accepting a single tenant request.
+  // Whether row-level security actually filters depends on a property of the
+  // connecting role that no migration can guarantee, and the failure is silent:
+  // every query succeeds and returns other tenants' rows. Refusing to boot is
+  // the only safe response to a database that cannot demonstrate the boundary.
+  const isolation = await assertTenantIsolationEnforced(managedPool);
+  if (!isolation.enforced) {
+    throw new Error(
+      `Tenant isolation is not enforced on this database: ${isolation.detail ?? "unknown cause"}`
+    );
+  }
+  console.log(JSON.stringify({
+    event: "cloud_tenant_isolation_verified",
+    current_role: isolation.current_role,
+    runtime_role_available: isolation.runtime_role_available,
+    owner_bypasses_row_level_security: isolation.owner_bypasses_row_level_security
+  }));
   managed = new ManagedPostgresDataPlaneManager({
     connectionString: dataPlaneConnectionString,
     publicBaseUrl,
