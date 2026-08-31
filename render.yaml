@@ -17,7 +17,7 @@ services:
   - type: web
     name: crave-loyalty-development
     runtime: docker
-    region: virginia
+    region: oregon
     plan: starter
     numInstances: 1
     autoDeploy: false
@@ -51,7 +51,7 @@ services:
       - key: HEALTH_PORT
         value: "10000"
       - key: LIP_CLOUD_REGIONS
-        value: render-virginia
+        value: render-oregon
       - key: LIP_CLOUD_DEFAULT_PLAN
         value: free
       - key: LIP_CLOUD_PROGRAM_DIR
@@ -99,7 +99,7 @@ services:
   - type: web
     name: crave-loyalty-sandbox
     runtime: docker
-    region: virginia
+    region: oregon
     plan: starter
     numInstances: 1
     autoDeploy: false
@@ -133,7 +133,7 @@ services:
       - key: HEALTH_PORT
         value: "10000"
       - key: LIP_CLOUD_REGIONS
-        value: render-virginia
+        value: render-oregon
       - key: LIP_CLOUD_DEFAULT_PLAN
         value: free
       - key: LIP_CLOUD_PROGRAM_DIR
@@ -181,7 +181,7 @@ services:
   - type: web
     name: crave-loyalty-production
     runtime: docker
-    region: virginia
+    region: oregon
     plan: starter
     numInstances: 1
     autoDeploy: false
@@ -215,7 +215,7 @@ services:
       - key: HEALTH_PORT
         value: "10000"
       - key: LIP_CLOUD_REGIONS
-        value: render-virginia
+        value: render-oregon
       - key: LIP_CLOUD_DEFAULT_PLAN
         value: free
       - key: LIP_CLOUD_PROGRAM_DIR

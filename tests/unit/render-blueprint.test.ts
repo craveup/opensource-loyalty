@@ -59,7 +59,7 @@ const secretVariables = [
 ] as const;
 
 describe("managed Render blueprint", () => {
-  it("defines isolated development, sandbox, and production services in Virginia", async () => {
+  it("defines isolated development, sandbox, and production services in Oregon", async () => {
     const blueprint = parse(await readFile("render.yaml", "utf8")) as Blueprint;
     expect(blueprint.previews).toEqual({ generation: "off" });
     expect(blueprint.services).toHaveLength(3);
@@ -91,7 +91,7 @@ describe("managed Render blueprint", () => {
         name,
         numInstances: 1,
         plan: "starter",
-        region: "virginia",
+        region: "oregon",
         runtime: "docker",
         type: "web",
       });
@@ -100,7 +100,7 @@ describe("managed Render blueprint", () => {
         name: `${name}-data`,
         sizeGB: 1,
       });
-      expect(variables.get("LIP_CLOUD_REGIONS")?.value).toBe("render-virginia");
+      expect(variables.get("LIP_CLOUD_REGIONS")?.value).toBe("render-oregon");
       expect(variables.get("LIP_CLOUD_DATA_PLANE_PUBLIC_HOST")?.value).toBe(
         name,
       );
