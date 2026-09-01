@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -20,11 +21,13 @@ import addFormatsImport, { type FormatsPlugin } from "ajv-formats";
  *      proof they are independent.
  *   2. Nothing in the record may look like a credential. Evidence is retained
  *      and shared; a connection string in it is a live secret leak.
+ *   3. Each environment may have a different normal-merge commit, but every
+ *      commit must resolve to the same canonical Git source tree.
  */
 
 const FINGERPRINT = /^[a-f0-9]{16}$/;
-const GIT_COMMIT = /^[a-f0-9]{7,40}$/;
-const IMAGE_DIGEST = /^sha256:[a-f0-9]{64}$/;
+const GIT_COMMIT = /^[a-f0-9]{40}$/;
+const GIT_TREE = /^[a-f0-9]{40}$/;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
 /** Anything that would be a live credential if this file were shared. */
@@ -39,7 +42,13 @@ const CREDENTIAL_PATTERNS: Array<{ id: string; pattern: RegExp }> = [
 ];
 
 const ENVIRONMENTS = ["development", "sandbox", "production"] as const;
-type EnvironmentName = (typeof ENVIRONMENTS)[number];
+export type ManagedEnvironmentName = (typeof ENVIRONMENTS)[number];
+type EnvironmentName = ManagedEnvironmentName;
+const CANONICAL_REFS: Record<ManagedEnvironmentName, string> = {
+  development: "origin/dev",
+  sandbox: "origin/sandbox",
+  production: "origin/main"
+};
 type DatabaseFingerprintField = keyof Pick<
   EnvironmentFacts,
   "controlPlaneDatabaseFingerprint" | "dataPlaneDatabaseFingerprint"
@@ -49,8 +58,8 @@ interface EnvironmentFacts {
   controlPlaneDatabaseFingerprint: string | null;
   dataPlaneDatabaseFingerprint: string | null;
   gitCommit: string | null;
-  imageDigest: string | null;
   neonProjectId: string | null;
+  sourceTree: string | null;
 }
 
 const evidenceSchema = JSON.parse(
@@ -70,6 +79,48 @@ const validateEvidenceSchema = schemaValidator.compile(evidenceSchema);
 export interface EvidenceProblem {
   path: string;
   message: string;
+}
+
+export type GitCommandRunner = (args: readonly string[]) => string;
+export type GitTreeResolver = (
+  commit: string,
+  environment: ManagedEnvironmentName
+) => string | null;
+
+export interface ManagedEnvironmentEvidenceOptions {
+  resolveGitTree?: GitTreeResolver;
+}
+
+const EVIDENCE_CHECK_USAGE = "Usage: npm run cloud:evidence:check -- <evidence.json>";
+
+export function requireManagedEnvironmentEvidenceTarget(args: readonly string[]): string {
+  const [target] = args;
+  if (!target || args.length !== 1) throw new Error(EVIDENCE_CHECK_USAGE);
+  return target;
+}
+
+function runGitCommand(args: readonly string[]): string {
+  return execFileSync("git", [...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  }).trim();
+}
+
+export function resolveGitTreeFromRepository(
+  commit: string,
+  environment: ManagedEnvironmentName,
+  runGit: GitCommandRunner = runGitCommand
+): string | null {
+  if (!GIT_COMMIT.test(commit)) return null;
+  try {
+    const resolvedCommit = runGit(["rev-parse", "--verify", `${commit}^{commit}`]);
+    if (resolvedCommit !== commit) return null;
+    runGit(["merge-base", "--is-ancestor", commit, CANONICAL_REFS[environment]]);
+    const tree = runGit(["rev-parse", "--verify", `${commit}^{tree}`]);
+    return GIT_TREE.test(tree) ? tree : null;
+  } catch {
+    return null;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -137,11 +188,11 @@ function checkEnvironment(
   requireLiteral(value["connectionMode"], "direct", `${path}.connectionMode`, problems);
   requireLiteral(value["instanceCount"], 1, `${path}.instanceCount`, problems);
   const gitCommit = requireString(value["gitCommit"], `${path}.gitCommit`, problems, GIT_COMMIT);
-  const imageDigest = requireString(
-    value["imageDigest"],
-    `${path}.imageDigest`,
+  const sourceTree = requireString(
+    value["sourceTree"],
+    `${path}.sourceTree`,
     problems,
-    IMAGE_DIGEST
+    GIT_TREE
   );
   const controlPlaneDatabaseFingerprint = requireString(
     value["controlPlaneDatabaseFingerprint"],
@@ -209,13 +260,17 @@ function checkEnvironment(
     controlPlaneDatabaseFingerprint,
     dataPlaneDatabaseFingerprint,
     gitCommit,
-    imageDigest,
-    neonProjectId
+    neonProjectId,
+    sourceTree
   };
 }
 
-export function checkManagedEnvironmentEvidence(raw: string): EvidenceProblem[] {
+export function checkManagedEnvironmentEvidence(
+  raw: string,
+  options: ManagedEnvironmentEvidenceOptions = {}
+): EvidenceProblem[] {
   const problems: EvidenceProblem[] = [];
+  const resolveGitTree = options.resolveGitTree ?? resolveGitTreeFromRepository;
 
   for (const { id, pattern } of CREDENTIAL_PATTERNS) {
     if (pattern.test(raw)) {
@@ -259,8 +314,7 @@ export function checkManagedEnvironmentEvidence(raw: string): EvidenceProblem[] 
     { environment: EnvironmentName; field: DatabaseFingerprintField }
   >();
   const neonProjects = new Map<string, EnvironmentName>();
-  let expectedGitCommit: string | null = null;
-  let expectedImageDigest: string | null = null;
+  let expectedSourceTree: string | null = null;
   for (const name of ENVIRONMENTS) {
     const facts = checkEnvironment(
       environments?.[name],
@@ -299,24 +353,39 @@ export function checkManagedEnvironmentEvidence(raw: string): EvidenceProblem[] 
       }
     }
 
+    let verifiedSourceTree: string | null = null;
     if (facts.gitCommit) {
-      if (expectedGitCommit && facts.gitCommit !== expectedGitCommit) {
+      let resolvedSourceTree: string | null = null;
+      try {
+        resolvedSourceTree = resolveGitTree(facts.gitCommit, name);
+      } catch {
+        resolvedSourceTree = null;
+      }
+      if (!resolvedSourceTree) {
         problems.push({
           path: `environments.${name}.gitCommit`,
-          message: "must match the release commit used by every environment"
+          message:
+            `must resolve to a full commit reachable from the canonical ` +
+            `${CANONICAL_REFS[name]} history`
         });
-      } else {
-        expectedGitCommit ??= facts.gitCommit;
+      } else if (facts.sourceTree && facts.sourceTree !== resolvedSourceTree) {
+        problems.push({
+          path: `environments.${name}.sourceTree`,
+          message: "does not match the canonical tree resolved from gitCommit"
+        });
+      } else if (facts.sourceTree) {
+        verifiedSourceTree = resolvedSourceTree;
       }
     }
-    if (facts.imageDigest) {
-      if (expectedImageDigest && facts.imageDigest !== expectedImageDigest) {
+
+    if (verifiedSourceTree) {
+      if (expectedSourceTree && verifiedSourceTree !== expectedSourceTree) {
         problems.push({
-          path: `environments.${name}.imageDigest`,
-          message: "must match the image digest used by every environment"
+          path: `environments.${name}.sourceTree`,
+          message: "must match the canonical source tree used by every environment"
         });
       } else {
-        expectedImageDigest ??= facts.imageDigest;
+        expectedSourceTree ??= verifiedSourceTree;
       }
     }
   }
@@ -334,7 +403,14 @@ export function checkManagedEnvironmentEvidence(raw: string): EvidenceProblem[] 
 }
 
 async function main(): Promise<void> {
-  const target = process.argv[2] ?? "docs/releases/managed-environment-evidence.example.json";
+  let target: string;
+  try {
+    target = requireManagedEnvironmentEvidenceTarget(process.argv.slice(2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : EVIDENCE_CHECK_USAGE);
+    process.exitCode = 2;
+    return;
+  }
   const path = resolve(process.cwd(), target);
   const raw = await readFile(path, "utf8");
   const problems = checkManagedEnvironmentEvidence(raw);
