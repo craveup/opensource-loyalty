@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryCredentialOperationStore } from "./credential-operation-store.js";
 import {
   CREDENTIAL_HANDOFF_RETENTION_MS,
@@ -249,6 +249,10 @@ describe("lost responses and crashes", () => {
 });
 
 describe("handoff retention", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("stops serving a replay once the retention window closes", async () => {
     let clock = Date.parse("2026-01-01T00:00:00.000Z");
     const harness = service({ now: () => new Date(clock) });
@@ -283,6 +287,32 @@ describe("handoff retention", () => {
     const harness = service();
     await harness.service.issue(request);
     expect(await harness.service.purgeExpiredHandoffs()).toBe(0);
+  });
+
+  it("sweeps expired handoffs periodically and closes its store", async () => {
+    vi.useFakeTimers();
+    let clock = Date.parse("2026-01-01T00:00:00.000Z");
+    let closed = 0;
+    const store = new MemoryCredentialOperationStore() as unknown as CredentialOperationStore & {
+      close(): Promise<void>;
+    };
+    store.close = async () => {
+      closed += 1;
+    };
+    const harness = service({ store, now: () => new Date(clock) });
+    await harness.service.issue(request);
+    clock += CREDENTIAL_HANDOFF_RETENTION_MS + 1_000;
+
+    const lifecycle = harness.service as unknown as {
+      startHandoffRetentionSweep(intervalMs: number): void;
+      close(): Promise<void>;
+    };
+    lifecycle.startHandoffRetentionSweep(1_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await store.findById("operation-1"))?.handoff_envelope).toBeUndefined();
+
+    await lifecycle.close();
+    expect(closed).toBe(1);
   });
 });
 

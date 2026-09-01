@@ -366,6 +366,11 @@ export class ProgramManagementService {
   ): Promise<ProgramManagementSnapshot> {
     const apply = this.applyProgram;
     if (!apply) throw new Error("Program publisher is not bound");
+    const publishedProgram = clone(program);
+    if (publishedProgram.metadata?.["lip_bootstrap"] === true) {
+      const { lip_bootstrap: _bootstrapMarker, ...metadata } = publishedProgram.metadata;
+      publishedProgram.metadata = metadata;
+    }
     const previous = clone(this.state);
     const timestamp = now();
     const revision = this.state.active_revision + 1;
@@ -384,7 +389,7 @@ export class ProgramManagementService {
       active_revision: revision,
       active_published_at: timestamp,
       active_published_by: actor,
-      active_program: clone(program)
+      active_program: clone(publishedProgram)
     };
     this.recordAudit({
       audit_id: `audit_${crypto.randomUUID()}`,
@@ -397,7 +402,7 @@ export class ProgramManagementService {
     // snapshot to this compatible published definition after an interrupted write.
     await this.save();
     try {
-      await apply(clone(program));
+      await apply(clone(publishedProgram));
     } catch (error) {
       this.state = previous;
       await this.save();

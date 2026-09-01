@@ -107,6 +107,35 @@ describe("reference HTTP server", () => {
     }
   });
 
+  it("gives maintenance freeze precedence over tenant protocol guards", async () => {
+    const running = await startReferenceServer(new LoyaltyEngine(makeProgram()), {
+      apiKey: "freeze-precedence-key",
+      writeFrozen: true,
+      protocolWriteGuard: () => ({
+        status: 409,
+        code: "program_not_configured",
+        title: "Loyalty program not configured",
+        detail: "Publish a loyalty program before accepting protocol mutations"
+      })
+    });
+    try {
+      const enroll = await fetch(`${running.url}/lip/v1/members/enroll`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer freeze-precedence-key",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(makeEnroll("freeze-precedence-write"))
+      });
+
+      expect(enroll.status).toBe(503);
+      expect(enroll.headers.get("retry-after")).toBe("30");
+      expect(await enroll.json()).toMatchObject({ code: "write_frozen" });
+    } finally {
+      await running.close();
+    }
+  });
+
   it("defaults to unfrozen (writes allowed, health write_frozen false)", async () => {
     const running = await startReferenceServer(new LoyaltyEngine(makeProgram()), { apiKey: "unfrozen-key" });
     try {

@@ -34,6 +34,7 @@ import {
   Spinner
 } from "./components/ui/index.js";
 import { formatDate, formatNumber, memberName, percentage } from "./format.js";
+import { adminPath } from "./admin-path.js";
 import type {
   AdminBootstrap,
   AdminMember,
@@ -101,7 +102,7 @@ function adminCsrfToken(): string {
 }
 
 async function adminWrite(path: string, method: "PUT" | "POST" | "DELETE", body: unknown): Promise<unknown> {
-  const response = await fetch(path, {
+  const response = await fetch(adminPath(path), {
     method,
     credentials: "same-origin",
     headers: {
@@ -139,7 +140,7 @@ function Login({ bootstrap, onAuthenticated }: {
     setSubmitting(true);
     setError("");
     try {
-      const response = await fetch("/admin/api/v1/session", {
+      const response = await fetch(adminPath("/admin/api/v1/session"), {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
@@ -1248,14 +1249,19 @@ function Developer({ snapshot, onChanged }: {
           </div>
           <div className="program-editor-actions">
             <CommandButton
-              onClick={() => window.open("/admin/api/v1/exports/members?format=csv", "_blank")}
+              onClick={() => window.open(
+                adminPath("/admin/api/v1/exports/members?format=csv"),
+                "_blank"
+              )}
               variant="text"
             >
               Export consented CSV
             </CommandButton>
             <CommandButton
               onClick={() => window.open(
-                "/admin/api/v1/exports/members?format=json&include_unconsented=true",
+                adminPath(
+                  "/admin/api/v1/exports/members?format=json&include_unconsented=true"
+                ),
                 "_blank"
               )}
               variant="text"
@@ -1606,7 +1612,9 @@ export function App() {
     setRefreshing(true);
     setError("");
     try {
-      const response = await fetch("/admin/api/v1/snapshot", { credentials: "same-origin" });
+      const response = await fetch(adminPath("/admin/api/v1/snapshot"), {
+        credentials: "same-origin"
+      });
       if (response.status === 401) {
         setAuthenticated(false);
         setSnapshot(undefined);
@@ -1626,7 +1634,9 @@ export function App() {
     let cancelled = false;
     async function loadBootstrap() {
       try {
-        const response = await fetch("/admin/api/v1/bootstrap", { credentials: "same-origin" });
+        const response = await fetch(adminPath("/admin/api/v1/bootstrap"), {
+          credentials: "same-origin"
+        });
         if (!response.ok) throw new Error(`Admin bootstrap returned HTTP ${response.status}`);
         const data = await response.json() as AdminBootstrap;
         if (cancelled) return;
@@ -1647,7 +1657,10 @@ export function App() {
   }, [refresh]);
 
   async function logout() {
-    await fetch("/admin/api/v1/logout", { method: "POST", credentials: "same-origin" });
+    await fetch(adminPath("/admin/api/v1/logout"), {
+      method: "POST",
+      credentials: "same-origin"
+    });
     setSnapshot(undefined);
     setAuthenticated(false);
   }
