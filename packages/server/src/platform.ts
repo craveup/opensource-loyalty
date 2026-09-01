@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { Pool } from "pg";
 import type { LoyaltyEvent, LoyaltyEventType } from "@loyalty-interchange/protocol";
 import {
   LoyaltyEngine,
@@ -100,6 +101,13 @@ export interface PostgresProtocolPlatform {
 
 export interface PostgresProtocolPlatformOptions {
   connectionString: string;
+  /**
+   * Shared pg pool. A managed deployment runs many tenant platforms in one
+   * process against one database; without a shared pool each would open its own
+   * and the process would exhaust the database's connection budget long before
+   * it exhausts anything else. A supplied pool is not closed by close().
+   */
+  pool?: Pool;
   tenantId?: string;
   reset?: boolean;
   seed?: boolean;
@@ -367,7 +375,8 @@ export async function createPostgresProtocolPlatform(
   assertSessionLeaseCompatibleUrl(options.connectionString, "LIP_DATABASE_URL");
   const configuredProgram = options.program ?? createDemoProgram();
   const tenantId = options.tenantId ?? configuredProgram.program_id;
-  const pool = createPostgresPool({ connectionString: options.connectionString });
+  const sharedPool = options.pool;
+  const pool = sharedPool ?? createPostgresPool({ connectionString: options.connectionString });
   const stateStore = <T>(key: string): AsyncStateStore<T> =>
     new PostgresJsonStateStore<T>({ pool, tenantId, key });
 
@@ -613,7 +622,7 @@ export async function createPostgresProtocolPlatform(
         await historyJournal?.close();
         await outboxJournal?.close();
         await engineStore.close();
-        await pool.end();
+        if (!sharedPool) await pool.end();
       }
     };
   } catch (error) {
@@ -630,7 +639,7 @@ export async function createPostgresProtocolPlatform(
     await historyJournal?.close();
     await outboxJournal?.close();
     await store?.close();
-    await pool.end();
+    if (!sharedPool) await pool.end();
     throw error;
   }
 }

@@ -7,6 +7,7 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { CloudAuthenticator } from "./auth.js";
+import { assertIdempotencyKey } from "./credential-operations.js";
 import { CustomerPlatformError } from "./customer-errors.js";
 import type { CustomerPlatform } from "./customer-service.js";
 import {
@@ -87,6 +88,43 @@ export interface CloudServerOptions {
     operation: LocalEnvironmentOperation,
     input: { backup_id?: string }
   ) => Promise<LocalEnvironmentOperationResult>;
+  /**
+   * Mounts the managed tenant runtimes under this listener. Returns true when
+   * the request belonged to a runtime and has been answered, so control-plane
+   * routing never sees it.
+   */
+  runtimeRequestHandler?: (
+    request: IncomingMessage,
+    response: ServerResponse
+  ) => Promise<boolean>;
+  /**
+   * Readiness, as distinct from liveness. `/health` says the process is up;
+   * this says it has applied its migrations, can reach its database, is
+   * running its provisioning worker, and has rebuilt the runtimes it is
+   * supposed to be serving. Render should not send traffic before all four.
+   */
+  readiness?: () => Promise<CloudReadiness>;
+  /**
+   * Non-secret facts about how this deployment stores things, published on
+   * /health so an operator can confirm from outside that the diskless,
+   * single-instance contract is the one actually running.
+   */
+  storagePolicy?: {
+    instance_policy: "single";
+    storage_policy: "postgres_only" | "filesystem";
+    shared_database: boolean;
+    disk_required: boolean;
+  };
+}
+
+export interface CloudReadiness {
+  ready: boolean;
+  migrations_applied: boolean;
+  database_reachable: boolean;
+  provisioning_worker_running: boolean;
+  expected_runtimes: number;
+  restored_runtimes: number;
+  detail?: string;
 }
 
 export interface RunningCloudServer {
@@ -644,12 +682,32 @@ export function createCloudServer(
     }
 
     void (async () => {
+      // Tenant traffic is dispatched before anything else: it must not be
+      // filtered by control-plane CORS, auth or route matching, which exist for
+      // a different audience entirely.
+      if (options.runtimeRequestHandler &&
+        await options.runtimeRequestHandler(request, response)) {
+        return;
+      }
+      if (method === "GET" && path === "/ready") {
+        const readiness = await options.readiness?.() ?? {
+          ready: true,
+          migrations_applied: true,
+          database_reachable: true,
+          provisioning_worker_running: false,
+          expected_runtimes: 0,
+          restored_runtimes: 0
+        };
+        sendJson(response, readiness.ready ? 200 : 503, readiness);
+        return;
+      }
       if (method === "GET" && path === "/health") {
         await options.healthCheck?.();
         sendJson(response, 200, {
           status: "ok",
           service: "lip-cloud-control-plane",
           instance_policy: "single",
+          ...(options.storagePolicy ?? {}),
           ...(options.databaseFingerprints
             ? {
                 control_plane_database: options.databaseFingerprints.controlPlane,
@@ -921,12 +979,23 @@ export function createCloudServer(
         if (overlap !== undefined && typeof overlap !== "number") {
           throw new CloudError(422, "validation_failed", "overlap_seconds must be a number");
         }
+        // Required, not optional. The response carries a secret that exists
+        // nowhere else; a caller who cannot name its request cannot be given a
+        // safe retry, and an unsafe retry mints a credential nobody receives.
+        const idempotencyKey = assertIdempotencyKey(
+          typeof request.headers["idempotency-key"] === "string"
+            ? request.headers["idempotency-key"]
+            : undefined
+        );
         sendJson(response, 200, {
           data: await controlPlane.rotateEnvironmentCredentials(
             actor,
             environmentRotateId,
             options.rotateEnvironmentCredentials,
-            typeof overlap === "number" ? { overlap_seconds: overlap } : {}
+            {
+              idempotency_key: idempotencyKey,
+              ...(typeof overlap === "number" ? { overlap_seconds: overlap } : {})
+            }
           )
         }, headers);
         return;

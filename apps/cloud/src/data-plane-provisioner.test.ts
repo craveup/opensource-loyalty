@@ -735,7 +735,7 @@ describe("LocalDataPlaneProvisioner", () => {
     const path = `/cloud/v1/environments/${environment.environment_id}/credentials/rotate`;
     const rotated = await fetch(`${running.url}${path}`, {
       method: "POST",
-      headers: operatorHeaders
+      headers: { ...operatorHeaders, "idempotency-key": "rotate-provisioner-1" }
     });
     expect(rotated.status).toBe(200);
     const bodyText = await rotated.text();
@@ -779,7 +779,7 @@ describe("LocalDataPlaneProvisioner", () => {
     // overlap_seconds threads through: 0 cuts the replaced key off immediately.
     const cutover = await fetch(`${running.url}${path}`, {
       method: "POST",
-      headers: operatorHeaders,
+      headers: { ...operatorHeaders, "idempotency-key": "rotate-provisioner-cutover" },
       body: JSON.stringify({ overlap_seconds: 0 })
     });
     expect(cutover.status).toBe(200);
@@ -795,11 +795,13 @@ describe("LocalDataPlaneProvisioner", () => {
       headers: { authorization: `Bearer ${cutoverBody.data.merchant_api_key}` }
     }).then((r) => r.status)).toBe(200);
 
-    // Invalid overlap values are rejected at the cloud surface.
-    for (const overlap of [-1, 999_999_999, "tomorrow"]) {
+    // Invalid overlap values are rejected at the cloud surface. A distinct,
+    // valid idempotency key per attempt keeps this about the overlap: a reused
+    // key would be answered by the replay path before validation ran.
+    for (const [index, overlap] of [-1, 999_999_999, "tomorrow"].entries()) {
       expect((await fetch(`${running.url}${path}`, {
         method: "POST",
-        headers: operatorHeaders,
+        headers: { ...operatorHeaders, "idempotency-key": `rotate-invalid-${index}` },
         body: JSON.stringify({ overlap_seconds: overlap })
       })).status).toBe(422);
     }
@@ -818,13 +820,14 @@ describe("LocalDataPlaneProvisioner", () => {
       method: "POST",
       headers: {
         ...operatorHeaders,
-        authorization: `Bearer ${outsiderOperator.secret}`
+        authorization: `Bearer ${outsiderOperator.secret}`,
+        "idempotency-key": "rotate-outsider"
       }
     });
     expect([403, 404]).toContain(outsider.status);
     expect((await fetch(
       `${running.url}/cloud/v1/environments/env_unknown/credentials/rotate`,
-      { method: "POST", headers: operatorHeaders }
+      { method: "POST", headers: { ...operatorHeaders, "idempotency-key": "rotate-unknown" } }
     )).status).toBe(404);
 
     // Without a wired provisioner the control plane reports the surface unavailable.
@@ -836,7 +839,7 @@ describe("LocalDataPlaneProvisioner", () => {
     try {
       expect((await fetch(
         `${detached.url}${path}`,
-        { method: "POST", headers: operatorHeaders }
+        { method: "POST", headers: { ...operatorHeaders, "idempotency-key": "rotate-detached" } }
       )).status).toBe(409);
     } finally {
       await detached.close();

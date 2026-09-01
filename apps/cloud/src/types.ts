@@ -264,6 +264,13 @@ export interface EnvironmentCredentialRotationOptions {
   subject: string;
   /** Replaced-key validity after rotation, 0..604800 s. Defaults to 24 h. */
   overlap_seconds?: number;
+  /**
+   * The caller's `Idempotency-Key`. A merchant secret is returned once and
+   * stored nowhere recoverable, so a retry that mints again leaves a live
+   * credential nobody holds. The managed hook uses this to replay the original
+   * answer instead; a hook without durable issuance ignores it.
+   */
+  idempotency_key?: string;
 }
 
 export interface CloudDashboard {
@@ -336,6 +343,13 @@ export interface CloudRepository {
     slug: string
   ): Promise<CloudEnvironment | undefined>;
   environmentsForProject(projectId: string): Promise<CloudEnvironment[]>;
+  /**
+   * Every environment a managed process must have running, across all
+   * organizations. This is the diskless replacement for scanning a data
+   * directory for credential files: the database is the only record of what
+   * exists, so a cold start reads it to rebuild its runtimes.
+   */
+  readyEnvironments(): Promise<CloudEnvironment[]>;
   attachEnvironment(
     environmentId: string,
     binding: {

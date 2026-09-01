@@ -22,6 +22,7 @@
     "cloud:operator": "tsx apps/cloud/src/operator-cli.ts",
     "cloud:provision": "tsx apps/cloud/src/tenant-onboarding-cli.ts",
     "cloud:restore-verify": "tsx apps/cloud/src/restore-verification-cli.ts",
+    "cloud:restore-source-stability": "tsx apps/cloud/src/restore-source-stability-cli.ts",
     "cloud:deployment-verify": "tsx apps/cloud/src/deployment-verification-cli.ts",
     "cloud:evidence:check": "tsx scripts/check-managed-environment-evidence.ts",
     "clean": "tsc -b --clean && rm -rf coverage spec/schemas",

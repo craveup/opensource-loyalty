@@ -394,7 +394,7 @@ describe("Cloud server operator auth", () => {
       }).data);
       const rotate = await fetch(
         `${running.url}/cloud/v1/environments/${environment.environment_id}/credentials/rotate`,
-        { method: "POST", headers }
+        { method: "POST", headers: { ...headers, "idempotency-key": "rotate-admin-1" } }
       );
       expect(rotate.status).toBe(200);
       expect(rotateSubjects).toEqual(["admin-operator-verified"]);
@@ -454,7 +454,7 @@ describe("Cloud server operator auth", () => {
       )).status).toBe(200);
       expect((await fetch(
         `${running.url}/cloud/v1/environments/${environmentA.environment_id}/credentials/rotate`,
-        { method: "POST", headers }
+        { method: "POST", headers: { ...headers, "idempotency-key": "rotate-brand-a-1" } }
       )).status).toBe(200);
       expect(rotateSubjects).toEqual(["brand-a-operator"]);
 
@@ -463,9 +463,12 @@ describe("Cloud server operator auth", () => {
         `${running.url}/cloud/v1/organizations/${orgB.organization.organization_id}`,
         { headers }
       )).status).toBe(404);
+      // A well-formed request, so the 404 is authorization talking rather than
+      // validation: another organization's environment is indistinguishable
+      // from one that does not exist.
       expect((await fetch(
         `${running.url}/cloud/v1/environments/${environmentB.environment_id}/credentials/rotate`,
-        { method: "POST", headers }
+        { method: "POST", headers: { ...headers, "idempotency-key": "rotate-brand-b-1" } }
       )).status).toBe(404);
 
       // Operator management stays platform-admin only.
@@ -482,7 +485,7 @@ describe("Cloud server operator auth", () => {
       )).status).toBe(200);
       expect((await fetch(
         `${running.url}/cloud/v1/environments/${environmentB.environment_id}/credentials/rotate`,
-        { method: "POST", headers: adminHeaders }
+        { method: "POST", headers: { ...adminHeaders, "idempotency-key": "rotate-admin-brand-b" } }
       )).status).toBe(200);
     } finally {
       await running.close();

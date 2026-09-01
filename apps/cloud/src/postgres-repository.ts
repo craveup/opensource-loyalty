@@ -55,6 +55,11 @@ const migrations = [
     version: 5,
     name: "operators",
     url: new URL("../migrations/005_operators.sql", import.meta.url)
+  },
+  {
+    version: 6,
+    name: "credential_operations",
+    url: new URL("../migrations/006_credential_operations.sql", import.meta.url)
   }
 ] as const;
 
@@ -711,6 +716,16 @@ export class PostgresCloudRepository implements CloudRepository {
       WHERE project_id = $1
       ORDER BY created_at
     `, [projectId]);
+    return result.rows.map(environment);
+  }
+
+  public async readyEnvironments(): Promise<CloudEnvironment[]> {
+    const result = await this.pool.query(`
+      SELECT *
+      FROM lip_cloud_environments
+      WHERE status = 'ready'
+      ORDER BY created_at
+    `);
     return result.rows.map(environment);
   }
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Pool, type PoolClient, type PoolConfig, type QueryResultRow } from "pg";
@@ -15,7 +16,26 @@ import { assertSessionLeaseCompatibleUrl } from "./connection-policy.js";
 
 export { assertSessionLeaseCompatibleUrl } from "./connection-policy.js";
 
-const migrationUrl = new URL("../migrations/001_normalized_engine.sql", import.meta.url);
+const migrations = [
+  {
+    version: 1,
+    name: "normalized_engine",
+    url: new URL("../migrations/001_normalized_engine.sql", import.meta.url)
+  },
+  {
+    version: 2,
+    name: "tenant_isolation",
+    url: new URL("../migrations/002_tenant_isolation.sql", import.meta.url)
+  },
+  {
+    version: 3,
+    name: "tenant_runtime_role",
+    url: new URL("../migrations/003_tenant_runtime_role.sql", import.meta.url)
+  }
+] as const;
+
+/** The non-bypassing role every tenant transaction assumes. See migration 003. */
+export const TENANT_RUNTIME_ROLE = "lip_tenant_runtime";
 const engineTables = [
   "lip_engine_identities",
   "lip_engine_balance_lots",
@@ -115,6 +135,140 @@ async function lockTransaction(client: PoolClient, key: string): Promise<void> {
   await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
 }
 
+/**
+ * Runs `run` in one transaction whose tenant scope is set for that transaction
+ * only, so row-level security can enforce the isolation the query predicates
+ * merely assert (see migrations/002_tenant_isolation.sql).
+ *
+ * The `true` third argument to set_config is what makes this safe on a pooled
+ * connection: the setting is reverted on COMMIT or ROLLBACK, so the next
+ * transaction on the same socket starts with no tenant and can read nothing
+ * until it declares its own.
+ */
+export async function withTenantTransaction<T>(
+  pool: Pool,
+  tenantId: string,
+  run: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  if (!tenantId.trim()) throw new Error("A tenant id is required to open a tenant transaction");
+  return inTransaction(pool, async (client) => {
+    // Assume the non-bypassing role first. PostgreSQL checks BYPASSRLS on the
+    // current role, and managed providers hand out owner roles that have it --
+    // without this, the policies are present, forced, and completely inert.
+    // SET LOCAL reverts on COMMIT/ROLLBACK, like the setting below.
+    await client.query(`SET LOCAL ROLE ${TENANT_RUNTIME_ROLE}`);
+    await client.query("SELECT set_config('lip.tenant_id', $1, true)", [tenantId]);
+    return run(client);
+  });
+}
+
+export interface TenantIsolationStatus {
+  /** Both probes held: no tenant context reads nothing, and one tenant cannot read another. */
+  enforced: boolean;
+  current_role: string;
+  runtime_role_available: boolean;
+  /**
+   * True when the *connecting* role could read every tenant's rows if it issued
+   * a query without assuming the runtime role.
+   *
+   * This is expected on a managed provider: the service connects as the
+   * database owner because it runs its own migrations, and Neon grants that
+   * role BYPASSRLS. It is not an application bypass — every tenant-data path
+   * assumes `lip_tenant_runtime` first — but it does mean that whoever holds
+   * the connection string holds administrator access to the database, which is
+   * true of any owner credential and is worth stating rather than implying.
+   */
+  owner_bypasses_row_level_security: boolean;
+  detail?: string;
+}
+
+/**
+ * Proves tenant isolation is in force on this database, by trying to break it.
+ *
+ * Static checks cannot answer this. Whether RLS actually filters depends on an
+ * attribute of the connecting role that no amount of correct SQL in a migration
+ * can guarantee, and the failure mode is silent: every query succeeds and
+ * returns other tenants' rows. So the check writes a row under one scope and
+ * reads it back with none, and reports isolation as enforced only when that
+ * read comes back empty.
+ *
+ * Managed startup calls this and refuses to serve if it fails. A deployment
+ * that cannot prove isolation must not accept tenant traffic.
+ */
+export async function assertTenantIsolationEnforced(pool: Pool): Promise<TenantIsolationStatus> {
+  const probeTenant = `lip-isolation-probe-${randomUUID()}`;
+  const otherTenant = `lip-isolation-other-${randomUUID()}`;
+  const probeKey = `isolation-probe-${randomUUID()}`;
+  const identity = await pool.query<{
+    current_role: string;
+    bypasses: boolean;
+    runtime_role_available: boolean;
+  }>(`
+    SELECT current_user AS current_role,
+           COALESCE((SELECT rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user), false)
+             AS bypasses,
+           EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1) AS runtime_role_available
+  `, [TENANT_RUNTIME_ROLE]);
+  const row = identity.rows[0];
+  const base = {
+    current_role: row?.current_role ?? "unknown",
+    runtime_role_available: Boolean(row?.runtime_role_available),
+    owner_bypasses_row_level_security: Boolean(row?.bypasses)
+  };
+
+  try {
+    await withTenantTransaction(pool, probeTenant, async (client) => {
+      await client.query(`
+        INSERT INTO lip_platform_state (tenant_id, state_key, value, revision, updated_at)
+        VALUES ($1, $2, '{}'::jsonb, 1, now())
+      `, [probeTenant, probeKey]);
+    });
+
+    // A request that declares no tenant. This is the shape of a code path that
+    // forgot to scope itself, and it must come back empty rather than
+    // returning every tenant's rows.
+    const unscoped = await inTransaction(pool, async (client) => {
+      await client.query(`SET LOCAL ROLE ${TENANT_RUNTIME_ROLE}`);
+      return client.query("SELECT 1 FROM lip_platform_state WHERE state_key = $1", [probeKey]);
+    });
+
+    // A request that declares the wrong tenant, which is the shape of a
+    // credential used against someone else's environment.
+    const crossTenant = await withTenantTransaction(pool, otherTenant, (client) =>
+      client.query("SELECT 1 FROM lip_platform_state WHERE state_key = $1", [probeKey]));
+
+    const enforced = unscoped.rowCount === 0 && crossTenant.rowCount === 0;
+    return {
+      ...base,
+      enforced,
+      ...(enforced
+        ? {}
+        : {
+            detail:
+              "Row-level security is not filtering tenant rows " +
+              `(unscoped read ${unscoped.rowCount ?? 0} row(s), cross-tenant read ` +
+              `${crossTenant.rowCount ?? 0} row(s)). Apply migration 003 so ${base.current_role} ` +
+              `can assume ${TENANT_RUNTIME_ROLE}, or connect as a role without BYPASSRLS.`
+          })
+    };
+  } catch (error) {
+    return {
+      ...base,
+      enforced: false,
+      detail: error instanceof Error ? error.message : String(error)
+    };
+  } finally {
+    // Remove the probe row as its owner, and again unscoped, so no residue
+    // survives whichever of the two paths this database actually permits.
+    await withTenantTransaction(pool, probeTenant, async (client) => {
+      await client.query("DELETE FROM lip_platform_state WHERE state_key = $1", [probeKey]);
+    }).catch(() => undefined);
+    await pool
+      .query("DELETE FROM lip_platform_state WHERE state_key = $1", [probeKey])
+      .catch(() => undefined);
+  }
+}
+
 export class PostgresMigrator {
   private readonly pool: Pool;
 
@@ -123,7 +277,12 @@ export class PostgresMigrator {
   }
 
   public async migrate(): Promise<void> {
-    const sql = await readFile(fileURLToPath(migrationUrl), "utf8");
+    const pending = await Promise.all(
+      migrations.map(async (migration) => ({
+        ...migration,
+        sql: await readFile(fileURLToPath(migration.url), "utf8")
+      }))
+    );
     await inTransaction(this.pool, async (client) => {
       await client.query(`
         CREATE TABLE IF NOT EXISTS lip_schema_migrations (
@@ -133,16 +292,18 @@ export class PostgresMigrator {
         )
       `);
       await lockTransaction(client, "lip:schema-migrations");
-      const existing = await client.query(
-        "SELECT version FROM lip_schema_migrations WHERE version = $1",
-        [1]
+      const existing = await client.query<{ version: number }>(
+        "SELECT version FROM lip_schema_migrations"
       );
-      if (existing.rowCount) return;
-      await client.query(sql);
-      await client.query(
-        "INSERT INTO lip_schema_migrations (version, name) VALUES ($1, $2)",
-        [1, "normalized_engine"]
-      );
+      const applied = new Set(existing.rows.map((row) => row.version));
+      for (const migration of pending) {
+        if (applied.has(migration.version)) continue;
+        await client.query(migration.sql);
+        await client.query(
+          "INSERT INTO lip_schema_migrations (version, name) VALUES ($1, $2)",
+          [migration.version, migration.name]
+        );
+      }
     });
   }
 }
@@ -175,19 +336,21 @@ export class PostgresJsonStateStore<T> implements AsyncStateStore<T> {
   }
 
   public async load(): Promise<VersionedState<T> | null> {
-    const result = await this.pool.query<RevisionRow & { value: T }>(`
-      SELECT value, revision
-      FROM lip_platform_state
-      WHERE tenant_id = $1 AND state_key = $2
-    `, [this.tenantId, this.key]);
-    const row = result.rows[0];
+    const row = await this.inTenantTransaction(async (client) => {
+      const result = await client.query<RevisionRow & { value: T }>(`
+        SELECT value, revision
+        FROM lip_platform_state
+        WHERE tenant_id = $1 AND state_key = $2
+      `, [this.tenantId, this.key]);
+      return result.rows[0];
+    });
     return row
       ? { state: structuredClone(row.value), revision: safeInteger(row.revision, "State revision") }
       : null;
   }
 
   public async save(state: T, expectedRevision?: number): Promise<number> {
-    return inTransaction(this.pool, async (client) => {
+    return this.inTenantTransaction(async (client) => {
       await lockTransaction(client, `lip:state:${this.tenantId}:${this.key}`);
       const current = await client.query<RevisionRow>(`
         SELECT revision
@@ -212,14 +375,20 @@ export class PostgresJsonStateStore<T> implements AsyncStateStore<T> {
   }
 
   public async clear(): Promise<void> {
-    await this.pool.query(
-      "DELETE FROM lip_platform_state WHERE tenant_id = $1 AND state_key = $2",
-      [this.tenantId, this.key]
-    );
+    await this.inTenantTransaction(async (client) => {
+      await client.query(
+        "DELETE FROM lip_platform_state WHERE tenant_id = $1 AND state_key = $2",
+        [this.tenantId, this.key]
+      );
+    });
   }
 
   public async close(): Promise<void> {
     if (this.ownsPool) await this.pool.end();
+  }
+
+  private async inTenantTransaction<R>(run: (client: PoolClient) => Promise<R>): Promise<R> {
+    return withTenantTransaction(this.pool, this.tenantId, run);
   }
 }
 
@@ -252,16 +421,11 @@ export class PostgresEngineRepository {
   }
 
   public async load(): Promise<VersionedState<LoyaltyEngineState> | null> {
-    const client = await this.pool.connect();
-    try {
-      return await this.loadWithClient(client);
-    } finally {
-      client.release();
-    }
+    return this.inTenantTransaction((client) => this.loadWithClient(client));
   }
 
   public async save(state: LoyaltyEngineState, expectedRevision?: number): Promise<number> {
-    return inTransaction(this.pool, async (client) => {
+    return this.inTenantTransaction(async (client) => {
       await this.lockEngine(client);
       return this.saveWithClient(client, state, expectedRevision);
     });
@@ -271,7 +435,7 @@ export class PostgresEngineRepository {
     engine: LoyaltyEngine,
     operation: () => T | Promise<T>
   ): Promise<T> {
-    return this.serialized(async () => inTransaction(this.pool, async (client) => {
+    return this.serialized(async () => this.inTenantTransaction(async (client) => {
       await this.lockEngine(client);
       const current = await this.loadWithClient(client);
       if (current) engine.replaceState(current.state);
@@ -314,7 +478,7 @@ export class PostgresEngineRepository {
   }
 
   public async clear(): Promise<void> {
-    await inTransaction(this.pool, async (client) => {
+    await this.inTenantTransaction(async (client) => {
       await this.lockEngine(client);
       await client.query(
         "DELETE FROM lip_engine_states WHERE tenant_id = $1 AND program_id = $2",
@@ -326,6 +490,10 @@ export class PostgresEngineRepository {
   public async close(): Promise<void> {
     await Promise.allSettled(this.queues.values());
     if (this.ownsPool) await this.pool.end();
+  }
+
+  private async inTenantTransaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
+    return withTenantTransaction(this.pool, this.tenantId, run);
   }
 
   private async lockEngine(client: PoolClient): Promise<void> {

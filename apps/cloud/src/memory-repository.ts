@@ -355,6 +355,12 @@ export class MemoryCloudRepository implements CloudRepository {
       .map(clone);
   }
 
+  public async readyEnvironments(): Promise<CloudEnvironment[]> {
+    return [...this.environments.values()]
+      .filter((environment) => environment.status === "ready")
+      .map(clone);
+  }
+
   public async attachEnvironment(
     environmentId: string,
     binding: {
