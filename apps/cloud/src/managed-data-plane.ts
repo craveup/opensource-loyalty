@@ -11,7 +11,7 @@ import {
   type TenantPrincipal
 } from "@loyalty-interchange/server";
 import { EngineError } from "@loyalty-interchange/reference";
-import { createBootstrapProgram } from "./bootstrap-program.js";
+import { createBootstrapProgram, isBootstrapProgram } from "./bootstrap-program.js";
 import type { CloudProvisioner } from "./provisioning.js";
 import { CloudError } from "./service.js";
 import type {
@@ -227,6 +227,52 @@ export class ManagedPostgresDataPlaneManager implements CloudProvisioner {
     return [...this.started.values()].map((runtime) => ({ ...runtime.descriptor }));
   }
 
+  /** Enrolls a Crave customer through the same transactional tenant runtime as HTTP traffic. */
+  public async enrollCustomer(input: {
+    tenantId: string;
+    programId: string;
+    customerId: string;
+    idempotencyKey: string;
+  }): Promise<{ member_id: string }> {
+    const matches = (await this.options.readyEnvironments()).filter((candidate) =>
+      candidate.tenant_id === input.tenantId &&
+      candidate.program_id === input.programId
+    );
+    if (matches.length !== 1) {
+      throw new CloudError(
+        503,
+        "customer_loyalty_runtime_unavailable",
+        matches.length === 0
+          ? "Customer loyalty runtime is unavailable"
+          : "Customer loyalty runtime ownership is ambiguous"
+      );
+    }
+    const runtime = await this.runtimeFor(matches[0]!);
+    if (isBootstrapProgram(runtime.platform.programs.activeProgram())) {
+      throw new CloudError(
+        409,
+        "program_not_configured",
+        "Publish a loyalty program before enrolling customers"
+      );
+    }
+    const enrolled = await runtime.platform.executeEngineOperation(() =>
+      runtime.platform.engine.enroll({
+        context: {
+          protocol_version: "1.0",
+          profile: "foodservice/1.0",
+          request_id: input.idempotencyKey.slice(0, 128),
+          idempotency_key: input.idempotencyKey,
+          occurred_at: new Date().toISOString(),
+          source: { system: "lip-cloud-customer-gateway", instance: "server" }
+        },
+        program_id: input.programId,
+        identity: { type: "external", value: input.customerId },
+        member_id: input.customerId
+      })
+    );
+    return { member_id: enrolled.member.member_id };
+  }
+
   /** Stops a runtime without touching its rows; a later request restarts it. */
   public async suspend(environmentId: string): Promise<void> {
     const pending = this.runtimes.get(environmentId);
@@ -402,9 +448,18 @@ export class ManagedPostgresDataPlaneManager implements CloudProvisioner {
       }
       const handler = createReferenceRequestHandler(platform.engine, {
         apiKey: rootKey,
+        mountPath: `${RUNTIME_PREFIX}${environment.environment_id}`,
         reservationTtlSeconds: active.reservation_ttl_seconds ?? 120,
         executeEngineOperation: platform.executeEngineOperation,
         readEngineSnapshot: platform.readEngineSnapshot,
+        protocolWriteGuard: () => isBootstrapProgram(platform.programs.activeProgram())
+          ? {
+              status: 409,
+              code: "program_not_configured",
+              title: "Loyalty program not configured",
+              detail: "Publish a loyalty program before accepting protocol mutations"
+            }
+          : undefined,
         admin: {
           ...(platform.adminAssetRoot ? { assetRoot: platform.adminAssetRoot } : {}),
           storage: platform.store.status,

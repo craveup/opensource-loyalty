@@ -67,42 +67,6 @@ function context(idempotencyKey: string): Record<string, unknown> {
   };
 }
 
-function order(): Record<string, unknown> {
-  return {
-    order_id: "order-1",
-    scope: {
-      program_id: "program-alpha",
-      brand_id: "brand-1",
-      merchant_id: "merchant-1",
-      location_id: "location-1"
-    },
-    member_id: "member-1",
-    channel: "counter",
-    status: "paid",
-    business_date: "2026-01-01",
-    placed_at: "2026-01-01T10:00:00.000Z",
-    closed_at: "2026-01-01T10:02:00.000Z",
-    lines: [{
-      line_id: "line-1",
-      kind: "item",
-      product_id: "coffee",
-      quantity: 1,
-      unit_price: { amount: 5_000, currency: "USD" },
-      subtotal: { amount: 5_000, currency: "USD" },
-      discount: { amount: 0, currency: "USD" },
-      tax: { amount: 0, currency: "USD" }
-    }],
-    totals: {
-      subtotal: { amount: 5_000, currency: "USD" },
-      discount: { amount: 0, currency: "USD" },
-      tax: { amount: 0, currency: "USD" },
-      tip: { amount: 0, currency: "USD" },
-      service_charge: { amount: 0, currency: "USD" },
-      total: { amount: 5_000, currency: "USD" }
-    }
-  };
-}
-
 async function sqlitePlatform(target: CloudEnvironment): Promise<ManagedTenantPlatform> {
   const directory = mkdtempSync(join(tmpdir(), "lip-managed-"));
   temporaryDirectories.push(directory);
@@ -223,6 +187,91 @@ describe("managed data-plane manager", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ protocol_version: "1.0" });
+  });
+
+  it("keeps the environment prefix in Admin redirects and discovery links", async () => {
+    const managed = manager({ environments: [environment()] });
+    const server = await listen(managed);
+    const base = `${server.url}/runtime/v1/environments/env-alpha`;
+
+    const redirect = await fetch(`${base}/admin`, { redirect: "manual" });
+    expect(redirect.status).toBe(302);
+    expect(redirect.headers.get("location")).toBe(
+      "/runtime/v1/environments/env-alpha/admin/"
+    );
+
+    const issued = await managed.issueMerchantCredential("env-alpha", {
+      subject: "operator@crave"
+    });
+    const bootstrap = await fetch(`${base}/admin/api/v1/bootstrap`, {
+      headers: { authorization: `Bearer ${issued.merchant_api_key}` }
+    });
+    expect(await bootstrap.json()).toMatchObject({
+      links: {
+        admin: "/runtime/v1/environments/env-alpha/admin/",
+        health: "/runtime/v1/environments/env-alpha/health",
+        capabilities: "/runtime/v1/environments/env-alpha/lip/v1/capabilities",
+        api: "/runtime/v1/environments/env-alpha/lip/v1"
+      }
+    });
+
+    const session = await fetch(`${base}/admin/api/v1/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ api_key: issued.merchant_api_key })
+    });
+    expect(session.status).toBe(204);
+    expect(session.headers.getSetCookie()).toEqual(expect.arrayContaining([
+      expect.stringContaining("Path=/runtime/v1/environments/env-alpha/admin")
+    ]));
+  });
+
+  it("enrolls a customer through the managed tenant runtime", async () => {
+    const realProgram = {
+      ...createBootstrapProgram("program-alpha"),
+      name: "Published points",
+      earn_rate: { points: 1, spend_minor_units: 100 },
+      metadata: {}
+    };
+    const managed = manager({
+      environments: [environment()],
+      createPlatform: async (target) => {
+        const directory = mkdtempSync(join(tmpdir(), "lip-managed-customer-"));
+        temporaryDirectories.push(directory);
+        const demo = await createDemoPlatform({
+          databasePath: join(directory, `${target.tenant_id}.db`),
+          program: realProgram,
+          seed: false,
+          webhooks: []
+        });
+        return {
+          ...demo,
+          store: { status: demo.store.status },
+          executeEngineOperation: async <T>(operation: () => T | Promise<T>): Promise<T> => {
+            const result = await operation();
+            demo.store.save(demo.engine.exportState());
+            return result;
+          },
+          readEngineSnapshot: async <T>(read: (engine: typeof demo.engine) => T | Promise<T>) =>
+            read(demo.engine)
+        };
+      }
+    });
+    const customerRuntime = managed as unknown as {
+      enrollCustomer(input: {
+        tenantId: string;
+        programId: string;
+        customerId: string;
+        idempotencyKey: string;
+      }): Promise<{ member_id: string }>;
+    };
+
+    await expect(customerRuntime.enrollCustomer({
+      tenantId: "tenant-alpha",
+      programId: "program-alpha",
+      customerId: "customer-alpha",
+      idempotencyKey: "customer:alpha:program:alpha"
+    })).resolves.toEqual({ member_id: "customer-alpha" });
   });
 
   it("refuses an environment that is not ready and one that does not exist", async () => {
@@ -431,7 +480,7 @@ describe("bootstrap program", () => {
     expect(isBootstrapProgram(program)).toBe(true);
   });
 
-  it("earns nothing and can redeem nothing before the merchant publishes", async () => {
+  it("refuses protocol mutations before the merchant publishes", async () => {
     const managed = manager({ environments: [environment()] });
     const server = await listen(managed);
     const issued = await managed.issueMerchantCredential("env-alpha", { subject: "operator" });
@@ -449,38 +498,7 @@ describe("bootstrap program", () => {
       identity: { type: "token", value: "guest-token-1", issuer: "test-identity" },
       member_id: "member-1"
     });
-    expect(enrolled.status).toBe(201);
-
-    const accrued = await post("/lip/v1/accruals", {
-      context: context("accrual-1"),
-      member_id: "member-1",
-      order: order()
-    });
-    expect(accrued.status).toBe(201);
-    expect(await accrued.json()).toMatchObject({ entry: { amount: 0 } });
-
-    const account = await post("/lip/v1/accounts/get", {
-      context: context("account-1"),
-      member_id: "member-1",
-      program_id: "program-alpha"
-    });
-    expect(account.status).toBe(200);
-    const balances = (await account.json() as { balances: Array<{ available: number }> }).balances;
-    expect(balances.every((balance) => balance.available === 0)).toBe(true);
-
-    // No rewards exist, so nothing is reservable no matter the balance.
-    const reserved = await post("/lip/v1/redemptions/reserve", {
-      context: context("reserve-1"),
-      member_id: "member-1",
-      program_id: "program-alpha",
-      reward_id: "any-reward",
-      scope: {
-        program_id: "program-alpha",
-        brand_id: "brand-1",
-        merchant_id: "merchant-1",
-        location_id: "location-1"
-      }
-    });
-    expect(reserved.ok).toBe(false);
+    expect(enrolled.status).toBe(409);
+    expect(await enrolled.json()).toMatchObject({ code: "program_not_configured" });
   });
 });

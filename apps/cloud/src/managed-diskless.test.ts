@@ -98,4 +98,18 @@ describe("managed startup configuration", () => {
       shutdown.indexOf("running.close()")
     );
   });
+
+  it("runs and closes the credential-handoff retention lifecycle", () => {
+    expect(cli).toContain("credentials.startHandoffRetentionSweep()");
+    const shutdown = cli.slice(cli.indexOf('for (const signal of ["SIGINT"'));
+    expect(shutdown.indexOf("credentials?.close()")).toBeGreaterThanOrEqual(0);
+    expect(shutdown.indexOf("credentials?.close()")).toBeLessThan(
+      shutdown.indexOf("managedPool?.end()")
+    );
+  });
+
+  it("wires customer enrollment to the selected managed or file-backed runtime", () => {
+    expect(cli).toContain("managed!.enrollCustomer");
+    expect(cli).not.toMatch(/if \(customerConfigured && !provisioner\) \{/u);
+  });
 });

@@ -22,6 +22,7 @@ export function assertDistinctRestoreDatabases(
 }
 
 const relations = [
+  "lip_cloud_credential_operations",
   "lip_cloud_environments",
   "lip_cloud_organizations",
   "lip_cloud_projects",

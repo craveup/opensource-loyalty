@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { Pool } from "pg";
 import {
   assertDistinctRestoreDatabases,
+  captureRestoreEvidence,
   captureStableRestoreSourceEvidence,
   compareRestoreEvidence,
   type RestoreEvidence,
@@ -16,6 +18,24 @@ const evidence = (): RestoreEvidence => ({
 });
 
 describe("backup restore verification", () => {
+  it("captures credential operations as durable restore evidence", async () => {
+    const queried: string[] = [];
+    const pool = {
+      query: async (sql: string) => {
+        queried.push(sql);
+        if (sql.includes("schema_migrations")) return { rows: [] };
+        return { rows: [{ checksum: "0", row_count: "0" }] };
+      }
+    } as unknown as Pool;
+
+    const captured = await captureRestoreEvidence(pool);
+    expect(captured.relations).toHaveProperty("lip_cloud_credential_operations", {
+      checksum: "0",
+      row_count: 0
+    });
+    expect(queried.some((sql) => sql.includes("FROM lip_cloud_credential_operations"))).toBe(true);
+  });
+
   it("accepts an exact schema and data fingerprint match", () => {
     expect(() =>
       compareRestoreEvidence(evidence(), structuredClone(evidence())),

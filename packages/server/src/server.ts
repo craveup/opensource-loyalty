@@ -103,7 +103,18 @@ class TransportError extends Error {
 
 export interface ServerOptions {
   apiKey: string;
+  /** Public path mounted in front of this listener-independent handler. */
+  mountPath?: string;
   writeFrozen?: boolean;
+  /** Dynamically refuses protocol mutations that are unsafe for current tenant state. */
+  protocolWriteGuard?: () =>
+    | undefined
+    | {
+        status: number;
+        code: string;
+        title: string;
+        detail: string;
+      };
   reservationTtlSeconds?: number;
   persistState?: (state: LoyaltyEngineState) => void;
   /**
@@ -376,26 +387,31 @@ async function adminBootstrapDocument(
       ]
     },
     links: {
-      admin: "/admin/",
-      health: "/health",
-      capabilities: "/lip/v1/capabilities",
-      api: "/lip/v1"
+      admin: mountedPath(options, "/admin/"),
+      health: mountedPath(options, "/health"),
+      capabilities: mountedPath(options, "/lip/v1/capabilities"),
+      api: mountedPath(options, "/lip/v1")
     }
   };
 }
 
-function wellKnownDocument(): WellKnownDocument {
+function wellKnownDocument(options: ServerOptions): WellKnownDocument {
   return {
     protocol: "LIP",
     protocol_version: "1.0",
     profiles: ["foodservice/1.0"],
     endpoints: {
-      api: "/lip/v1",
-      capabilities: "/lip/v1/capabilities",
-      health: "/health"
+      api: mountedPath(options, "/lip/v1"),
+      capabilities: mountedPath(options, "/lip/v1/capabilities"),
+      health: mountedPath(options, "/health")
     },
     authentication: ["bearer"]
   };
+}
+
+function mountedPath(options: ServerOptions, path: string): string {
+  const prefix = options.mountPath?.replace(/\/+$/u, "") ?? "";
+  return `${prefix}${path}`;
 }
 
 function capabilitiesDocument(reservationTtlSeconds: number): CapabilitiesDocument {
@@ -1037,7 +1053,7 @@ export function createReferenceRequestHandler(
       }
 
       if (method === "GET" && path === "/.well-known/lip") {
-        sendJson(response, 200, wellKnownDocument());
+        sendJson(response, 200, wellKnownDocument(options));
         return;
       }
 
@@ -1490,7 +1506,10 @@ export function createReferenceRequestHandler(
       }
 
       if (adminEnabled && method === "GET" && path === "/admin") {
-        response.writeHead(302, { location: "/admin/", "cache-control": "no-store" });
+        response.writeHead(302, {
+          location: mountedPath(options, "/admin/"),
+          "cache-control": "no-store"
+        });
         response.end();
         return;
       }
@@ -1522,10 +1541,11 @@ export function createReferenceRequestHandler(
         const csrf = randomUUID();
         adminSessions.set(session, { csrf, principal });
         const cookieAttrs = adminCookieAttributes(request);
+        const adminCookiePath = mountedPath(options, "/admin");
         response.writeHead(204, {
           "set-cookie": [
-            `lip_admin_session=${encodeURIComponent(session)}; Path=/admin; HttpOnly${cookieAttrs}; Max-Age=28800`,
-            `lip_admin_csrf=${encodeURIComponent(csrf)}; Path=/admin${cookieAttrs}; Max-Age=28800`
+            `lip_admin_session=${encodeURIComponent(session)}; Path=${adminCookiePath}; HttpOnly${cookieAttrs}; Max-Age=28800`,
+            `lip_admin_csrf=${encodeURIComponent(csrf)}; Path=${adminCookiePath}${cookieAttrs}; Max-Age=28800`
           ],
           "x-lip-csrf-token": csrf,
           "cache-control": "no-store"
@@ -1538,10 +1558,11 @@ export function createReferenceRequestHandler(
         const session = cookieValue(request, "lip_admin_session");
         if (session) adminSessions.delete(session);
         const cookieAttrs = adminCookieAttributes(request);
+        const adminCookiePath = mountedPath(options, "/admin");
         response.writeHead(204, {
           "set-cookie": [
-            `lip_admin_session=; Path=/admin; HttpOnly${cookieAttrs}; Max-Age=0`,
-            `lip_admin_csrf=; Path=/admin${cookieAttrs}; Max-Age=0`
+            `lip_admin_session=; Path=${adminCookiePath}; HttpOnly${cookieAttrs}; Max-Age=0`,
+            `lip_admin_csrf=; Path=${adminCookiePath}${cookieAttrs}; Max-Age=0`
           ],
           "cache-control": "no-store"
         });
@@ -2509,6 +2530,18 @@ export function createReferenceRequestHandler(
         response.setHeader("www-authenticate", "Bearer");
         sendJson(response, 401, problem(401, "Unauthorized", "unauthorized"), "application/problem+json");
         return;
+      }
+      if (protocolPermission(path) === "protocol:write") {
+        const denial = options.protocolWriteGuard?.();
+        if (denial) {
+          sendJson(
+            response,
+            denial.status,
+            problem(denial.status, denial.title, denial.code, denial.detail),
+            "application/problem+json"
+          );
+          return;
+        }
       }
       if (writeFrozen && protocolPermission(path) === "protocol:write") {
         response.setHeader("retry-after", "30");
