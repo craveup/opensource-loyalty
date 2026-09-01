@@ -746,7 +746,7 @@ export class CloudControlPlane {
       environmentId: string,
       options: EnvironmentCredentialRotationOptions
     ) => Promise<EnvironmentCredentialRotation>,
-    input: { overlap_seconds?: number } = {}
+    input: { overlap_seconds?: number; idempotency_key?: string } = {}
   ): Promise<RotatedEnvironmentCredentials> {
     const environment = await this.requiredEnvironment(environmentId);
     const project = await this.requiredProject(environment.project_id);
@@ -776,9 +776,14 @@ export class CloudControlPlane {
         subject: principal.subject,
         ...(input.overlap_seconds !== undefined
           ? { overlap_seconds: input.overlap_seconds }
-          : {})
+          : {}),
+        ...(input.idempotency_key ? { idempotency_key: input.idempotency_key } : {})
       });
     } catch (error) {
+      // An idempotency conflict or an expired handoff is a precise answer the
+      // caller needs; flattening it to "runtime unavailable" would tell them to
+      // retry the one thing that must not be retried.
+      if (error instanceof CloudError) throw error;
       throw new CloudError(
         409,
         "runtime_unavailable",

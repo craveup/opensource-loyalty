@@ -1,14 +1,27 @@
 # Managed Crave Loyalty shared clusters
 #
-# Development, sandbox, and production are intentionally separate services
-# with separate disks, secrets, and independently managed Neon databases. Both
-# database variables in one service point at that environment's direct
-# (unpooled) Neon endpoint. Never reuse a Crave application database or a
-# `-pooler` endpoint.
+# Development, sandbox, and production are intentionally separate services with
+# separate secrets and independently managed Neon databases. Never reuse a Crave
+# application database or a `-pooler` endpoint: the runtime holds
+# session-scoped advisory leases, which a transaction pooler silently breaks.
 #
-# `numInstances: 1` is a correctness constraint while Admin extension state
-# and webhook dispatch retain single-process assumptions. The attached disks
-# also prevent accidental scale-out. Promote and roll back deliberately.
+# There is no disk. Every durable byte -- programs, members, balances, ledgers,
+# webhook state, access-control key hashes, credential handoffs -- is a row in
+# that environment's Neon database, so a container is disposable and the service
+# can run on Render Free after development certification. `LIP_CLOUD_PUBLIC_BASE_URL`
+# is what selects this mode;
+# the file-backed provisioner (`LIP_CLOUD_PROGRAM_DIR`) is for standalone Docker
+# and local development only, and setting both is refused at boot.
+#
+# `numInstances: 1` is a correctness constraint, not a cost decision: the
+# schedulers, webhook dispatch and credential single-flight assume one process.
+# Do not scale out before distributed leasing lands.
+#
+# Migrations run at startup under advisory locks. `preDeployCommand` repeats
+# them as defence in depth; the service does not depend on it. That is what
+# makes Render Free viable for development once no disk is attached -- Free has
+# no pre-deploy step. Development stays on `starter` until its certification
+# passes, then the plan is lowered deliberately rather than by blueprint.
 
 previews:
   generation: off
@@ -25,18 +38,14 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: node apps/cloud/dist/cli.js
     preDeployCommand: node apps/cloud/dist/migrate-cli.js
-    healthCheckPath: /health
-    disk:
-      name: crave-loyalty-development-data
-      mountPath: /data
-      sizeGB: 1
+    healthCheckPath: /ready
     envVars:
       - key: LIP_CLOUD_DEPLOYMENT_ENVIRONMENT
         value: development
       - key: LIP_CLOUD_DATABASE_URL
         sync: false # direct development Neon URL; never a Crave DB or pooler
-      - key: LIP_CLOUD_DATA_PLANE_DATABASE_URL
-        sync: false # same direct development Neon URL
+      - key: LIP_CLOUD_PUBLIC_BASE_URL
+        sync: false # this service\'s exact public origin; selects the diskless managed runtime
       - key: LIP_CLOUD_API_KEY
         sync: false # bootstrap only; retire after the first operator exists
       - key: LIP_CLOUD_CREDENTIAL_KEY
@@ -55,20 +64,6 @@ services:
         value: render-oregon
       - key: LIP_CLOUD_DEFAULT_PLAN
         value: free
-      - key: LIP_CLOUD_PROGRAM_DIR
-        value: /data/programs
-      - key: LIP_CLOUD_DATA_DIR
-        value: /data/lip-cloud
-      - key: LIP_CLOUD_BACKUP_DIR
-        value: /data/lip-cloud/backups
-      - key: LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION
-        value: "false"
-      - key: LIP_CLOUD_DATA_PLANE_HOST
-        value: 0.0.0.0
-      - key: LIP_CLOUD_DATA_PLANE_PUBLIC_HOST
-        value: crave-loyalty-development
-      - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
-        value: "13210"
       # Optional production-equivalent auth/billing/customer integrations.
       - key: LIP_CLOUD_OIDC_ISSUER
         sync: false
@@ -108,18 +103,14 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: node apps/cloud/dist/cli.js
     preDeployCommand: node apps/cloud/dist/migrate-cli.js
-    healthCheckPath: /health
-    disk:
-      name: crave-loyalty-sandbox-data
-      mountPath: /data
-      sizeGB: 1
+    healthCheckPath: /ready
     envVars:
       - key: LIP_CLOUD_DEPLOYMENT_ENVIRONMENT
         value: sandbox
       - key: LIP_CLOUD_DATABASE_URL
         sync: false # direct sandbox Neon URL; never a Crave DB or pooler
-      - key: LIP_CLOUD_DATA_PLANE_DATABASE_URL
-        sync: false # same direct sandbox Neon URL
+      - key: LIP_CLOUD_PUBLIC_BASE_URL
+        sync: false # this service\'s exact public origin; selects the diskless managed runtime
       - key: LIP_CLOUD_API_KEY
         sync: false # bootstrap only; retire after the first operator exists
       - key: LIP_CLOUD_CREDENTIAL_KEY
@@ -138,20 +129,6 @@ services:
         value: render-oregon
       - key: LIP_CLOUD_DEFAULT_PLAN
         value: free
-      - key: LIP_CLOUD_PROGRAM_DIR
-        value: /data/programs
-      - key: LIP_CLOUD_DATA_DIR
-        value: /data/lip-cloud
-      - key: LIP_CLOUD_BACKUP_DIR
-        value: /data/lip-cloud/backups
-      - key: LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION
-        value: "false"
-      - key: LIP_CLOUD_DATA_PLANE_HOST
-        value: 0.0.0.0
-      - key: LIP_CLOUD_DATA_PLANE_PUBLIC_HOST
-        value: crave-loyalty-sandbox
-      - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
-        value: "13210"
       # Optional production-equivalent auth/billing/customer integrations.
       - key: LIP_CLOUD_OIDC_ISSUER
         sync: false
@@ -191,18 +168,14 @@ services:
     dockerfilePath: ./Dockerfile
     dockerCommand: node apps/cloud/dist/cli.js
     preDeployCommand: node apps/cloud/dist/migrate-cli.js
-    healthCheckPath: /health
-    disk:
-      name: crave-loyalty-production-data
-      mountPath: /data
-      sizeGB: 1
+    healthCheckPath: /ready
     envVars:
       - key: LIP_CLOUD_DEPLOYMENT_ENVIRONMENT
         value: production
       - key: LIP_CLOUD_DATABASE_URL
         sync: false # direct production Neon URL; never a Crave DB or pooler
-      - key: LIP_CLOUD_DATA_PLANE_DATABASE_URL
-        sync: false # same direct production Neon URL
+      - key: LIP_CLOUD_PUBLIC_BASE_URL
+        sync: false # this service\'s exact public origin; selects the diskless managed runtime
       - key: LIP_CLOUD_API_KEY
         sync: false # bootstrap only; retire after the first operator exists
       - key: LIP_CLOUD_CREDENTIAL_KEY
@@ -221,20 +194,6 @@ services:
         value: render-oregon
       - key: LIP_CLOUD_DEFAULT_PLAN
         value: free
-      - key: LIP_CLOUD_PROGRAM_DIR
-        value: /data/programs
-      - key: LIP_CLOUD_DATA_DIR
-        value: /data/lip-cloud
-      - key: LIP_CLOUD_BACKUP_DIR
-        value: /data/lip-cloud/backups
-      - key: LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION
-        value: "false"
-      - key: LIP_CLOUD_DATA_PLANE_HOST
-        value: 0.0.0.0
-      - key: LIP_CLOUD_DATA_PLANE_PUBLIC_HOST
-        value: crave-loyalty-production
-      - key: LIP_CLOUD_DATA_PLANE_BASE_PORT
-        value: "13210"
       - key: LIP_CLOUD_OIDC_ISSUER
         sync: false
       - key: LIP_CLOUD_OIDC_AUDIENCE

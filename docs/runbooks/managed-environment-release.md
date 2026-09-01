@@ -9,7 +9,11 @@ inside one cluster.
 
 The managed-service code and configuration can merge independently of provider activation. A merge
 does not approve any environment for traffic, and `render.yaml` keeps automatic deploys disabled.
-As of 2026-08-28, activation remains blocked until release evidence records all of the following:
+As of 2026-08-31, the development service has passed its database migration, Postgres 18 tenant
+isolation, restart, health/readiness, authenticated metrics, and frozen-source Neon restore checks.
+Its signed-webhook delivery drill still requires an approved synthetic external test event. Sandbox
+and production remain undeployed and unactivated. External sandbox access and production activation
+remain blocked until release evidence records all of the following:
 
 - Render has the required GitHub repository access and the operator has completed the provider
   authorization flow.
@@ -17,8 +21,9 @@ As of 2026-08-28, activation remains blocked until release evidence records all 
   approved secret manager and Render.
 - All three environments have their own direct Neon URLs and independently generated API and encryption
   keys in Render. Credential values must never be copied into this repository or release evidence.
-- `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` exist on paid
-  Starter plans in Oregon with one independent 1 GB disk each.
+- `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` exist as
+  diskless Oregon services. Development stays on Starter while certification runs and may move to
+  Free only after it passes; sandbox and production require a paid plan before activation.
 - Development verification passes before sandbox receives a candidate. Sandbox deployment, restore
   rehearsal, rollback rehearsal, and the required lifecycle smoke tests below pass before production
   promotion.
@@ -30,11 +35,14 @@ does not by itself prove end-to-end order settlement.
 
 - `crave-loyalty-development`, `crave-loyalty-sandbox`, and `crave-loyalty-production` are separate
   Render services in Oregon.
-- Oregon is a correctness constraint, not a latency preference. Tenant runtimes are private-network
-  only, and Render's private network reaches a service only from the same region, so the consuming
-  Crave API must share it. `cravejs-apis-production` and `cravejs-apis-dev` run in Oregon. Each
-  environment's Neon project lives in `aws-us-west-2` for the same reason.
-- Each service has its own disk, bootstrap/operator credentials, encryption key, and independently
+- Keep all Crave API and Loyalty Render services in Oregon. Managed tenant runtimes are currently
+  reached through their exact public HTTPS base URL, so same-region placement is not required for
+  basic reachability; it minimizes the live API-to-Loyalty hop and preserves the option to adopt
+  Render private networking without rebuilding services. Each Loyalty environment's Neon project
+  stays in `aws-us-west-2`. A separately managed Crave platform database may remain in another
+  region temporarily, but that cross-region dependency must be recorded and removed before its own
+  production latency certification; it is not a reason to move the existing Render services.
+- Each service has its own bootstrap/operator credentials, encryption key, and independently
   managed Neon project/database/role. No environment uses a Crave platform database.
 - Both `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL` use the environment's direct
   Neon hostname. A `-pooler` hostname or `pgbouncer=true` fails before migrations or startup.
@@ -49,8 +57,9 @@ does not by itself prove end-to-end order settlement.
   reopen the deprecated shared-key bootstrap. Set it to `false` only while creating the first
   platform administrator, then set it permanently to `true` and redeploy as described in
   `shared-cluster-provisioning.md`.
-- Migrations run in `preDeployCommand`. The engine and control-plane migrators each serialize with a
-  PostgreSQL advisory transaction lock and record applied versions.
+- Migrations run at process startup under PostgreSQL advisory transaction locks and record applied
+  versions. Paid services repeat the same idempotent migration command in `preDeployCommand` as
+  defence in depth; development must still boot correctly on Free, where pre-deploy is unavailable.
 - Source rollback never runs a down migration. Restore a Neon branch and repoint both database
   variables when data/schema rollback is required.
 
@@ -59,8 +68,10 @@ does not by itself prove end-to-end order settlement.
 1. Record the exact Git commit and immutable image digest from the candidate build.
 2. Validate `render.yaml`; confirm exactly three services, `autoDeploy: false`, `region: oregon`,
    and `numInstances: 1` for all three.
-3. Deploy development first. The pre-deploy log must contain
-   `shared_cluster_migrations_applied`; a pooled URL must stop here with a safe direct-endpoint error.
+3. Deploy development first. On a paid plan, the pre-deploy log must contain
+   `shared_cluster_migrations_applied`. On Free, where no pre-deploy step exists, startup must apply
+   the same migrations and `/ready` must report `migrations_applied: true`. A pooled URL must stop
+   before either path with a safe direct-endpoint error.
 4. Verify development with `LIP_EXPECTED_ENVIRONMENT=development`, then exercise provisioning,
    enrollment, accrual, refund adjustment, member closure, and webhook delivery against synthetic
    data. Record its independent database fingerprint and restore rehearsal.
@@ -94,18 +105,34 @@ does not by itself prove end-to-end order settlement.
 - `GET /metrics` exposes Prometheus text for completed HTTP requests, process uptime, and resident
   memory. Alert on non-200 health, restart loops, sustained 5xx, and memory approaching the service
   limit.
-- Tenant runtimes still require their own `/health`, `/metrics`, and webhook-health checks on the
-  private network.
+- Path-scoped tenant runtimes still require their own protocol health, authenticated operations,
+  webhook-health, and cross-tenant refusal checks through the managed service's exact public HTTPS
+  base URL.
 
 ## Backup and restore rehearsal
 
-Neon history retention/PITR is the database backup authority. The encrypted service disk backup is
-separate and covers program definitions and local environment credential material.
+Neon history retention/PITR is the only backup authority; there is no disk to snapshot. Legacy
+standalone file backups are not evidence for a managed environment.
 
 1. Freeze writes on every tenant runtime and record the freeze timestamp, source database branch,
-   current Render deploy ID, Git commit, and image digest.
-2. Create a Neon branch at that timestamp. Use its direct endpoint and a restore-only role.
-3. While source writes remain frozen, compare schema versions and deterministic fingerprints for
+   current Render deploy ID, Git commit, and image digest. For a single-instance development drill,
+   suspending the Render service is an acceptable full-cluster freeze.
+2. Prove the source is stable before branching: capture the same schema/row-count/checksum evidence
+   twice at least five seconds apart and require an exact match. A graceful service suspension can
+   finish one last lease or scheduler write, so "suspended" alone is not sufficient evidence.
+
+   ```bash
+   LIP_BACKUP_SOURCE_DATABASE_URL='<direct frozen source URL>' \
+   npm run cloud:restore-source-stability
+   ```
+
+   The command fails closed on any schema, row-count, or checksum drift and prints only the interval
+   and counts of compared evidence fields, never connection details or row evidence.
+
+3. Create a Neon branch only after the stability check passes. Use its direct endpoint and a
+   restore-only role. Neon Console may visually wrap a hostname; use the endpoint metadata rather
+   than copying formatting whitespace, and use `sslmode=verify-full` with current `pg` clients.
+4. While source writes remain frozen, compare schema versions and deterministic fingerprints for
    control-plane, ledger, balance, idempotency, accrual, adjustment, member, and state relations:
 
    ```bash
@@ -114,10 +141,10 @@ separate and covers program definitions and local environment credential materia
    npm run cloud:restore-verify
    ```
 
-4. Point a non-production verification service at the restored branch, run
+5. Point a non-production verification service at the restored branch, run
    `cloud:deployment-verify`, and verify one known member balance/order lifecycle through the public
    protocol.
-5. Record the source/restore branch IDs, restore timestamp, command result, row counts/checksums, and
+6. Record the source/restore branch IDs, restore timestamp, command result, row counts/checksums, and
    operator. Delete the rehearsal branch only after review. Unfreeze the source last.
 
 The rehearsal fails closed on missing schemas, a pooled endpoint, a reused source URL, row-count

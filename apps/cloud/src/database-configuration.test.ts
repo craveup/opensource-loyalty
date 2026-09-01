@@ -9,10 +9,35 @@ const direct = (name: string) =>
   `postgresql://loyalty:secret@ep-${name}.us-west-2.aws.neon.tech/loyalty?sslmode=require`;
 
 describe("managed database configuration", () => {
-  it("requires both control-plane and data-plane URLs", () => {
+  it("requires the managed database URL", () => {
     expect(() => managedDatabaseConfiguration({})).toThrow("LIP_CLOUD_DATABASE_URL");
-    expect(() => managedDatabaseConfiguration({ LIP_CLOUD_DATABASE_URL: direct("sandbox") }))
-      .toThrow("LIP_CLOUD_DATA_PLANE_DATABASE_URL");
+  });
+
+  it("defaults the data plane to the same database", () => {
+    // One managed environment, one Neon database. Making an operator set the
+    // same URL twice was a way to get it wrong, not a safeguard.
+    expect(managedDatabaseConfiguration({ LIP_CLOUD_DATABASE_URL: direct("sandbox") })).toEqual({
+      controlPlaneUrl: direct("sandbox"),
+      dataPlaneUrl: direct("sandbox")
+    });
+  });
+
+  it("still honours an explicitly separate self-hosted data plane", () => {
+    expect(managedDatabaseConfiguration({
+      LIP_CLOUD_DATABASE_URL: direct("control"),
+      LIP_CLOUD_DATA_PLANE_DATABASE_URL: direct("data")
+    })).toEqual({
+      controlPlaneUrl: direct("control"),
+      dataPlaneUrl: direct("data")
+    });
+  });
+
+  it("rejects a pooled data-plane URL even though it is optional", () => {
+    expect(() => managedDatabaseConfiguration({
+      LIP_CLOUD_DATABASE_URL: direct("sandbox"),
+      LIP_CLOUD_DATA_PLANE_DATABASE_URL:
+        "postgresql://loyalty:secret@ep-sandbox-pooler.us-west-2.aws.neon.tech/loyalty"
+    })).toThrow("LIP_CLOUD_DATA_PLANE_DATABASE_URL");
   });
 
   it("rejects pooled URLs without leaking credentials", () => {

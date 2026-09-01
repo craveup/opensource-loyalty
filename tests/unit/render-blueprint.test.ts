@@ -49,6 +49,22 @@ const expectedBranches = new Map([
   ["production", "main"],
 ]);
 
+/**
+ * Every variable the diskless runtime once needed to find its own files and
+ * ports. They are load-bearing in the wrong direction now: any of them still
+ * present would either reattach a filesystem dependency or hand out a URL
+ * derived from local state rather than the service's real origin.
+ */
+const retiredVariables = [
+  "LIP_CLOUD_ALLOW_LEGACY_CREDENTIAL_MIGRATION",
+  "LIP_CLOUD_BACKUP_DIR",
+  "LIP_CLOUD_DATA_DIR",
+  "LIP_CLOUD_DATA_PLANE_BASE_PORT",
+  "LIP_CLOUD_DATA_PLANE_HOST",
+  "LIP_CLOUD_DATA_PLANE_PUBLIC_HOST",
+  "LIP_CLOUD_PROGRAM_DIR",
+] as const;
+
 const secretVariables = [
   "LIP_CLOUD_ALLOWED_ORIGINS",
   "LIP_CLOUD_API_KEY",
@@ -59,11 +75,11 @@ const secretVariables = [
   "LIP_CLOUD_CUSTOMER_OIDC_ISSUER",
   "LIP_CLOUD_CUSTOMER_PROVIDER_ID",
   "LIP_CLOUD_CUSTOMER_TENANT_ID",
-  "LIP_CLOUD_DATA_PLANE_DATABASE_URL",
   "LIP_CLOUD_DATABASE_URL",
   "LIP_CLOUD_OIDC_AUDIENCE",
   "LIP_CLOUD_OIDC_ISSUER",
   "LIP_CLOUD_OIDC_JWKS_URI",
+  "LIP_CLOUD_PUBLIC_BASE_URL",
   "LIP_CLOUD_SHARED_KEY_DISABLED",
   "LIP_CLOUD_STRIPE_PRICE_BUSINESS",
   "LIP_CLOUD_STRIPE_PRICE_PRO",
@@ -101,23 +117,19 @@ describe("managed Render blueprint", () => {
       expect(service).toMatchObject({
         autoDeploy: false,
         branch: expectedBranches.get(environment),
-        healthCheckPath: "/health",
+        // Readiness gates the deploy: migrations, database, worker and
+        // restored runtimes. /health remains liveness only, and would let
+        // Render cut over to a process that is up but serving nothing.
+        healthCheckPath: "/ready",
         name,
+        // Not a cost decision. Schedulers, webhook dispatch and the credential
+        // single-flight all assume one process.
         numInstances: 1,
-        plan: "starter",
         region: "oregon",
         runtime: "docker",
         type: "web",
       });
-      expect(service.disk).toEqual({
-        mountPath: "/data",
-        name: `${name}-data`,
-        sizeGB: 1,
-      });
       expect(variables.get("LIP_CLOUD_REGIONS")?.value).toBe("render-oregon");
-      expect(variables.get("LIP_CLOUD_DATA_PLANE_PUBLIC_HOST")?.value).toBe(
-        name,
-      );
 
       for (const key of secretVariables) {
         expect(variables.get(key), `${environment}.${key}`).toEqual({
@@ -126,10 +138,27 @@ describe("managed Render blueprint", () => {
         });
       }
     }
+  });
 
-    expect(
-      new Set((blueprint.services ?? []).map((service) => service.disk?.name))
-        .size,
-    ).toBe(3);
+  it("attaches no disk and keeps no filesystem or port variables", async () => {
+    const blueprint = parse(await readFile("render.yaml", "utf8")) as Blueprint;
+    for (const service of blueprint.services ?? []) {
+      expect(service.disk, `${service.name} disk`).toBeUndefined();
+      const keys = new Set((service.envVars ?? []).map((variable) => variable.key));
+      for (const retired of retiredVariables) {
+        expect(keys.has(retired), `${service.name}.${retired}`).toBe(false);
+      }
+    }
+  });
+
+  it("keeps every service on a paid plan until certification lowers one", async () => {
+    const blueprint = parse(await readFile("render.yaml", "utf8")) as Blueprint;
+    // Removing the disks is what makes Render Free viable for development, but
+    // the plan change is a deliberate post-certification step, not something
+    // this blueprint should make on the operator's behalf while the runtime is
+    // still unproven.
+    for (const service of blueprint.services ?? []) {
+      expect(service.plan, `${service.name} plan`).toBe("starter");
+    }
   });
 });

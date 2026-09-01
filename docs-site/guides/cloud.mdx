@@ -42,31 +42,32 @@ The `@loyalty-interchange/cloud` workspace includes:
   New organizations use manual billing on Free. Configured Stripe Checkout and signed subscription webhooks can manage paid subscriptions. New environments stay `pending` until a provisioning adapter processes their job; the local adapter is for evaluation/design partners, while regional infrastructure remains future work.
 </Warning>
 
-## Local data-plane provisioner
+## Managed diskless runtime
 
-Setting `LIP_CLOUD_PROGRAM_DIR` starts a provisioning worker with `LocalDataPlaneProvisioner`, which runs one LIP data-plane runtime per environment inside the control-plane process. Each `create` job:
+Setting `LIP_CLOUD_PUBLIC_BASE_URL` starts the diskless managed runtime: one listener, path-scoped tenant runtimes, and every durable byte in Postgres. See the [diskless managed runtime runbook](https://github.com/craveup/opensource-loyalty/blob/main/docs/runbooks/diskless-managed-runtime.md). Each `create` job:
 
 <Steps>
-  <Step title="Load the program">
-    Reads `<program_id>.json` from the program directory.
+  <Step title="Create a bootstrap program">
+    Valid but inert — USD, zero earn rate, no rewards, tiers, plans, members or seeded activity — written to Postgres. Nothing can accrue or redeem until the merchant publishes a real program through the Admin API.
   </Step>
-  <Step title="Start an isolated runtime">
-    Per-environment SQLite under `LIP_CLOUD_DATA_DIR` (default `.lip-cloud`), or tenant-scoped Postgres when `LIP_CLOUD_DATA_PLANE_DATABASE_URL` is set.
+  <Step title="Start a tenant runtime">
+    Tenant-scoped rows in the shared database, under forced row-level security. No SQLite file, no disk.
   </Step>
-  <Step title="Allocate a stable port">
-    From `LIP_CLOUD_DATA_PLANE_BASE_PORT` (default `13210`), recorded in `<data-dir>/ports.json`.
-  </Step>
-  <Step title="Bootstrap a merchant API key">
-    An owner-role key minted through tenant access control and stored inside a `0600` AES-256-GCM v3 credential envelope.
+  <Step title="Mount it by path">
+    `/runtime/v1/environments/<environment_id>` on the shared listener. The environment id is the address, so there is no port to allocate and nothing to remember locally.
   </Step>
   <Step title="Mark the environment ready">
-    With its reachable `api_url` and `admin_url`.
+    With `api_url` and `admin_url` both set to that path-scoped base URL.
   </Step>
 </Steps>
+
+Setting `LIP_CLOUD_PROGRAM_DIR` instead starts the standalone file-backed provisioner, which runs one runtime per environment on its own port with per-environment SQLite, credential files and a port registry under `LIP_CLOUD_DATA_DIR`. It is for standalone Docker and local development. Setting both is refused at boot.
 
 ### Retrieving and rotating merchant credentials
 
 Merchant credentials are retrieved and rotated through the control plane with `POST /cloud/v1/environments/{id}/credentials/rotate`, available to a platform-admin operator, an org-scoped operator covering that organization, or an org owner/admin. Rotation is audited cloud-side, and tenant-side as actor `cloud:<subject>` where the subject is the **verified** operator identity.
+
+An `Idempotency-Key` header is **required**. The merchant secret is returned once and stored nowhere it can be read back, so a retry without a stable key mints a second live owner key that nobody receives; with one, the same request is served the original credential for 24 hours, a different request under the same key is refused with `409 idempotency_conflict`, and an expired handoff answers `410 credential_handoff_expired`.
 
 An optional body `{"overlap_seconds": <0..604800>}` controls the cutover: `0` is an emergency immediate cutover, and the default keeps the replaced key valid for 24 hours. The response includes `replaced_api_key_expires_at`, the moment the previous merchant key stops working.
 
