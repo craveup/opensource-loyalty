@@ -34,6 +34,9 @@ describe("backup restore verification", () => {
       row_count: 0
     });
     expect(queried.some((sql) => sql.includes("FROM lip_cloud_credential_operations"))).toBe(true);
+    expect(
+      queried.find((sql) => sql.includes("FROM lip_cloud_credential_operations"))
+    ).toContain("to_jsonb(row_value) - 'handoff_envelope'");
   });
 
   it("accepts an exact schema and data fingerprint match", () => {

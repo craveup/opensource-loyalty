@@ -106,6 +106,14 @@ export interface ServerOptions {
   /** Public path mounted in front of this listener-independent handler. */
   mountPath?: string;
   writeFrozen?: boolean;
+  /**
+   * Shared freeze state for callers that mutate the same engine outside HTTP.
+   * When absent, the reference server owns an in-memory flag as before.
+   */
+  writeFreezeControl?: {
+    isFrozen(): boolean;
+    setFrozen(value: boolean): void;
+  };
   /** Dynamically refuses protocol mutations that are unsafe for current tenant state. */
   protocolWriteGuard?: () =>
     | undefined
@@ -822,6 +830,15 @@ export function createReferenceRequestHandler(
   const routes = routeTable(engine);
   const adminSessions = new Map<string, AdminSession>();
   let writeFrozen = options.writeFrozen ?? false;
+  const isWriteFrozen = (): boolean =>
+    options.writeFreezeControl?.isFrozen() ?? writeFrozen;
+  const setWriteFrozen = (value: boolean): void => {
+    if (options.writeFreezeControl) {
+      options.writeFreezeControl.setFrozen(value);
+      return;
+    }
+    writeFrozen = value;
+  };
   const adminEnabled = options.admin?.enabled ?? true;
   const rateLimiter = options.rateLimit === false ? undefined : createRateLimiter(options.rateLimit);
   const metrics = options.metrics === false ? undefined : new HttpMetrics();
@@ -1031,7 +1048,7 @@ export function createReferenceRequestHandler(
           status: "ok",
           protocol_version: "1.0",
           profile: "foodservice/1.0",
-          write_frozen: writeFrozen
+          write_frozen: isWriteFrozen()
         });
         return;
       }
@@ -1112,7 +1129,7 @@ export function createReferenceRequestHandler(
           );
           return;
         }
-        if (permission === "platform:write" && writeFrozen) {
+        if (permission === "platform:write" && isWriteFrozen()) {
           response.setHeader("retry-after", "30");
           sendJson(
             response,
@@ -2276,7 +2293,7 @@ export function createReferenceRequestHandler(
           sendJson(response, 401, problem(401, "Unauthorized", "unauthorized"), "application/problem+json");
           return;
         }
-        sendJson(response, 200, { write_frozen: writeFrozen });
+        sendJson(response, 200, { write_frozen: isWriteFrozen() });
         return;
       }
 
@@ -2306,7 +2323,7 @@ export function createReferenceRequestHandler(
             "write_frozen (boolean) is required"
           );
         }
-        writeFrozen = values["write_frozen"];
+        setWriteFrozen(values["write_frozen"]);
         const principal = await bearerPrincipal(request, options) ??
           await adminPrincipal(request, options, adminSessions);
         if (principal) {
@@ -2316,13 +2333,13 @@ export function createReferenceRequestHandler(
               "maintenance.write_freeze.changed",
               "server",
               undefined,
-              { write_frozen: writeFrozen }
+              { write_frozen: isWriteFrozen() }
             );
           } catch {
             // Audit persistence must never change an already completed response.
           }
         }
-        sendJson(response, 200, { write_frozen: writeFrozen });
+        sendJson(response, 200, { write_frozen: isWriteFrozen() });
         return;
       }
 
@@ -2531,6 +2548,17 @@ export function createReferenceRequestHandler(
         sendJson(response, 401, problem(401, "Unauthorized", "unauthorized"), "application/problem+json");
         return;
       }
+      if (isWriteFrozen() && protocolPermission(path) === "protocol:write") {
+        response.setHeader("retry-after", "30");
+        sendJson(
+          response,
+          503,
+          problem(503, "Write operations are temporarily frozen", "write_frozen",
+            "The provider is in a maintenance window; retry after it closes"),
+          "application/problem+json"
+        );
+        return;
+      }
       if (protocolPermission(path) === "protocol:write") {
         const denial = options.protocolWriteGuard?.();
         if (denial) {
@@ -2542,17 +2570,6 @@ export function createReferenceRequestHandler(
           );
           return;
         }
-      }
-      if (writeFrozen && protocolPermission(path) === "protocol:write") {
-        response.setHeader("retry-after", "30");
-        sendJson(
-          response,
-          503,
-          problem(503, "Write operations are temporarily frozen", "write_frozen",
-            "The provider is in a maintenance window; retry after it closes"),
-          "application/problem+json"
-        );
-        return;
       }
       if (!enforceRateLimit()) return;
 

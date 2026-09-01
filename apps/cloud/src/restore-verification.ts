@@ -47,10 +47,13 @@ async function relationEvidence(
   pool: Pool,
   table: (typeof relations)[number],
 ): Promise<{ checksum: string; row_count: number }> {
+  const evidenceRow = table === "lip_cloud_credential_operations"
+    ? "to_jsonb(row_value) - 'handoff_envelope'"
+    : "to_jsonb(row_value)";
   const result = await pool.query<{ checksum: string; row_count: string }>(`
     SELECT
       count(*)::text AS row_count,
-      coalesce(sum(hashtextextended(to_jsonb(row_value)::text, 0)::numeric), 0)::text AS checksum
+      coalesce(sum(hashtextextended((${evidenceRow})::text, 0)::numeric), 0)::text AS checksum
     FROM ${table} AS row_value
   `);
   const row = result.rows[0];

@@ -83,6 +83,7 @@ interface ManagedRuntime {
   handler: ReferenceRequestHandler;
   access: AccessControlService;
   platform: ManagedTenantPlatform;
+  isWriteFrozen(): boolean;
   close(): Promise<void>;
 }
 
@@ -248,6 +249,13 @@ export class ManagedPostgresDataPlaneManager implements CloudProvisioner {
       );
     }
     const runtime = await this.runtimeFor(matches[0]!);
+    if (runtime.isWriteFrozen()) {
+      throw new CloudError(
+        503,
+        "write_frozen",
+        "The provider is in a maintenance window; retry after it closes"
+      );
+    }
     if (isBootstrapProgram(runtime.platform.programs.activeProgram())) {
       throw new CloudError(
         409,
@@ -446,12 +454,20 @@ export class ManagedPostgresDataPlaneManager implements CloudProvisioner {
           `Environment ${environment.environment_id} is bound to ${environment.program_id} but its stored program is ${active.program_id}`
         );
       }
+      let writeFrozen = false;
+      const writeFreezeControl = {
+        isFrozen: (): boolean => writeFrozen,
+        setFrozen: (value: boolean): void => {
+          writeFrozen = value;
+        }
+      };
       const handler = createReferenceRequestHandler(platform.engine, {
         apiKey: rootKey,
         mountPath: `${RUNTIME_PREFIX}${environment.environment_id}`,
         reservationTtlSeconds: active.reservation_ttl_seconds ?? 120,
         executeEngineOperation: platform.executeEngineOperation,
         readEngineSnapshot: platform.readEngineSnapshot,
+        writeFreezeControl,
         protocolWriteGuard: () => isBootstrapProgram(platform.programs.activeProgram())
           ? {
               status: 409,
@@ -487,6 +503,7 @@ export class ManagedPostgresDataPlaneManager implements CloudProvisioner {
         handler,
         access: platform.access,
         platform,
+        isWriteFrozen: writeFreezeControl.isFrozen,
         close: () => Promise.resolve(platform.close())
       };
       this.emit({

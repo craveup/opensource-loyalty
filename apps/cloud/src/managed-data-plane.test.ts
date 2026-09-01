@@ -274,6 +274,60 @@ describe("managed data-plane manager", () => {
     })).resolves.toEqual({ member_id: "customer-alpha" });
   });
 
+  it("refuses direct customer enrollment while the managed runtime is write-frozen", async () => {
+    const realProgram = {
+      ...createBootstrapProgram("program-alpha"),
+      name: "Published points",
+      earn_rate: { points: 1, spend_minor_units: 100 },
+      metadata: {}
+    };
+    const managed = manager({
+      environments: [environment()],
+      createPlatform: async (target) => {
+        const directory = mkdtempSync(join(tmpdir(), "lip-managed-frozen-customer-"));
+        temporaryDirectories.push(directory);
+        const demo = await createDemoPlatform({
+          databasePath: join(directory, `${target.tenant_id}.db`),
+          program: realProgram,
+          seed: false,
+          webhooks: []
+        });
+        return {
+          ...demo,
+          store: { status: demo.store.status },
+          executeEngineOperation: async <T>(operation: () => T | Promise<T>): Promise<T> => {
+            const result = await operation();
+            demo.store.save(demo.engine.exportState());
+            return result;
+          },
+          readEngineSnapshot: async <T>(read: (engine: typeof demo.engine) => T | Promise<T>) =>
+            read(demo.engine)
+        };
+      }
+    });
+    const server = await listen(managed);
+    const base = `${server.url}/runtime/v1/environments/env-alpha`;
+    const issued = await managed.issueMerchantCredential("env-alpha", {
+      subject: "operator@crave"
+    });
+    const freeze = await fetch(`${base}/admin/api/v1/maintenance`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${issued.merchant_api_key}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ write_frozen: true })
+    });
+    expect(freeze.status).toBe(200);
+
+    await expect(managed.enrollCustomer({
+      tenantId: "tenant-alpha",
+      programId: "program-alpha",
+      customerId: "customer-frozen",
+      idempotencyKey: "customer:frozen:program:alpha"
+    })).rejects.toMatchObject({ status: 503, code: "write_frozen" });
+  });
+
   it("refuses an environment that is not ready and one that does not exist", async () => {
     const managed = manager({
       environments: [environment({ environment_id: "env-suspended", status: "suspended" })]
