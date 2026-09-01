@@ -9,11 +9,12 @@ inside one cluster.
 
 The managed-service code and configuration can merge independently of provider activation. A merge
 does not approve any environment for traffic, and `render.yaml` keeps automatic deploys disabled.
-As of 2026-08-31, the development service has passed its database migration, Postgres 18 tenant
-isolation, restart, health/readiness, authenticated metrics, and frozen-source Neon restore checks.
-Its signed-webhook delivery drill still requires an approved synthetic external test event. Sandbox
-and production remain undeployed and unactivated. External sandbox access and production activation
-remain blocked until release evidence records all of the following:
+As of 2026-09-01, all three services are deployed and healthy, and development has passed its
+database migration, Postgres 18 tenant isolation, restart, health/readiness, authenticated metrics,
+and frozen-source Neon restore checks. Deployment is not activation: development still requires a
+fresh exact-head certification after each candidate, and sandbox/production remain blocked from
+external traffic until the evidence below is complete. The signed-webhook delivery drill still
+requires an approved synthetic external test event.
 
 - Render has the required GitHub repository access and the operator has completed the provider
   authorization flow.
@@ -47,10 +48,11 @@ does not by itself prove end-to-end order settlement.
 - Both `LIP_CLOUD_DATABASE_URL` and `LIP_CLOUD_DATA_PLANE_DATABASE_URL` use the environment's direct
   Neon hostname. A `-pooler` hostname or `pgbouncer=true` fails before migrations or startup.
 - Each service tracks its own branch — development `dev`, sandbox `sandbox`, production `main` —
-  and `autoDeploy: false` keeps every deploy deliberate. Promotion is a **merge along
-  dev -> sandbox -> main**, never a direct push: that is what keeps the deployed commit identical
-  across environments, which is exactly what the release evidence claims. `sandbox` and `main` are
-  protected so a direct push cannot quietly break that.
+  and `autoDeploy: false` keeps every deploy deliberate. Promotion is a **normal merge along
+  dev -> sandbox -> main**, never a direct push. Normal merges produce different commit SHAs, so
+  promotion equality is proved with each commit's canonical Git tree (`git rev-parse <sha>^{tree}`).
+  The three tree SHAs must match exactly. `sandbox` and `main` are protected so a direct push cannot
+  quietly break that.
 - `numInstances: 1` is a correctness limit, not a sizing preference. Do not scale out until Admin
   state and webhook dispatch no longer depend on one process.
 - `LIP_CLOUD_SHARED_KEY_DISABLED` is operator-managed (`sync: false`) so a Blueprint sync cannot
@@ -65,17 +67,27 @@ does not by itself prove end-to-end order settlement.
 
 ## Candidate promotion
 
-1. Record the exact Git commit and immutable image digest from the candidate build.
+1. Select the exact full development Git commit and compute its canonical source-tree SHA with
+   `git rev-parse <full-commit>^{tree}` from a canonical checkout with `dev`, `sandbox`, and `main`
+   fetched. Do not record a Render deploy ID yet because the candidate has not been deployed. These
+   are Git-backed Docker services; Render builds each service from source and does not expose a
+   registry image digest for promotion. Do not invent one. A future switch to prebuilt,
+   digest-pinned registry images requires a separate topology decision.
 2. Validate `render.yaml`; confirm exactly three services, `autoDeploy: false`, `region: oregon`,
    and `numInstances: 1` for all three.
-3. Deploy development first. On a paid plan, the pre-deploy log must contain
-   `shared_cluster_migrations_applied`. On Free, where no pre-deploy step exists, startup must apply
-   the same migrations and `/ready` must report `migrations_applied: true`. A pooled URL must stop
-   before either path with a safe direct-endpoint error.
+3. Deploy the selected development commit first. After Render marks it live, record the deploy ID
+   and the full commit Render reports, require that commit to equal the selected commit, recompute
+   its canonical tree, and require that tree to equal the candidate tree. On a paid plan, the
+   pre-deploy log must contain `shared_cluster_migrations_applied`. On Free, where no pre-deploy step
+   exists, startup must apply the same migrations and `/ready` must report
+   `migrations_applied: true`. A pooled URL must stop before either path with a safe direct-endpoint
+   error. Finally, require `/health.release` to equal Render's recorded commit.
 4. Verify development with `LIP_EXPECTED_ENVIRONMENT=development`, then exercise provisioning,
    enrollment, accrual, refund adjustment, member closure, and webhook delivery against synthetic
    data. Record its independent database fingerprint and restore rehearsal.
-5. Deploy the exact development-verified commit/image to sandbox. The pre-deploy log must contain
+5. Merge development into `sandbox`, prove the resulting full sandbox commit has the exact recorded
+   source-tree SHA, and deploy that commit. After it is live, record Render's deploy ID and reported
+   commit and bind `/health.release` to that commit. The pre-deploy log must contain
    `shared_cluster_migrations_applied`; a pooled URL must stop here with a safe direct-endpoint error.
 6. Verify the exact candidate:
 
@@ -95,8 +107,10 @@ does not by itself prove end-to-end order settlement.
    webhook delivery in sandbox. Confirm the original accrual multiplier is used after membership or
    tier changes.
 8. Create a Neon restore branch and complete the restore rehearsal below.
-9. Promote the same reviewed commit/image to production. Repeat migration, health, metrics, and
-   restore checks with `LIP_EXPECTED_ENVIRONMENT=production` before routing Crave traffic.
+9. Merge sandbox into `main`, prove the resulting full production commit has the exact recorded
+   source-tree SHA, and deploy that commit. After it is live, record Render's deploy ID and reported
+   commit and bind `/health.release` to that commit. Repeat migration, health, metrics, and restore
+   checks with `LIP_EXPECTED_ENVIRONMENT=production` before routing Crave traffic.
 
 ## Health and metrics
 
@@ -115,7 +129,7 @@ Neon history retention/PITR is the only backup authority; there is no disk to sn
 standalone file backups are not evidence for a managed environment.
 
 1. Freeze writes on every tenant runtime and record the freeze timestamp, source database branch,
-   current Render deploy ID, Git commit, and image digest. For a single-instance development drill,
+   current Render deploy ID, Git commit, and canonical source-tree SHA. For a single-instance development drill,
    suspending the Render service is an acceptable full-cluster freeze.
 2. Prove the source is stable before branching: capture the same schema/row-count/checksum evidence
    twice at least five seconds apart and require an exact match. A graceful service suspension can
@@ -155,8 +169,10 @@ drift, or content-checksum drift.
 ### Application-only rollback
 
 1. Freeze tenant writes.
-2. Select the last reviewed Render deploy whose commit/image is recorded in release evidence.
-3. Redeploy that exact artifact; do not rebuild a mutable branch.
+2. Select the last reviewed Render deploy whose deploy ID, commit, and source tree are recorded in
+   release evidence.
+3. Use Render's rollback/redeploy control for that exact deploy; do not deploy the latest mutable
+   branch head as a substitute.
 4. Run `cloud:deployment-verify` with the rollback commit in `LIP_EXPECTED_RELEASE`.
 5. Run a known-member balance and idempotent order replay before unfreezing.
 
@@ -176,11 +192,12 @@ Record it in a file shaped by
 and validate it before activation:
 
 ```
+git fetch --prune origin
 npm run cloud:evidence:check -- path/to/evidence.json
 ```
 
 For development, sandbox, and production, retain: service ID/hostname, Neon project/branch identifiers,
-database-directness check, deploy ID, Git commit, image digest, migration log event, `/health`
+database-directness check, deploy ID, Git commit, canonical source-tree SHA, migration log event, `/health`
 response, `/metrics` probe, instance count, backup branch/timestamp, restore verification result,
 rollback target, and reviewer sign-off. Never record connection strings or credential values — the
 checker refuses a record that contains anything matching a credential.
@@ -196,8 +213,13 @@ The checker also enforces release and isolation invariants:
   `data_plane_database` on `GET /health`, SHA-256 prefixes of `host:port/database` that contain no
   role or password. Control and data may intentionally match inside one environment, but comparing
   all six reported values across environments proves no database was reused.
-- **Development, sandbox, and production must run the same Git commit and image digest.** Each
-  `/health` response must also report that environment's declared Git commit as `release`; a stale
-  response or mixed artifact cannot satisfy the gate.
+- **Development, sandbox, and production must run commits with the same canonical Git source tree.**
+  Normal merge promotion intentionally gives each protected branch a different commit SHA. Each
+  `/health` response must report that environment's declared deployed commit as `release`, while
+  the checker first proves the full commit is reachable from that environment's fetched canonical
+  history (`origin/dev`, `origin/sandbox`, or `origin/main`), resolves its `gitCommit^{tree}`, binds
+  the result to the recorded `sourceTree`, and then requires all three verified trees to match.
+  Fetch all three protected refs immediately before running the checker. A stale response, orphaned
+  or fork-only commit, fabricated tree, or mixed source tree cannot satisfy the gate.
 - **An anonymous `/metrics` scrape must have been refused (401).** The series name tenants and
   environments, and the control plane is on a public URL.

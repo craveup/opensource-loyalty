@@ -55,7 +55,7 @@
         "dataPlaneDatabaseFingerprint",
         "deployId",
         "gitCommit",
-        "imageDigest",
+        "sourceTree",
         "migration",
         "health",
         "metricsProbe",
@@ -83,8 +83,12 @@
           "description": "The data_plane_database value reported by GET /health. It may equal the control-plane value in the same environment, but cannot appear in another environment."
         },
         "deployId": { "type": "string", "minLength": 1 },
-        "gitCommit": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },
-        "imageDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "gitCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "sourceTree": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Canonical Git tree SHA for the deployed commit. Normal merge promotion may produce different commit SHAs while preserving this source tree exactly."
+        },
         "migration": {
           "type": "object",
           "additionalProperties": false,
@@ -103,7 +107,7 @@
             "checkedAt": { "type": "string", "format": "date-time" },
             "status": { "const": "ok" },
             "instancePolicy": { "const": "single" },
-            "release": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" }
+            "release": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
           }
         },
         "metricsProbe": {
