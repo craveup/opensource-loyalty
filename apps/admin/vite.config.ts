@@ -3,7 +3,9 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  base: "/admin/",
+  // Relative assets keep the Admin bundle beneath a managed tenant prefix as
+  // well as the standalone /admin/ mount.
+  base: "./",
   plugins: [react(), tailwindcss()],
   build: {
     outDir: "../../packages/server/dist/admin",

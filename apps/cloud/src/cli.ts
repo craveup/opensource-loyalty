@@ -185,6 +185,7 @@ if (publicBaseUrl) {
     issuer: managed,
     encryptionKey: credentialEncryptionKey
   });
+  credentials.startHandoffRetentionSweep();
   const restored = await managed.restore();
   restoredRuntimes = restored.length;
   console.log(JSON.stringify({
@@ -276,11 +277,52 @@ if (
     "LIP_CLOUD_CUSTOMER_AUTHORIZED_PARTIES"
   );
 }
-if (customerConfigured && !provisioner) {
-  throw new Error("Managed customer routes require a configured local data-plane provisioner");
+if (customerConfigured && !provisioner && !managed) {
+  throw new Error("Managed customer routes require a configured loyalty runtime");
 }
+const customerLoyalty = managed
+  ? {
+      enroll: (input: {
+        tenant_id: string;
+        program_id: string;
+        customer_id: string;
+        idempotency_key: string;
+      }) => managed!.enrollCustomer({
+        tenantId: input.tenant_id,
+        programId: input.program_id,
+        customerId: input.customer_id,
+        idempotencyKey: input.idempotency_key
+      })
+    }
+  : provisioner
+    ? {
+        enroll: async (input: {
+          tenant_id: string;
+          program_id: string;
+          customer_id: string;
+          idempotency_key: string;
+        }) => {
+          const runtime = provisioner!.runtimes().find((candidate) =>
+            candidate.tenant_id === input.tenant_id &&
+            candidate.program_id === input.program_id
+          );
+          if (!runtime) throw new Error("Customer loyalty runtime is unavailable");
+          const client = new LipClient({
+            baseUrl: runtime.api_url,
+            apiKey: runtime.merchant_api_key,
+            source: { system: "lip-cloud-customer-gateway", instance: "server" }
+          });
+          const enrolled = await client.members.enroll({
+            program_id: input.program_id,
+            identity: { type: "external", value: input.customer_id },
+            member_id: input.customer_id
+          }, { idempotencyKey: input.idempotency_key });
+          return { member_id: enrolled.member.member_id };
+        }
+      }
+    : undefined;
 let customers: CustomerPlatform | undefined;
-if (customerIssuer && customerTenantId && customerProviderId && provisioner) {
+if (customerIssuer && customerTenantId && customerProviderId && customerLoyalty) {
   customers = new CustomerPlatform({
     repository: new PostgresCustomerRepository({ connectionString }),
     providers: [new OidcCustomerIdentityProvider({
@@ -299,26 +341,7 @@ if (customerIssuer && customerTenantId && customerProviderId && provisioner) {
           }
         : {})
     })],
-    loyalty: {
-      enroll: async (input) => {
-        const runtime = provisioner.runtimes().find((candidate) =>
-          candidate.tenant_id === input.tenant_id &&
-          candidate.program_id === input.program_id
-        );
-        if (!runtime) throw new Error("Customer loyalty runtime is unavailable");
-        const client = new LipClient({
-          baseUrl: runtime.api_url,
-          apiKey: runtime.merchant_api_key,
-          source: { system: "lip-cloud-customer-gateway", instance: "server" }
-        });
-        const enrolled = await client.members.enroll({
-          program_id: input.program_id,
-          identity: { type: "external", value: input.customer_id },
-          member_id: input.customer_id
-        }, { idempotencyKey: input.idempotency_key });
-        return { member_id: enrolled.member.member_id };
-      }
-    }
+    loyalty: customerLoyalty
   });
   await customers.migrate();
 }
@@ -507,6 +530,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       .then(() => provisioner?.close())
       .then(() => running.close())
       .then(() => customers?.close())
+      .then(() => credentials?.close())
       .then(() => controlPlane.close())
       .then(() => managedPool?.end())
       .then(() => process.exit(0));

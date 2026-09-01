@@ -3,6 +3,7 @@ import { CloudError } from "./service.js";
 
 const HANDOFF_AAD_PREFIX = "lip-cloud-credential-handoff/v1";
 const HANDOFF_RETENTION_MS = 24 * 60 * 60 * 1_000;
+const HANDOFF_SWEEP_INTERVAL_MS = 60 * 60 * 1_000;
 
 export type CredentialOperationKind = "create" | "rotate";
 export type CredentialOperationState = "pending" | "issued" | "failed";
@@ -78,6 +79,7 @@ export interface CredentialOperationStore {
   findById(credentialOperationId: string): Promise<CredentialOperationRecord | undefined>;
   /** Erases expired handoffs, keeping the operation and audit metadata. Returns the count. */
   purgeExpiredHandoffs(now: string): Promise<number>;
+  close?(): Promise<void>;
 }
 
 /** Mints or rotates the environment's merchant credential and can revoke an orphan. */
@@ -256,6 +258,8 @@ export class ManagedCredentialService {
    * instance.
    */
   private readonly inFlight = new Map<string, Promise<MerchantCredentialHandoff>>();
+  private retentionTimer: ReturnType<typeof setInterval> | undefined;
+  private retentionSweep: Promise<void> | undefined;
 
   public constructor(options: ManagedCredentialServiceOptions) {
     this.store = options.store;
@@ -459,6 +463,56 @@ export class ManagedCredentialService {
   /** Erases handoffs past their retention window, keeping the audit record. */
   public async purgeExpiredHandoffs(): Promise<number> {
     return this.store.purgeExpiredHandoffs(this.now().toISOString());
+  }
+
+  /**
+   * Starts the bounded-retention lifecycle for encrypted credential handoffs.
+   *
+   * The initial sweep handles secrets that expired while this process was down;
+   * the interval handles a long-lived process that receives no further rotation
+   * requests. A failed sweep is observable but never an unhandled rejection.
+   */
+  public startHandoffRetentionSweep(
+    intervalMs = HANDOFF_SWEEP_INTERVAL_MS
+  ): void {
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 1) {
+      throw new Error("Credential handoff sweep interval must be a positive integer");
+    }
+    if (this.retentionTimer) return;
+    void this.runRetentionSweep();
+    this.retentionTimer = setInterval(() => {
+      void this.runRetentionSweep();
+    }, intervalMs);
+    this.retentionTimer.unref();
+  }
+
+  private runRetentionSweep(): Promise<void> {
+    if (this.retentionSweep) return this.retentionSweep;
+    const sweep = this.purgeExpiredHandoffs()
+      .then((purged) => {
+        if (purged > 0) {
+          this.onEvent({ event: "cloud_credential_handoffs_purged", purged });
+        }
+      })
+      .catch((error: unknown) => {
+        this.onEvent({
+          event: "cloud_credential_handoff_purge_failed",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      })
+      .finally(() => {
+        if (this.retentionSweep === sweep) this.retentionSweep = undefined;
+      });
+    this.retentionSweep = sweep;
+    return sweep;
+  }
+
+  public async close(): Promise<void> {
+    if (this.retentionTimer) clearInterval(this.retentionTimer);
+    this.retentionTimer = undefined;
+    await this.retentionSweep;
+    await Promise.allSettled(this.inFlight.values());
+    await this.store.close?.();
   }
 }
 
