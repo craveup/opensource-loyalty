@@ -92,10 +92,11 @@ async function sqlitePlatform(target: CloudEnvironment): Promise<ManagedTenantPl
 function manager(options: {
   environments: CloudEnvironment[];
   createPlatform?: (target: CloudEnvironment) => Promise<ManagedTenantPlatform>;
+  publicBaseUrl?: string;
 }): ManagedPostgresDataPlaneManager {
   const created = new ManagedPostgresDataPlaneManager({
     connectionString: CONNECTION,
-    publicBaseUrl: BASE_URL,
+    publicBaseUrl: options.publicBaseUrl ?? BASE_URL,
     environmentById: async (id) =>
       options.environments.find((candidate) => candidate.environment_id === id),
     readyEnvironments: async () =>
@@ -521,6 +522,43 @@ describe("managed data-plane manager", () => {
       "https://loyalty.example.com/lip/runtime/v1/environments/env-alpha"
     );
   });
+
+  it("keeps a configured base pathname in managed Admin links and cookie paths", async () => {
+    const managed = manager({
+      environments: [environment()],
+      publicBaseUrl: "https://loyalty.example.com/lip/"
+    });
+    const server = await listen(managed);
+    const internalBase = `${server.url}/runtime/v1/environments/env-alpha`;
+    const publicBase = "/lip/runtime/v1/environments/env-alpha";
+
+    const redirect = await fetch(`${internalBase}/admin`, { redirect: "manual" });
+    expect(redirect.headers.get("location")).toBe(`${publicBase}/admin/`);
+
+    const issued = await managed.issueMerchantCredential("env-alpha", {
+      subject: "operator@crave"
+    });
+    const bootstrap = await fetch(`${internalBase}/admin/api/v1/bootstrap`, {
+      headers: { authorization: `Bearer ${issued.merchant_api_key}` }
+    });
+    expect(await bootstrap.json()).toMatchObject({
+      links: {
+        admin: `${publicBase}/admin/`,
+        health: `${publicBase}/health`,
+        capabilities: `${publicBase}/lip/v1/capabilities`,
+        api: `${publicBase}/lip/v1`
+      }
+    });
+
+    const session = await fetch(`${internalBase}/admin/api/v1/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ api_key: issued.merchant_api_key })
+    });
+    expect(session.headers.getSetCookie()).toEqual(expect.arrayContaining([
+      expect.stringContaining(`Path=${publicBase}/admin`)
+    ]));
+  });
 });
 
 describe("bootstrap program", () => {
@@ -554,5 +592,43 @@ describe("bootstrap program", () => {
     });
     expect(enrolled.status).toBe(409);
     expect(await enrolled.json()).toMatchObject({ code: "program_not_configured" });
+  });
+
+  it("accepts mutations after the merchant deliberately publishes an inert program", async () => {
+    let platform: ManagedTenantPlatform | undefined;
+    const managed = manager({
+      environments: [environment()],
+      createPlatform: async (target) => {
+        platform = await sqlitePlatform(target);
+        return platform;
+      }
+    });
+    await managed.provision({ environment: environment(), job: createJob });
+    const draft = await platform!.programs.saveDraft(
+      createBootstrapProgram("program-alpha"),
+      "merchant-owner"
+    );
+    await platform!.programs.publish(draft.draft!.version, "merchant-owner");
+
+    const server = await listen(managed);
+    const issued = await managed.issueMerchantCredential("env-alpha", { subject: "operator" });
+    const enrolled = await fetch(
+      `${server.url}/runtime/v1/environments/env-alpha/lip/v1/members/enroll`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${issued.merchant_api_key}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          context: context("published-inert-enroll"),
+          program_id: "program-alpha",
+          identity: { type: "token", value: "guest-token-2", issuer: "test-identity" },
+          member_id: "member-2"
+        })
+      }
+    );
+
+    expect(enrolled.status).toBe(201);
   });
 });

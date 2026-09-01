@@ -118,6 +118,7 @@ export function parseRuntimePath(
  */
 export class ManagedPostgresDataPlaneManager implements CloudProvisioner {
   private readonly options: ManagedDataPlaneOptions;
+  private readonly publicMountPath: string;
   private readonly runtimes = new Map<string, Promise<ManagedRuntime>>();
   /** Runtimes that finished starting, for callers that cannot await (see runtimeDescriptors). */
   private readonly started = new Map<string, ManagedRuntime>();
@@ -128,7 +129,10 @@ export class ManagedPostgresDataPlaneManager implements CloudProvisioner {
     if (!options.connectionString.trim()) {
       throw new Error("A managed data-plane connection string is required");
     }
-    this.options = { ...options, publicBaseUrl: normalizeBaseUrl(options.publicBaseUrl) };
+    const publicBaseUrl = normalizeBaseUrl(options.publicBaseUrl);
+    this.options = { ...options, publicBaseUrl };
+    const pathname = new URL(publicBaseUrl).pathname.replace(/\/+$/, "");
+    this.publicMountPath = pathname === "/" ? "" : pathname;
   }
 
   public apiUrlFor(environmentId: string): string {
@@ -463,7 +467,7 @@ export class ManagedPostgresDataPlaneManager implements CloudProvisioner {
       };
       const handler = createReferenceRequestHandler(platform.engine, {
         apiKey: rootKey,
-        mountPath: `${RUNTIME_PREFIX}${environment.environment_id}`,
+        mountPath: `${this.publicMountPath}${RUNTIME_PREFIX}${environment.environment_id}`,
         reservationTtlSeconds: active.reservation_ttl_seconds ?? 120,
         executeEngineOperation: platform.executeEngineOperation,
         readEngineSnapshot: platform.readEngineSnapshot,
