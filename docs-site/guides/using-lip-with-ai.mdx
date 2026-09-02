@@ -21,7 +21,7 @@ Everything an agent needs to reason about LIP correctly — no guessing loyalty 
   <Card title="MCP server" icon="plug" href="#mcp-server">
     Official server exposing spec lookups, schema validation, and checkout checklists as tools.
   </Card>
-  <Card title="llms.txt index" icon="file-lines" href="https://github.com/craveup/opensource-loyalty/blob/main/llms.txt">
+  <Card title="llms.txt index" icon="file-lines" href="https://github.com/craveup-oss/opensource-loyalty/blob/main/llms.txt">
     A compact index of the spec, OpenAPI contract, SDK entry points, and CLI — point your agent here first.
   </Card>
   <Card title="AI prompts" icon="message-code" href="/guides/ai-prompts">
@@ -33,7 +33,7 @@ Everything an agent needs to reason about LIP correctly — no guessing loyalty 
 
 <Steps>
   <Step title="Point your agent at llms.txt">
-    Load the checked-in [`llms.txt`](https://github.com/craveup/opensource-loyalty/blob/main/llms.txt) so the agent reads the normative spec before changing behavior.
+    Load the checked-in [`llms.txt`](https://github.com/craveup-oss/opensource-loyalty/blob/main/llms.txt) so the agent reads the normative spec before changing behavior.
 
     ```text
     @llms.txt
@@ -47,7 +47,7 @@ Everything an agent needs to reason about LIP correctly — no guessing loyalty 
     ```
   </Step>
   <Step title="Connect the MCP server">
-    Enable the repo-root [`mcp.json`](https://github.com/craveup/opensource-loyalty/blob/main/mcp.json), or run the published server standalone.
+    Enable the repo-root [`mcp.json`](https://github.com/craveup-oss/opensource-loyalty/blob/main/mcp.json), or run the published server standalone.
 
     ```bash
     npx @loyalty-interchange/mcp
@@ -57,7 +57,7 @@ Everything an agent needs to reason about LIP correctly — no guessing loyalty 
 
 ## The `llms.txt` index
 
-The repo root includes [`llms.txt`](https://github.com/craveup/opensource-loyalty/blob/main/llms.txt), a compact index of the normative spec, OpenAPI contract, SDK entry points, CLI commands, and the files agents should read before changing behavior. Point your agent at it first:
+The repo root includes [`llms.txt`](https://github.com/craveup-oss/opensource-loyalty/blob/main/llms.txt), a compact index of the normative spec, OpenAPI contract, SDK entry points, CLI commands, and the files agents should read before changing behavior. Point your agent at it first:
 
 ```text
 @llms.txt
@@ -69,7 +69,7 @@ The repo root includes [`llms.txt`](https://github.com/craveup/opensource-loyalt
 
 ## Agent Skills
 
-LIP ships installable [Agent Skills](https://agentskills.io/) in the [`skills/`](https://github.com/craveup/opensource-loyalty/tree/main/skills) directory. They give coding agents specialized knowledge for the checkout lifecycle, webhooks, the BFF pattern, SDK usage, and conformance.
+LIP ships installable [Agent Skills](https://agentskills.io/) in the [`skills/`](https://github.com/craveup-oss/opensource-loyalty/tree/main/skills) directory. They give coding agents specialized knowledge for the checkout lifecycle, webhooks, the BFF pattern, SDK usage, and conformance.
 
 <CodeGroup>
 ```bash Install all
@@ -81,7 +81,7 @@ npx skills add . --skill lip-checkout
 ```
 
 ```bash From the public repo
-npx skills add craveup/opensource-loyalty
+npx skills add craveup-oss/opensource-loyalty
 ```
 </CodeGroup>
 
@@ -95,7 +95,7 @@ npx skills add craveup/opensource-loyalty
 | `lip-bff` | customer app + backend-for-frontend |
 | `lip-conformance` | doctor, test, e2e patterns |
 
-Works with Cursor, Claude Code, Codex, Windsurf, GitHub Copilot, and other agents that support the skills format. See the [Skills README](https://github.com/craveup/opensource-loyalty/blob/main/skills/README.md) for the full catalog.
+Works with Cursor, Claude Code, Codex, Windsurf, GitHub Copilot, and other agents that support the skills format. See the [Skills README](https://github.com/craveup-oss/opensource-loyalty/blob/main/skills/README.md) for the full catalog.
 
 <Note>
   `lip init` prints the install command when you bootstrap a new project, so the Skills are one step away from any fresh integration.
@@ -105,7 +105,7 @@ Works with Cursor, Claude Code, Codex, Windsurf, GitHub Copilot, and other agent
 
 LIP includes an official MCP server that exposes spec lookups, the `llms.txt` index, OpenAPI operation lists, schema validation, checkout lifecycle checklists, and SDK snippets — so agents do not guess loyalty semantics from training data.
 
-**Cursor:** enable the repo-root [`mcp.json`](https://github.com/craveup/opensource-loyalty/blob/main/mcp.json) (Settings → MCP).
+**Cursor:** enable the repo-root [`mcp.json`](https://github.com/craveup-oss/opensource-loyalty/blob/main/mcp.json) (Settings → MCP).
 
 **Manual configuration:**
 
@@ -209,12 +209,12 @@ LIP's contract is machine-readable. Before implementing or modifying loyalty beh
 
 | Resource | Path | Use when |
 | --- | --- | --- |
-| OpenAPI 3.1 binding | [`spec/openapi.yaml`](https://github.com/craveup/opensource-loyalty/blob/main/spec/openapi.yaml) | HTTP paths, auth, request/response shapes |
-| JSON Schemas | [`spec/schemas/`](https://github.com/craveup/opensource-loyalty/tree/main/spec/schemas) | Payload validation and code generation |
-| Lifecycle rules | [`spec/lifecycle.md`](https://github.com/craveup/opensource-loyalty/blob/main/spec/lifecycle.md) | Reserve → capture → reverse, refunds, idempotency |
-| Foodservice profile | [`spec/profiles/foodservice.md`](https://github.com/craveup/opensource-loyalty/blob/main/spec/profiles/foodservice.md) | Order lines, modifiers, tenders, earning rules |
-| Webhook profile | [`spec/webhooks.md`](https://github.com/craveup/opensource-loyalty/blob/main/spec/webhooks.md) | Signature verification and deduplication |
-| Full lifecycle example | [`examples/typescript/full-lifecycle.ts`](https://github.com/craveup/opensource-loyalty/blob/main/examples/typescript/full-lifecycle.ts) | End-to-end SDK usage |
+| OpenAPI 3.1 binding | [`spec/openapi.yaml`](https://github.com/craveup-oss/opensource-loyalty/blob/main/spec/openapi.yaml) | HTTP paths, auth, request/response shapes |
+| JSON Schemas | [`spec/schemas/`](https://github.com/craveup-oss/opensource-loyalty/tree/main/spec/schemas) | Payload validation and code generation |
+| Lifecycle rules | [`spec/lifecycle.md`](https://github.com/craveup-oss/opensource-loyalty/blob/main/spec/lifecycle.md) | Reserve → capture → reverse, refunds, idempotency |
+| Foodservice profile | [`spec/profiles/foodservice.md`](https://github.com/craveup-oss/opensource-loyalty/blob/main/spec/profiles/foodservice.md) | Order lines, modifiers, tenders, earning rules |
+| Webhook profile | [`spec/webhooks.md`](https://github.com/craveup-oss/opensource-loyalty/blob/main/spec/webhooks.md) | Signature verification and deduplication |
+| Full lifecycle example | [`examples/typescript/full-lifecycle.ts`](https://github.com/craveup-oss/opensource-loyalty/blob/main/examples/typescript/full-lifecycle.ts) | End-to-end SDK usage |
 
 <Warning>
   When docs and spec disagree, treat `spec/` as canonical.
@@ -224,13 +224,13 @@ Recommended agent read order for a new integration:
 
 <Steps>
   <Step title="llms.txt">
-    Start with the [index](https://github.com/craveup/opensource-loyalty/blob/main/llms.txt) to orient on what exists.
+    Start with the [index](https://github.com/craveup-oss/opensource-loyalty/blob/main/llms.txt) to orient on what exists.
   </Step>
   <Step title="Lifecycle rules">
-    Read [`spec/lifecycle.md`](https://github.com/craveup/opensource-loyalty/blob/main/spec/lifecycle.md) for reserve → capture → reverse and idempotency.
+    Read [`spec/lifecycle.md`](https://github.com/craveup-oss/opensource-loyalty/blob/main/spec/lifecycle.md) for reserve → capture → reverse and idempotency.
   </Step>
   <Step title="Full lifecycle example">
-    Study [`examples/typescript/full-lifecycle.ts`](https://github.com/craveup/opensource-loyalty/blob/main/examples/typescript/full-lifecycle.ts) for end-to-end SDK usage.
+    Study [`examples/typescript/full-lifecycle.ts`](https://github.com/craveup-oss/opensource-loyalty/blob/main/examples/typescript/full-lifecycle.ts) for end-to-end SDK usage.
   </Step>
   <Step title="TypeScript SDK">
     Review the [TypeScript SDK](/guides/typescript-sdk) for operations and helpers.

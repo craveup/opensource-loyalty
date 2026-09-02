@@ -7,7 +7,7 @@ If this is your first time in the repo, start with
 [Getting started](getting-started.md). This page adds validation, Docker, reset,
 and conformance details.
 
-Canonical source: [`craveup/opensource-loyalty`](https://github.com/craveup/opensource-loyalty).
+Canonical source: [`craveup-oss/opensource-loyalty`](https://github.com/craveup-oss/opensource-loyalty).
 
 ## 1. Install and start
 

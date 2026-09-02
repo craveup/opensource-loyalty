@@ -136,7 +136,7 @@
       },
       {
         "label": "GitHub",
-        "href": "https://github.com/craveup/opensource-loyalty"
+        "href": "https://github.com/craveup-oss/opensource-loyalty"
       }
     ],
     "primary": {
@@ -147,7 +147,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/craveup/opensource-loyalty"
+      "github": "https://github.com/craveup-oss/opensource-loyalty"
     }
   }
 }

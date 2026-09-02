@@ -116,7 +116,7 @@ npm run mcp
 Requirements: Git and Docker.
 
 ```bash
-git clone https://github.com/craveup/opensource-loyalty.git
+git clone https://github.com/craveup-oss/opensource-loyalty.git
 cd opensource-loyalty
 docker compose up --build
 ```
@@ -150,7 +150,7 @@ Requirements: Git, Node.js 22 or newer, and npm.
 > This repo uses npm workspaces with `package-lock.json`. pnpm is not the supported install path. For a clean lockfile-only install, use `npm ci` instead of `npm install`.
 
 ```bash
-git clone https://github.com/craveup/opensource-loyalty.git
+git clone https://github.com/craveup-oss/opensource-loyalty.git
 cd opensource-loyalty
 npm install
 npm start
@@ -364,7 +364,6 @@ Developer guides (rendered on the docs site; sources live in [`docs/`](docs/READ
 - [Reference platform](https://loyalty-interchange.mintlify.app/guides/reference-platform) — server, Admin, storage, and implementation boundaries
 - [PostgreSQL storage](https://loyalty-interchange.mintlify.app/guides/postgres) — multi-instance engine store, location scoping, and the lock-free report path
 - [Cloud control plane](https://loyalty-interchange.mintlify.app/guides/cloud) — organizations, projects, environments, provisioning, operator auth, and metering
-- [Punchh migration](https://loyalty-interchange.mintlify.app/guides/punchh-migration) — mapping restaurant loyalty capabilities to vendor-neutral LIP contracts
 - [Ordering adapters](docs/ordering-adapters.md) — deterministic source mapping and edge-case certification
 - [Member import](docs/member-migration.md) — checksummed plans and balance reconciliation
 - [Design partners](docs/design-partners.md) — prove one source integration without protocol lock-in
@@ -409,6 +408,6 @@ This project is licensed under [Apache-2.0](LICENSE).
 
 ## Support 💬
 
-Use [GitHub Discussions](https://github.com/craveup/opensource-loyalty/discussions)
+Use [GitHub Discussions](https://github.com/craveup-oss/opensource-loyalty/discussions)
 for questions and ideas, structured issues for reproducible work, and
 [SUPPORT.md](SUPPORT.md) for the support boundary.

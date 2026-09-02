@@ -2,9 +2,9 @@
 
 LIP has three support lanes:
 
-- Use [GitHub Discussions](https://github.com/craveup/opensource-loyalty/discussions)
+- Use [GitHub Discussions](https://github.com/craveup-oss/opensource-loyalty/discussions)
   for setup questions, design feedback, integration patterns, and ideas.
-- Open a structured [GitHub issue](https://github.com/craveup/opensource-loyalty/issues/new/choose)
+- Open a structured [GitHub issue](https://github.com/craveup-oss/opensource-loyalty/issues/new/choose)
   for a reproducible bug, adapter proposal, or protocol proposal.
 - Follow [SECURITY.md](SECURITY.md) for vulnerabilities; never disclose a
   credential, customer record, or exploit in a public issue.

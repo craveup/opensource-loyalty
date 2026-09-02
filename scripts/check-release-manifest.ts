@@ -113,7 +113,7 @@ export function validateLipReleaseManifest(value: unknown): LipReleaseManifestV1
   if (source) {
     expectOnlyKeys(source, ["repository", "commit", "tag"], "source", errors);
     expectPattern(source.repository, /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "source.repository", errors);
-    expectExact(source.repository, "craveup/opensource-loyalty", "source.repository", errors);
+    expectExact(source.repository, "craveup-oss/opensource-loyalty", "source.repository", errors);
     expectPattern(source.commit, GIT_SHA, "source.commit", errors);
     expectPattern(source.tag, TAG, "source.tag", errors);
     if (typeof source.tag === "string" && TAG.test(source.tag)) {

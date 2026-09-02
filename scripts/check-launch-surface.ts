@@ -4,6 +4,17 @@ import { extname, join, relative, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const failures: string[] = [];
 
+const readme = await readFile(join(root, "README.md"), "utf8");
+const prohibitedReadmeCompetitorNames = [
+  ["Pu", "nchh"].join(""),
+  ["Olo", " Engage"].join("")
+];
+for (const competitorName of prohibitedReadmeCompetitorNames) {
+  if (readme.toLocaleLowerCase("en-US").includes(competitorName.toLocaleLowerCase("en-US"))) {
+    failures.push("README.md includes prohibited competitor naming");
+  }
+}
+
 function requireText(value: string, needle: string, label: string): void {
   if (!value.includes(needle)) failures.push(`${label} is missing ${needle}`);
 }
@@ -118,12 +129,17 @@ const textExtensions = new Set([
   ".md", ".mdx", ".json", ".yaml", ".yml", ".ts", ".tsx", ".js", ".mjs",
   ".html", ".txt", ".xml"
 ]);
-const retiredRepositoryNamespace = ["alvinjchoi", "opensource-loyalty"].join("/");
+const retiredRepositoryNamespaces = [
+  ["alvinjchoi", "opensource-loyalty"].join("/"),
+  ["craveup", "opensource-loyalty"].join("/")
+];
 for (const path of await files(root)) {
   if (!textExtensions.has(extname(path))) continue;
   const contents = await readFile(path, "utf8").catch(() => "");
-  if (contents.includes(retiredRepositoryNamespace)) {
-    failures.push(`${relative(root, path)} references the retired repository namespace`);
+  for (const retiredRepositoryNamespace of retiredRepositoryNamespaces) {
+    if (contents.includes(retiredRepositoryNamespace)) {
+      failures.push(`${relative(root, path)} references the retired repository namespace`);
+    }
   }
 }
 

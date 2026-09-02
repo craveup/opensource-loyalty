@@ -27,4 +27,4 @@ approval. Sanitized examples must exclude customer PII and credentials.
 
 [Start a private design-partner conversation](mailto:opensource@craveup.com?subject=LIP%20design%20partner)
 or post a non-confidential integration question in
-[Discussions](https://github.com/craveup/opensource-loyalty/discussions).
+[Discussions](https://github.com/craveup-oss/opensource-loyalty/discussions).
