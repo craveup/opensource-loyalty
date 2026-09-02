@@ -14,6 +14,17 @@ for (const competitorName of prohibitedReadmeCompetitorNames) {
     failures.push("README.md includes prohibited competitor naming");
   }
 }
+for (const [needle, label] of [
+  ["docs/images/admin-overview.png", "verified Admin visual"],
+  ["https://opensource-loyalty.vercel.app/#walkthrough", "browser walkthrough call to action"],
+  ["Run checkout through refund in your browser", "primary newcomer path"]
+] as const) requireText(readme, needle, `README ${label}`);
+const readmeAdminVisual = await readFile(join(root, "docs/images/admin-overview.png")).catch(() => undefined);
+const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+if (!readmeAdminVisual || readmeAdminVisual.length < 10_000 ||
+    !readmeAdminVisual.subarray(0, pngSignature.length).equals(pngSignature)) {
+  failures.push("README verified Admin visual is missing or invalid");
+}
 
 function requireText(value: string, needle: string, label: string): void {
   if (!value.includes(needle)) failures.push(`${label} is missing ${needle}`);

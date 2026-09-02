@@ -15,6 +15,20 @@ payments, refunds, locations, and existing identity. It is not yet a turnkey
 no-code marketing service for restaurants without an integration team, and no
 repository fixture is presented as independent production adoption.
 
+<p align="center">
+  <a href="https://opensource-loyalty.vercel.app/#walkthrough">
+    <img src="docs/images/admin-overview.png" width="100%" alt="LIP Admin overview showing synthetic member, balance, tier, expiration, and ledger activity data" />
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://opensource-loyalty.vercel.app/#walkthrough">Run checkout through refund in your browser →</a></strong>
+  · <a href="https://loyalty-interchange.mintlify.app/get-started/quickstart">Self-host the quickstart</a>
+  · <a href="https://loyalty-interchange.mintlify.app">Read the docs</a>
+</p>
+
+<p align="center"><sub>The dashboard above runs locally with seeded synthetic data. The browser walkthrough requires no account, API key, or install.</sub></p>
+
 > [!IMPORTANT]
 > Customer authentication is intentionally outside the LIP transaction
 > boundary. The app BFF integrates Clerk, Auth0, or another identity provider,
