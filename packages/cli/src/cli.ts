@@ -124,6 +124,9 @@ function addMockCommand(name: "mock" | "quickstart" | "serve", description: stri
         databasePath: resolve(options.database),
         ...(options.reset ? { reset: true } : {}),
         seed: options.seed,
+        ...(process.env.LIP_ALLOW_PRIVATE_WEBHOOK_NETWORKS === "true"
+          ? { allowPrivateWebhookNetworks: true }
+          : {}),
         rateLimit: {
           maxRequests: options.rateLimit,
           windowMs: options.rateWindowMs
