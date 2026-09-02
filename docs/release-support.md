@@ -4,7 +4,9 @@
 
 | Surface | Current release | Stability |
 | --- | --- | --- |
-| npm packages and reference platform | `0.2.0` | Pre-1.0; exact package pins |
+| GitHub source and evidence | `v0.2.0` | Immutable tag and release evidence |
+| npm packages | `0.1.2` for 10 packages; `adapter-kit` unpublished | Pre-1.0; live registry is authoritative |
+| GHCR reference platform | `v0.2.0` built, anonymous pull unavailable | Not a public distribution surface |
 | Protocol working draft | `0.1.0` | Draft; changes require a protocol proposal |
 | Foodservice profile | `foodservice/1.0` request profile | Implemented contract identifier; governed with protocol compatibility |
 | Cloud API | `/cloud/v1` | Non-normative preview |
@@ -36,12 +38,17 @@ support is contractual and separate.
    npm run test:visual
    ```
 5. Merge only after the remote verify check passes.
-6. Tag `v0.2.0` at the merge commit and publish the GitHub release. The release
-   workflow publishes packages in dependency order and attaches evidence.
+6. Confirm npm authorization in the protected `npm` environment before creating
+   a release. Choose a new unused version, bump every changed package and exact
+   internal dependency together, then tag that version at the reviewed merge
+   commit and publish the GitHub release. The release workflow publishes packages
+   in dependency order and attaches evidence.
 7. Confirm npm package versions, docs, landing, image digest, release assets,
    and an anonymous `docker manifest inspect` of the versioned GHCR tag.
 8. If any confirmation fails, stop distribution and document the rollback or
-   corrective release; never retag a published version.
+   corrective release; never retag a published version. In particular, do not
+   move or recreate the existing `v0.2.0` tag to repair its incomplete npm
+   publication.
 
 The release job validates `NPM_TOKEN` with `npm whoami` and confirms read-write
 access to the existing protocol package before installing dependencies or
