@@ -23,6 +23,8 @@ export interface MockOptions {
   programPath?: string;
   /** Start with /lip/v1 writes frozen (maintenance mode). */
   writeFrozen?: boolean;
+  /** Development-only opt-in for loopback/private webhook receivers. */
+  allowPrivateWebhookNetworks?: boolean;
 }
 
 async function loadProgram(path: string): Promise<ProgramDefinition> {
@@ -40,7 +42,8 @@ export async function startMockServer(options: MockOptions): Promise<RunningServ
     databasePath: options.databasePath ?? ":memory:",
     ...(options.reset ? { reset: true } : {}),
     ...(options.seed === false ? { seed: false } : {}),
-    ...(program ? { program } : {})
+    ...(program ? { program } : {}),
+    ...(options.allowPrivateWebhookNetworks ? { allowPrivateWebhookNetworks: true } : {})
   });
   const running = await startReferenceServer(platform.engine, {
     host: options.host,

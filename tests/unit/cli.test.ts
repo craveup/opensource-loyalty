@@ -238,6 +238,36 @@ describe("lip serve write-freeze", () => {
   });
 });
 
+describe("lip serve local webhook policy", () => {
+  it("requires the explicit development opt-in for a loopback webhook", async () => {
+    const previousUrl = process.env.LIP_WEBHOOK_URL;
+    const previousSecret = process.env.LIP_WEBHOOK_SECRET;
+    process.env.LIP_WEBHOOK_URL = "http://127.0.0.1:1/hooks";
+    process.env.LIP_WEBHOOK_SECRET = "cli-local-webhook-secret";
+
+    try {
+      await expect(startMockServer({
+        host: "127.0.0.1",
+        port: 0,
+        apiKey: "cli-test-key"
+      })).rejects.toThrow(/must use HTTPS/);
+
+      const running = await startMockServer({
+        host: "127.0.0.1",
+        port: 0,
+        apiKey: "cli-test-key",
+        allowPrivateWebhookNetworks: true
+      });
+      await running.close();
+    } finally {
+      if (previousUrl === undefined) delete process.env.LIP_WEBHOOK_URL;
+      else process.env.LIP_WEBHOOK_URL = previousUrl;
+      if (previousSecret === undefined) delete process.env.LIP_WEBHOOK_SECRET;
+      else process.env.LIP_WEBHOOK_SECRET = previousSecret;
+    }
+  });
+});
+
 describe("lip terminal presentation", () => {
   it("formats a clear local server startup screen", () => {
     const output = formatServerReady({
