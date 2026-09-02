@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "source": {
-    "repository": "craveup/opensource-loyalty",
+    "repository": "craveup-oss/opensource-loyalty",
     "commit": "7cd6a6a18d1bc7f0091c824fb711864f37780ba9",
     "tag": "v0.2.0"
   },
@@ -68,9 +68,9 @@
     }
   ],
   "image": {
-    "reference": "ghcr.io/craveup/opensource-loyalty@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "reference": "ghcr.io/craveup-oss/opensource-loyalty@sha256:3333333333333333333333333333333333333333333333333333333333333333",
     "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-    "provenanceUrl": "https://github.com/craveup/opensource-loyalty/actions/runs/1234567890/attestations/sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    "provenanceUrl": "https://github.com/craveup-oss/opensource-loyalty/actions/runs/1234567890/attestations/sha256:3333333333333333333333333333333333333333333333333333333333333333"
   },
   "database": {
     "migrationSetSha256": "af3fc9e622fcc1f65693db90da2056945d8eec7613ec7a7cdf12a28b99ff1df6",
@@ -94,7 +94,7 @@
     }
   },
   "verification": {
-    "runUrl": "https://github.com/craveup/opensource-loyalty/actions/runs/1234567890",
+    "runUrl": "https://github.com/craveup-oss/opensource-loyalty/actions/runs/1234567890",
     "conformanceReportSha256": "7777777777777777777777777777777777777777777777777777777777777777"
   }
 }

@@ -15,6 +15,20 @@ payments, refunds, locations, and existing identity. It is not yet a turnkey
 no-code marketing service for restaurants without an integration team, and no
 repository fixture is presented as independent production adoption.
 
+<p align="center">
+  <a href="https://opensource-loyalty.vercel.app/#walkthrough">
+    <img src="docs/images/admin-overview.png" width="100%" alt="LIP Admin overview showing synthetic member, balance, tier, expiration, and ledger activity data" />
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://opensource-loyalty.vercel.app/#walkthrough">Run checkout through refund in your browser →</a></strong>
+  · <a href="https://loyalty-interchange.mintlify.app/get-started/quickstart">Self-host the quickstart</a>
+  · <a href="https://loyalty-interchange.mintlify.app">Read the docs</a>
+</p>
+
+<p align="center"><sub>The dashboard above runs locally with seeded synthetic data. The browser walkthrough requires no account, API key, or install.</sub></p>
+
 > [!IMPORTANT]
 > Customer authentication is intentionally outside the LIP transaction
 > boundary. The app BFF integrates Clerk, Auth0, or another identity provider,
@@ -116,7 +130,7 @@ npm run mcp
 Requirements: Git and Docker.
 
 ```bash
-git clone https://github.com/craveup/opensource-loyalty.git
+git clone https://github.com/craveup-oss/opensource-loyalty.git
 cd opensource-loyalty
 docker compose up --build
 ```
@@ -150,7 +164,7 @@ Requirements: Git, Node.js 22 or newer, and npm.
 > This repo uses npm workspaces with `package-lock.json`. pnpm is not the supported install path. For a clean lockfile-only install, use `npm ci` instead of `npm install`.
 
 ```bash
-git clone https://github.com/craveup/opensource-loyalty.git
+git clone https://github.com/craveup-oss/opensource-loyalty.git
 cd opensource-loyalty
 npm install
 npm start
@@ -364,7 +378,6 @@ Developer guides (rendered on the docs site; sources live in [`docs/`](docs/READ
 - [Reference platform](https://loyalty-interchange.mintlify.app/guides/reference-platform) — server, Admin, storage, and implementation boundaries
 - [PostgreSQL storage](https://loyalty-interchange.mintlify.app/guides/postgres) — multi-instance engine store, location scoping, and the lock-free report path
 - [Cloud control plane](https://loyalty-interchange.mintlify.app/guides/cloud) — organizations, projects, environments, provisioning, operator auth, and metering
-- [Punchh migration](https://loyalty-interchange.mintlify.app/guides/punchh-migration) — mapping restaurant loyalty capabilities to vendor-neutral LIP contracts
 - [Ordering adapters](docs/ordering-adapters.md) — deterministic source mapping and edge-case certification
 - [Member import](docs/member-migration.md) — checksummed plans and balance reconciliation
 - [Design partners](docs/design-partners.md) — prove one source integration without protocol lock-in
@@ -409,6 +422,6 @@ This project is licensed under [Apache-2.0](LICENSE).
 
 ## Support 💬
 
-Use [GitHub Discussions](https://github.com/craveup/opensource-loyalty/discussions)
+Use [GitHub Discussions](https://github.com/craveup-oss/opensource-loyalty/discussions)
 for questions and ideas, structured issues for reproducible work, and
 [SUPPORT.md](SUPPORT.md) for the support boundary.

@@ -4,6 +4,28 @@ import { extname, join, relative, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const failures: string[] = [];
 
+const readme = await readFile(join(root, "README.md"), "utf8");
+const prohibitedReadmeCompetitorNames = [
+  ["Pu", "nchh"].join(""),
+  ["Olo", " Engage"].join("")
+];
+for (const competitorName of prohibitedReadmeCompetitorNames) {
+  if (readme.toLocaleLowerCase("en-US").includes(competitorName.toLocaleLowerCase("en-US"))) {
+    failures.push("README.md includes prohibited competitor naming");
+  }
+}
+for (const [needle, label] of [
+  ["docs/images/admin-overview.png", "verified Admin visual"],
+  ["https://opensource-loyalty.vercel.app/#walkthrough", "browser walkthrough call to action"],
+  ["Run checkout through refund in your browser", "primary newcomer path"]
+] as const) requireText(readme, needle, `README ${label}`);
+const readmeAdminVisual = await readFile(join(root, "docs/images/admin-overview.png")).catch(() => undefined);
+const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+if (!readmeAdminVisual || readmeAdminVisual.length < 10_000 ||
+    !readmeAdminVisual.subarray(0, pngSignature.length).equals(pngSignature)) {
+  failures.push("README verified Admin visual is missing or invalid");
+}
+
 function requireText(value: string, needle: string, label: string): void {
   if (!value.includes(needle)) failures.push(`${label} is missing ${needle}`);
 }
@@ -118,12 +140,17 @@ const textExtensions = new Set([
   ".md", ".mdx", ".json", ".yaml", ".yml", ".ts", ".tsx", ".js", ".mjs",
   ".html", ".txt", ".xml"
 ]);
-const retiredRepositoryNamespace = ["alvinjchoi", "opensource-loyalty"].join("/");
+const retiredRepositoryNamespaces = [
+  ["alvinjchoi", "opensource-loyalty"].join("/"),
+  ["craveup", "opensource-loyalty"].join("/")
+];
 for (const path of await files(root)) {
   if (!textExtensions.has(extname(path))) continue;
   const contents = await readFile(path, "utf8").catch(() => "");
-  if (contents.includes(retiredRepositoryNamespace)) {
-    failures.push(`${relative(root, path)} references the retired repository namespace`);
+  for (const retiredRepositoryNamespace of retiredRepositoryNamespaces) {
+    if (contents.includes(retiredRepositoryNamespace)) {
+      failures.push(`${relative(root, path)} references the retired repository namespace`);
+    }
   }
 }
 

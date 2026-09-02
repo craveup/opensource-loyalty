@@ -107,7 +107,7 @@ describe("LIP release manifest", () => {
     expect(() =>
       validateLipReleaseManifest({
         ...manifest,
-        image: { ...manifest.image, reference: "ghcr.io/craveup/opensource-loyalty:latest" }
+        image: { ...manifest.image, reference: "ghcr.io/craveup-oss/opensource-loyalty:latest" }
       })
     ).toThrow(/image\.reference/);
 
@@ -206,11 +206,11 @@ describe("LIP release manifest", () => {
   });
 
   it("normalizes supported GitHub remote URLs", () => {
-    expect(normalizeRepository("https://github.com/craveup/opensource-loyalty.git")).toBe(
-      "craveup/opensource-loyalty"
+    expect(normalizeRepository("https://github.com/craveup-oss/opensource-loyalty.git")).toBe(
+      "craveup-oss/opensource-loyalty"
     );
-    expect(normalizeRepository("git@github.com:craveup/opensource-loyalty.git")).toBe(
-      "craveup/opensource-loyalty"
+    expect(normalizeRepository("git@github.com:craveup-oss/opensource-loyalty.git")).toBe(
+      "craveup-oss/opensource-loyalty"
     );
   });
 
@@ -264,7 +264,7 @@ describe("LIP release manifest", () => {
         git: async (args) => {
           if (args.join(" ") === "rev-parse HEAD") return `${manifest.source.commit}\n`;
           if (args.join(" ") === "tag --points-at HEAD") return `${manifest.source.tag}\n`;
-          if (args.join(" ") === "remote get-url origin") return "https://github.com/craveup/opensource-loyalty.git\n";
+          if (args.join(" ") === "remote get-url origin") return "https://github.com/craveup-oss/opensource-loyalty.git\n";
           throw new Error(`unexpected git args ${args.join(" ")}`);
         },
         npm: async (args) => {

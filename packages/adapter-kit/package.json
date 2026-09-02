@@ -5,11 +5,11 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/craveup/opensource-loyalty.git",
+    "url": "git+https://github.com/craveup-oss/opensource-loyalty.git",
     "directory": "packages/adapter-kit"
   },
-  "homepage": "https://github.com/craveup/opensource-loyalty#readme",
-  "bugs": { "url": "https://github.com/craveup/opensource-loyalty/issues" },
+  "homepage": "https://github.com/craveup-oss/opensource-loyalty#readme",
+  "bugs": { "url": "https://github.com/craveup-oss/opensource-loyalty/issues" },
   "engines": { "node": ">=22" },
   "publishConfig": { "access": "public", "provenance": true },
   "sideEffects": false,

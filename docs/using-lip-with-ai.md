@@ -7,7 +7,7 @@ loyalty events, these guides cover the fastest path from zero to a correct
 implementation.
 
 Canonical source and install examples use
-[`craveup/opensource-loyalty`](https://github.com/craveup/opensource-loyalty).
+[`craveup-oss/opensource-loyalty`](https://github.com/craveup-oss/opensource-loyalty).
 
 LIP is not an identity provider. Your app or backend-for-frontend (BFF) owns
 customer sign-in; LIP owns the loyalty ledger. Agents should follow that split
